@@ -17,7 +17,8 @@
 
 - Prompt packs for Claude/GPT/Gemini wrappers
 - JSON output mode for CI
-- Example projects by SaaS category
+- Filled examples by SaaS category
+- `start --emit bundle` workflow for practical LLM handoff
 
 ## v0.4 Optional Graph Layer
 

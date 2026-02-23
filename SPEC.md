@@ -1,25 +1,42 @@
-# MMU CLI Spec (v0.2)
+# MMU CLI Spec (v0.3)
 
-This document specifies the minimal runtime layer for `Make Me Unicorn`.
+This document defines the current runtime behavior for `Make Me Unicorn`.
 
-## Design Goals
+## Design goals
 
 1. Keep markdown files as source of truth.
-2. Minimize founder overhead during context handoff.
+2. Reduce founder overhead during context handoff.
 3. Enforce critical SaaS checks before release.
-4. Work with any LLM provider.
+4. Stay provider-agnostic for LLM workflows.
 
-## Command Surface
+## Command surface
 
 | Command | Purpose | Output | Exit Code |
 |---|---|---|---|
-| `mmu start --mode <mode>` | Start a focused session | mode-specific context file list | `0` success |
+| `mmu start --mode <mode>` | Start a focused session | mode file list and optional context bundle | `0` success |
 | `mmu close` | End a session safely | close checklist and update reminders | `0` success |
-| `mmu doctor` | Validate operating baseline | pass/fail report for docs + codebase guardrails | `0` pass, `2` fail |
-| `mmu gate --stage <M0..M5>` | Stage-gate readiness check | pass/fail for unresolved checklist items | `0` pass, `3` fail |
+| `mmu doctor` | Validate operating baseline | pass/fail report for docs and codebase guardrails | `0` pass, `2` fail |
+| `mmu gate --stage <M#>` | Stage-gate readiness check | pass/fail for unresolved checklist items | `0` pass, `3` fail |
 
 Installable command: `mmu` (via `pip install -e .`).
 Wrapper command: `scripts/mmu.sh`.
+
+## Global options
+
+- `--json`: print structured JSON instead of plain text.
+
+## Start command
+
+```bash
+mmu start --mode backend --emit bundle --output .mmu/context.md
+```
+
+Options:
+
+- `--mode`: one of the 12 operating modes.
+- `--emit list|bundle`: show file list (default) or full context bundle.
+- `--output <path>`: write generated bundle to file.
+- `--clipboard`: copy bundle to clipboard on macOS (`pbcopy`).
 
 ## Modes
 
@@ -36,40 +53,49 @@ Wrapper command: `scripts/mmu.sh`.
 - `analytics`
 - `launch`
 
-Mode behavior is defined in `docs/ops/mode_playbook.md`.
+Mode behavior is documented in `docs/ops/mode_playbook.md`.
 
-## `mmu doctor` baseline checks
+## Doctor checks
+
+Baseline checks:
 
 1. Required docs exist (`core`, `ops`, `checklists`, `prompts`, sprint file).
-2. Auth checklist includes password reset coverage.
-3. Billing checklist includes webhook safety (signature validation and idempotency).
-4. SEO checklist includes OG thumbnail checks.
-5. Architecture doc includes `dev/staging/prod` separation.
-6. If a codebase is detected:
-- Next.js metadata/OG markers are required when Next.js is detected.
-- Webhook handlers require signature verification markers and idempotency markers.
-- `.env.example` and environment split files for `dev/staging/prod` are required.
+2. Auth checklist includes password-reset coverage.
+3. Billing checklist includes webhook and idempotency coverage.
+4. SEO checklist includes OG coverage.
+5. Architecture doc includes `dev/staging/prod` split.
 
-## `mmu gate` behavior
+Codebase checks (only when source files are detected):
 
-- Reads unresolved tasks (`- [ ]`) from a target stage in `docs/checklists/from_scratch.md`.
-- Fails if any unresolved task remains.
+1. Next.js detected -> metadata/OG markers required.
+2. Webhook handlers detected -> signature and idempotency markers required.
+3. `.env.example` required.
+4. Environment split files for `dev/staging/prod` required.
+
+Config override:
+
+- `.mmu/config.toml`
+- `[doctor] skip_paths = ["path/to/skip", "another/path"]`
+
+## Gate behavior
+
+- Stage format supports `M<number>` (`M0`, `M1`, `M6`, ...).
+- Headings are parsed from `docs/checklists/from_scratch.md` using markdown stage headers.
+- Unresolved checkboxes (`- [ ]`) in the matching stage cause `NOT PASS`.
 
 ## CI behavior
 
-- Workflow: `.github/workflows/mmu-guardrails.yml`
-- Always runs `mmu doctor`.
-- Runs `mmu gate` only for stages listed in `docs/ops/gate_targets.txt`.
+Workflow: `.github/workflows/mmu-guardrails.yml`
 
-## Non-goals for v0.2
+1. Lint (`ruff`)
+2. Type check (`mypy`)
+3. Unit tests (`unittest`)
+4. Guardrails (`doctor` + configured `gate`s)
 
-- No vendor-specific SDK integration.
-- No automatic markdown edits.
-- No graph/ontology requirement.
+Configured gates are read from `docs/ops/gate_targets.txt`.
 
-## v0.3+ extensions
+## Non-goals (current)
 
-1. `mmu sync` for auto-updating sprint and ADR drafts.
-2. JSON output mode for CI integrations.
-3. Provider adapters for Claude/GPT/Gemini session wrappers.
-4. Optional graph extraction from ADR relationships.
+- Vendor-specific SDK integration.
+- Full semantic security validation beyond heuristics.
+- Automatic writing of business docs without explicit user control.

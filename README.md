@@ -13,7 +13,7 @@ Build from scratch. Ship with confidence. Keep context across any LLM.
 [![Guardrails CI](https://img.shields.io/badge/ci-doctor%20%2B%20gates-22c55e.svg)](./.github/workflows/mmu-guardrails.yml)
 [![Contributions Welcome](https://img.shields.io/badge/contributions-welcome-16a34a.svg)](./CONTRIBUTING.md)
 
-<img src="./assets/brand/unicorn-hero.png" alt="Make Me Unicorn mascot" width="420" />
+<img src="./assets/brand/unicorn-hero.svg" alt="Make Me Unicorn mascot" width="760" />
 
 </div>
 
@@ -130,6 +130,11 @@ PYTHONPATH=src python3 -m mmu_cli doctor
 
 Spec details: `SPEC.md`, CI enforcement: `.github/workflows/mmu-guardrails.yml`
 
+## Requirements
+
+- Python `3.10+` (recommended `3.11`)
+- `pip`
+
 ## Quick start
 
 1. Fill baseline docs in `docs/core/*`.
@@ -158,15 +163,22 @@ Keep markdown as the canonical source.
 
 For staged maturation from MVP to later phases, see `docs/ops/evolution_path.md`.
 
+## Filled example
+
+See a concrete, filled-out SaaS operation example:
+
+- `examples/filled/tasknote/README.md`
+
 ## CI guardrails
 
 `doctor` runs on every PR/push.
 `gate` runs only for stages listed in `docs/ops/gate_targets.txt`.
-Current default targets are `M0` and `M1`, so CI will fail until those checklist items are completed.
+No stages are enforced by default. Add lines such as `M0` and `M1` to enable strict gate blocking.
+Branch protection baseline: `docs/ops/repo_protection.md`.
 
 ## Brand setup
 
-1. Place your mascot image at `assets/brand/unicorn-hero.png`.
+1. Replace the default hero image at `assets/brand/unicorn-hero.svg` (or update the README image path).
 2. Place your social preview image at `assets/brand/og-cover.png`.
 3. In GitHub repo settings, set Social preview to `assets/brand/og-cover.png`.
 4. Verify link previews on Slack/X/Kakao/Messenger.
@@ -178,6 +190,14 @@ See `ROADMAP.md`.
 ## Contributing
 
 See `CONTRIBUTING.md`.
+
+## Security
+
+See `SECURITY.md`.
+
+## Changelog
+
+See `CHANGELOG.md`.
 
 ## License
 

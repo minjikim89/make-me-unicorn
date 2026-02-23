@@ -20,5 +20,19 @@ jobs:
         with:
           python-version: '3.11'
 
+      - name: Install package and dev tooling
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .[dev]
+
+      - name: Lint
+        run: ruff check src tests
+
+      - name: Type check
+        run: mypy src/mmu_cli
+
+      - name: Unit tests
+        run: python -m unittest discover -s tests -p "test_*.py" -v
+
       - name: Run doctor and configured gates
         run: ./scripts/ci_guardrails.sh
