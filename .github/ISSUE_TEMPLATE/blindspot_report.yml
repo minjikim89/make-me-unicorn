@@ -1,0 +1,29 @@
+name: SaaS blindspot report
+description: Report a missing checklist item or release risk
+labels: [checklist, risk]
+body:
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Auth
+        - Billing
+        - Compliance
+        - Growth/SEO
+        - Reliability
+        - Launch
+    validations:
+      required: true
+  - type: textarea
+    id: blindspot
+    attributes:
+      label: Missing item
+      description: What are we missing and why is it risky?
+    validations:
+      required: true
+  - type: textarea
+    id: recommendation
+    attributes:
+      label: Recommended checklist update
+      description: Suggest exact wording or rule

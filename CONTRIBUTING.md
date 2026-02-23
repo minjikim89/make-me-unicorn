@@ -5,6 +5,7 @@
 1. Prefer reducing operational friction over adding complexity.
 2. Write checklists that are practical and verifiable.
 3. Keep vendor-neutral guidance whenever possible.
+4. Follow the standards in `CODE_OF_CONDUCT.md`.
 
 ## PR Scope
 

@@ -13,6 +13,8 @@ Build from scratch. Ship with confidence. Keep context across any LLM.
 [![Guardrails CI](https://img.shields.io/badge/ci-doctor%20%2B%20gates-22c55e.svg)](./.github/workflows/mmu-guardrails.yml)
 [![Contributions Welcome](https://img.shields.io/badge/contributions-welcome-16a34a.svg)](./CONTRIBUTING.md)
 
+<img src="./assets/brand/unicorn-hero.png" alt="Make Me Unicorn mascot" width="420" />
+
 </div>
 
 ## What is this
@@ -90,6 +92,7 @@ Full rules: `docs/ops/mode_playbook.md`
 ## What you get
 
 - `Unicorn.md` as the operating hub
+- `assets/brand/*` for README and social-preview visuals
 - `docs/core/*` for durable product strategy context
 - `docs/ops/*` for operational control
 - `docs/checklists/*` for blind-spot prevention
@@ -100,6 +103,7 @@ Full rules: `docs/ops/mode_playbook.md`
 - installable `mmu` CLI (`pip install -e .`)
 - `SPEC.md` for CLI behavior contract
 - `docs/ops/evolution_path.md` for MVP -> Phase roadmap
+- `CODE_OF_CONDUCT.md` and issue/PR templates for community operations
 
 ## Runtime CLI (prototype)
 
@@ -158,6 +162,14 @@ For staged maturation from MVP to later phases, see `docs/ops/evolution_path.md`
 
 `doctor` runs on every PR/push.
 `gate` runs only for stages listed in `docs/ops/gate_targets.txt`.
+Current default targets are `M0` and `M1`, so CI will fail until those checklist items are completed.
+
+## Brand setup
+
+1. Place your mascot image at `assets/brand/unicorn-hero.png`.
+2. Place your social preview image at `assets/brand/og-cover.png`.
+3. In GitHub repo settings, set Social preview to `assets/brand/og-cover.png`.
+4. Verify link previews on Slack/X/Kakao/Messenger.
 
 ## Roadmap
 

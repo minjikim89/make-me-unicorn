@@ -12,7 +12,7 @@ if [[ ! -f "$TARGET_FILE" ]]; then
   exit 0
 fi
 
-STAGES="$(grep -E '^[[:space:]]*M[0-5][[:space:]]*$' "$TARGET_FILE" | tr -d '[:space:]' || true)"
+STAGES="$(grep -E '^[[:space:]]*M[0-5][[:space:]]*$' "$TARGET_FILE" | sed -E 's/^[[:space:]]+|[[:space:]]+$//g' || true)"
 if [[ -z "$STAGES" ]]; then
   echo "No active gate targets configured. Skipping stage gate enforcement."
   exit 0
