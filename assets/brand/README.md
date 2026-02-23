@@ -9,7 +9,7 @@ Place your unicorn image files here.
 
 ## Usage
 
- - README hero references: `assets/brand/unicorn-hero.png`
+- README hero references: `assets/brand/unicorn-hero.png`
 - Social preview uses: `assets/brand/og-cover.png`
 
 ## Notes
