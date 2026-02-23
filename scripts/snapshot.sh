@@ -52,9 +52,61 @@ DATE_NOW="$(date +%Y-%m-%d)"
 # - SNAPSHOT_RELIABILITY_KEYWORDS_EXTRA
 # - SNAPSHOT_ANALYTICS_KEYWORDS_EXTRA
 CONFIG_FILE="$TARGET_DIR/.snapshotrc"
+SNAPSHOT_IGNORE_DIRS="${SNAPSHOT_IGNORE_DIRS:-}"
+SNAPSHOT_AUTH_KEYWORDS_EXTRA="${SNAPSHOT_AUTH_KEYWORDS_EXTRA:-}"
+SNAPSHOT_AUTH_FILE_PATTERNS_EXTRA="${SNAPSHOT_AUTH_FILE_PATTERNS_EXTRA:-}"
+SNAPSHOT_BILLING_KEYWORDS_EXTRA="${SNAPSHOT_BILLING_KEYWORDS_EXTRA:-}"
+SNAPSHOT_COMPLIANCE_KEYWORDS_EXTRA="${SNAPSHOT_COMPLIANCE_KEYWORDS_EXTRA:-}"
+SNAPSHOT_RELIABILITY_KEYWORDS_EXTRA="${SNAPSHOT_RELIABILITY_KEYWORDS_EXTRA:-}"
+SNAPSHOT_ANALYTICS_KEYWORDS_EXTRA="${SNAPSHOT_ANALYTICS_KEYWORDS_EXTRA:-}"
+
+trim_space() {
+  local s="$1"
+  s="$(echo "$s" | sed 's/^ *//; s/ *$//')"
+  echo "$s"
+}
+
+strip_quotes() {
+  local s="$1"
+  if [[ "$s" == \"*\" && "$s" == *\" ]]; then
+    s="${s:1:${#s}-2}"
+  elif [[ "$s" == \'*\' && "$s" == *\' ]]; then
+    s="${s:1:${#s}-2}"
+  fi
+  echo "$s"
+}
+
+load_snapshot_config_safe() {
+  local file="$1"
+  local line key value
+  while IFS= read -r line || [ -n "$line" ]; do
+    line="${line%%#*}"
+    line="$(trim_space "$line")"
+    [ -z "$line" ] && continue
+    if [[ ! "$line" =~ ^[A-Za-z0-9_]+[[:space:]]*= ]]; then
+      continue
+    fi
+    key="${line%%=*}"
+    value="${line#*=}"
+    key="$(trim_space "$key")"
+    value="$(trim_space "$value")"
+    value="$(strip_quotes "$value")"
+    case "$key" in
+      SNAPSHOT_IGNORE_DIRS) SNAPSHOT_IGNORE_DIRS="$value" ;;
+      SNAPSHOT_AUTH_KEYWORDS_EXTRA) SNAPSHOT_AUTH_KEYWORDS_EXTRA="$value" ;;
+      SNAPSHOT_AUTH_FILE_PATTERNS_EXTRA) SNAPSHOT_AUTH_FILE_PATTERNS_EXTRA="$value" ;;
+      SNAPSHOT_BILLING_KEYWORDS_EXTRA) SNAPSHOT_BILLING_KEYWORDS_EXTRA="$value" ;;
+      SNAPSHOT_COMPLIANCE_KEYWORDS_EXTRA) SNAPSHOT_COMPLIANCE_KEYWORDS_EXTRA="$value" ;;
+      SNAPSHOT_RELIABILITY_KEYWORDS_EXTRA) SNAPSHOT_RELIABILITY_KEYWORDS_EXTRA="$value" ;;
+      SNAPSHOT_ANALYTICS_KEYWORDS_EXTRA) SNAPSHOT_ANALYTICS_KEYWORDS_EXTRA="$value" ;;
+      *)
+        ;;
+    esac
+  done < "$file"
+}
+
 if [ -f "$CONFIG_FILE" ]; then
-  # shellcheck disable=SC1090
-  source "$CONFIG_FILE"
+  load_snapshot_config_safe "$CONFIG_FILE"
 fi
 
 IGNORE_DIRS_BASE=".git,node_modules"

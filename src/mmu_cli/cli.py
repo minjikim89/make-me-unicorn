@@ -8,6 +8,7 @@ import re
 import subprocess
 import sys
 from pathlib import Path
+from textwrap import dedent
 from typing import Any
 
 try:
@@ -73,6 +74,107 @@ CODE_EXTENSIONS = {".js", ".jsx", ".ts", ".tsx", ".py", ".go", ".rb", ".java", "
 HEADING_PATTERN = re.compile(r"^##\s*(M\d+)\s+(.+?)\s*$")
 UNCHECKED_PATTERN = re.compile(r"^\s*-\s*\[\s\]\s+(.+)$")
 
+INIT_TEMPLATES: dict[str, str] = {
+    "README.md": dedent(
+        """\
+        # Make Me Unicorn Workspace
+
+        This workspace uses Make Me Unicorn operating docs.
+
+        ## Quick Start
+        1. Update `docs/core/*` with your project context.
+        2. Set this week's priorities in `current_sprint.md`.
+        3. Start each working session with `prompts/start.md`.
+        4. Close each session with `prompts/close.md`.
+        """
+    ),
+    "Unicorn.md": dedent(
+        """\
+        # Unicorn Hub
+
+        Primary operating hub for this project.
+
+        ## Current Mode
+        - mode: product
+        - goal: reduce execution drift
+        """
+    ),
+    "current_sprint.md": dedent(
+        """\
+        # Current Sprint
+
+        ## Goal 1
+        -
+
+        ## Goal 2
+        -
+
+        ## Goal 3
+        -
+        """
+    ),
+    "docs/core/strategy.md": "# Strategy\n\n- ICP:\n- Core problem:\n- Success metric:\n",
+    "docs/core/product.md": "# Product\n\n- Core flow:\n- Scope (this sprint):\n- Out of scope:\n",
+    "docs/core/pricing.md": "# Pricing\n\n- Free:\n- Pro:\n- Refund policy:\n",
+    "docs/core/architecture.md": "# Architecture\n\n- System map:\n- Data flow:\n- dev/staging/prod separation:\n",
+    "docs/core/ux.md": "# UX\n\n- Main journey:\n- Empty/error states:\n",
+    "docs/ops/roadmap.md": "# Roadmap\n\n- This month:\n- Next month:\n",
+    "docs/ops/metrics.md": "# Metrics\n\n- North star:\n- Activation:\n- Retention:\n",
+    "docs/ops/compliance.md": "# Compliance\n\n- Privacy policy:\n- Terms:\n- Data deletion flow:\n",
+    "docs/ops/reliability.md": "# Reliability\n\n- Monitoring:\n- Incident handling:\n- Backup/recovery:\n",
+    "docs/checklists/from_scratch.md": dedent(
+        """\
+        # SaaS From Scratch Checklist
+
+        ## M0 Problem Fit
+        - [ ] ICP and problem statement defined
+
+        ## M1 Build Fit
+        - [ ] Core flow works end-to-end with error states
+        """
+    ),
+    "docs/checklists/auth_security.md": dedent(
+        """\
+        # Auth & Security Checklist
+
+        - [ ] Login/signup path exists
+        - [ ] password reset flow exists
+        - [ ] Session management and logout covered
+        """
+    ),
+    "docs/checklists/billing_tax.md": dedent(
+        """\
+        # Billing & Tax Checklist
+
+        - [ ] Pricing and plan limits defined
+        - [ ] webhook signature verification implemented
+        - [ ] idempotent webhook processing implemented
+        - [ ] Refund/cancel policy documented
+        """
+    ),
+    "docs/checklists/seo_distribution.md": dedent(
+        """\
+        # SEO & Distribution Checklist
+
+        - [ ] sitemap and robots configured
+        - [ ] OG thumbnail/open graph metadata configured
+        - [ ] Basic analytics events defined
+        """
+    ),
+    "docs/checklists/release_readiness.md": dedent(
+        """\
+        # Release Readiness Checklist
+
+        - [ ] Rollback plan exists
+        - [ ] Monitoring and alerts active
+        - [ ] Support path and status page defined
+        """
+    ),
+    "prompts/start.md": "# Session Start Prompt\n\n- Mode:\n- Context files:\n- Today's objective:\n",
+    "prompts/close.md": "# Session Close Prompt\n\n- What changed:\n- Decisions made:\n- Next actions:\n",
+    "prompts/adr.md": "# ADR Prompt\n\n- Decision:\n- Context:\n- Options considered:\n- Trade-offs:\n",
+}
+
 
 class Result(dict):
     @property
@@ -83,6 +185,11 @@ class Result(dict):
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(prog="mmu", description="Make Me Unicorn CLI")
     sub = parser.add_subparsers(dest="command", required=True)
+
+    p_init = sub.add_parser("init", help="Initialize baseline docs and checklists")
+    p_init.add_argument("--json", action="store_true", help="Output structured JSON")
+    p_init.add_argument("--root", default=".", help="Project root path")
+    p_init.add_argument("--force", action="store_true", help="Overwrite existing files")
 
     p_start = sub.add_parser("start", help="Start a focused mode session")
     p_start.add_argument("--json", action="store_true", help="Output structured JSON")
@@ -104,6 +211,13 @@ def parse_args() -> argparse.Namespace:
     p_gate.add_argument("--json", action="store_true", help="Output structured JSON")
     p_gate.add_argument("--stage", required=True, help="Stage key (for example: M0, M1, M6)")
     p_gate.add_argument("--root", default=".", help="Project root path")
+
+    p_snapshot = sub.add_parser("snapshot", help="Run snapshot diagnostic from mmu CLI")
+    p_snapshot.add_argument("--json", action="store_true", help="Output structured JSON")
+    p_snapshot.add_argument("--root", default=".", help="MMU root path where snapshot script exists")
+    p_snapshot.add_argument("--target", default=".", help="Target project path to scan")
+    p_snapshot.add_argument("--output", default="SNAPSHOT.md", help="Output report path")
+    p_snapshot.add_argument("--no-md", action="store_true", help="Do not persist markdown report")
 
     return parser.parse_args()
 
@@ -405,6 +519,41 @@ def command_close(root: Path) -> Result:
     return Result(exit_code=0, placeholder_goals=placeholder_found, messages=messages)
 
 
+def command_init(root: Path, force: bool) -> Result:
+    created: list[str] = []
+    skipped: list[str] = []
+    overwritten: list[str] = []
+    messages = [f"Init workspace: {root}"]
+
+    for rel, content in INIT_TEMPLATES.items():
+        path = root / rel
+        existed_before = path.exists()
+        if existed_before and not force:
+            skipped.append(rel)
+            messages.append(f"  [skip] {rel} (already exists)")
+            continue
+        write_text(path, content)
+        if existed_before and force:
+            overwritten.append(rel)
+            messages.append(f"  [overwrite] {rel}")
+        else:
+            created.append(rel)
+            messages.append(f"  [create] {rel}")
+
+    if created or overwritten:
+        messages.append("Init result: workspace scaffold ready")
+        return Result(
+            exit_code=0,
+            created=created,
+            overwritten=overwritten,
+            skipped=skipped,
+            messages=messages,
+        )
+
+    messages.append("Init result: nothing changed")
+    return Result(exit_code=0, created=[], overwritten=[], skipped=skipped, messages=messages)
+
+
 def parse_stage_headings(checklist_text: str) -> dict[str, str]:
     out: dict[str, str] = {}
     for line in checklist_text.splitlines():
@@ -561,6 +710,41 @@ def command_gate(stage: str, root: Path) -> Result:
     return Result(exit_code=0, stage=stage, heading=heading, pending=[], messages=messages)
 
 
+def command_snapshot(root: Path, target: str, output: str, no_md: bool) -> Result:
+    candidates = [
+        root / "snapshot",
+        root / "scripts/snapshot.sh",
+        Path(__file__).resolve().parents[2] / "snapshot",
+        Path(__file__).resolve().parents[2] / "scripts/snapshot.sh",
+    ]
+
+    script = next((p for p in candidates if p.is_file()), None)
+    if script is None:
+        return Result(
+            exit_code=1,
+            messages=[
+                "Snapshot script not found.",
+                "Expected one of: snapshot or scripts/snapshot.sh",
+            ],
+        )
+
+    cmd = [str(script), target]
+    if no_md:
+        cmd.append("--no-md")
+    else:
+        cmd.append(output)
+
+    try:
+        proc = subprocess.run(cmd, cwd=str(root), text=True, capture_output=True, check=False)
+    except OSError as exc:
+        return Result(exit_code=1, messages=[f"failed to run snapshot: {exc}"])
+
+    out_lines = proc.stdout.splitlines() if proc.stdout else []
+    err_lines = proc.stderr.splitlines() if proc.stderr else []
+    messages = out_lines + [f"[stderr] {line}" for line in err_lines]
+    return Result(exit_code=proc.returncode, command=cmd, messages=messages)
+
+
 def render_result(result: Result, as_json: bool) -> int:
     if as_json:
         print(json.dumps(result, ensure_ascii=False, indent=2))
@@ -574,6 +758,9 @@ def main() -> int:
     args = parse_args()
     root = root_path(getattr(args, "root", "."))
 
+    if args.command == "init":
+        result = command_init(root, args.force)
+        return render_result(result, args.json)
     if args.command == "start":
         result = command_start(args.mode, root, args.emit, args.output, args.clipboard)
         return render_result(result, args.json)
@@ -585,6 +772,9 @@ def main() -> int:
         return render_result(result, args.json)
     if args.command == "gate":
         result = command_gate(args.stage, root)
+        return render_result(result, args.json)
+    if args.command == "snapshot":
+        result = command_snapshot(root, args.target, args.output, args.no_md)
         return render_result(result, args.json)
 
     return 1

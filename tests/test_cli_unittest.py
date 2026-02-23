@@ -1,4 +1,5 @@
 import io
+import os
 import tempfile
 import unittest
 from contextlib import redirect_stdout
@@ -48,6 +49,36 @@ class CLITestCase(unittest.TestCase):
         bundle = bundle_path.read_text(encoding="utf-8")
         self.assertIn("docs/core/product.md", bundle)
         self.assertIn("docs/ops/roadmap.md", bundle)
+
+    def test_init_creates_scaffold_and_doctor_passes(self) -> None:
+        result = cli.command_init(self.root, force=False)
+        self.assertEqual(result.exit_code, 0)
+        self.assertTrue((self.root / "README.md").is_file())
+        self.assertTrue((self.root / "docs/checklists/auth_security.md").is_file())
+
+        doctor = cli.command_doctor(self.root)
+        self.assertEqual(doctor.exit_code, 0)
+
+    def test_init_respects_existing_files_without_force(self) -> None:
+        self.write("README.md", "custom-readme\n")
+        result = cli.command_init(self.root, force=False)
+        self.assertEqual(result.exit_code, 0)
+        self.assertIn("README.md", result.get("skipped", []))
+        self.assertEqual((self.root / "README.md").read_text(encoding="utf-8"), "custom-readme\n")
+
+    def test_snapshot_command_runs_local_script(self) -> None:
+        script = self.root / "snapshot"
+        script.write_text(
+            "#!/usr/bin/env bash\n"
+            "set -euo pipefail\n"
+            "echo 'snapshot-ok'\n",
+            encoding="utf-8",
+        )
+        os.chmod(script, 0o755)
+
+        result = cli.command_snapshot(self.root, target=".", output="SNAPSHOT.md", no_md=True)
+        self.assertEqual(result.exit_code, 0)
+        self.assertIn("snapshot-ok", "\n".join(result.get("messages", [])))
 
     def test_gate_parses_flexible_heading_and_indented_checklist(self) -> None:
         self.write(

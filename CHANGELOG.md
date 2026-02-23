@@ -4,6 +4,24 @@ All notable changes to this project will be documented in this file.
 
 The format is inspired by Keep a Changelog and follows semantic intent.
 
+## [Unreleased]
+
+### Added
+
+- `mmu init` command for baseline workspace scaffolding.
+- `mmu snapshot` command to invoke snapshot diagnostics through the Python CLI.
+- GitHub metadata checklist at `docs/ops/github_metadata.md`.
+- Unit tests for `init` and `snapshot` command paths.
+
+### Changed
+
+- README quick-start and CLI sections now include `init` and `snapshot`.
+- CLI badge now reflects the expanded command surface.
+
+### Fixed
+
+- `snapshot.sh` now parses `.snapshotrc` safely instead of sourcing arbitrary shell code.
+
 ## [0.3.0] - 2026-02-23
 
 ### Added

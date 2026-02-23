@@ -9,7 +9,7 @@ SaaS from scratch, without execution drift.
 [![License: MIT](https://img.shields.io/badge/License-MIT-black.svg)](./LICENSE)
 [![Status: v0.3](https://img.shields.io/badge/status-v0.3-blue.svg)](./ROADMAP.md)
 [![Docs](https://img.shields.io/badge/docs-template%20pack-0ea5e9.svg)](./docs)
-[![CLI Prototype](https://img.shields.io/badge/cli-start%2Fclose%2Fdoctor%2Fgate-f59e0b.svg)](./SPEC.md)
+[![CLI Prototype](https://img.shields.io/badge/cli-init%2Fstart%2Fsnapshot%2Fdoctor%2Fgate%2Fclose-f59e0b.svg)](./SPEC.md)
 [![Guardrails CI](https://img.shields.io/badge/ci-doctor%20%2B%20gates-22c55e.svg)](./.github/workflows/mmu-guardrails.yml)
 [![Contributions Welcome](https://img.shields.io/badge/contributions-welcome-16a34a.svg)](./CONTRIBUTING.md)
 
@@ -23,7 +23,7 @@ SaaS from scratch, without execution drift.
 
 - `Make Me Unicorn` is a read-first founder operating system.
 - Use `snapshot` for fast diagnostics, then decide what to fix.
-- Use `mmu` for structured execution (`start`, `doctor`, `gate`, `close`).
+- Use `mmu` for structured execution (`init`, `start`, `doctor`, `gate`, `snapshot`, `close`).
 
 ### Quick Links
 
@@ -44,6 +44,20 @@ Example:
 ./snapshot ../vista-sphere-pro --no-md
 ```
 
+### 🎬 CLI Demo (Sample Output)
+
+```text
+MMU Snapshot
+Target: ../_ideas/claude-code-skills
+Status: Critical gaps in Billing
+
+Top Risks
+- 🚨 1. [critical] Product UX exists but monetization path is missing
+
+Immediate Actions
+- 👉 1. Define pricing and checkout path (success/failure/refund)
+```
+
 ### Repo Map
 
 - `docs/core/*` - durable strategy/product/architecture context
@@ -51,7 +65,7 @@ Example:
 - `docs/checklists/*` - practical launch/risk checklists
 - `prompts/*` - start/close/ADR session templates
 - `src/mmu_cli/*` - installable `mmu` CLI implementation
-- `scripts/*` - helper scripts (`mmu.sh`, guardrails, snapshot logic)
+- `scripts/*` - helper scripts (`mmu.sh`, guardrails, snapshot logic, GitHub metadata helper)
 - `examples/*` - filled example(s)
 - `reports/*` - local snapshot reports (generated)
 
@@ -148,9 +162,11 @@ Full rules: `docs/ops/mode_playbook.md`
 ```bash
 cd make-me-unicorn
 pip install -e .
+mmu init --root .
 mmu start --mode product
 mmu doctor
 mmu gate --stage M2
+mmu snapshot --target ../vista-sphere-pro --no-md
 mmu close
 ```
 
@@ -225,6 +241,7 @@ Branch protection baseline: `docs/ops/repo_protection.md`.
 2. Place your social preview image at `assets/brand/og-cover.png`.
 3. In GitHub repo settings, set Social preview to `assets/brand/og-cover.png`.
 4. Verify link previews on Slack/X/Kakao/Messenger.
+5. Apply repo topics/description checklist from `docs/ops/github_metadata.md`.
 
 ## 🗺 Roadmap
 

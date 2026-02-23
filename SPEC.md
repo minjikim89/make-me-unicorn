@@ -13,7 +13,9 @@ This document defines the current runtime behavior for `Make Me Unicorn`.
 
 | Command | Purpose | Output | Exit Code |
 |---|---|---|---|
+| `mmu init` | Bootstrap baseline docs/checklists/prompts | created/skipped file report | `0` success |
 | `mmu start --mode <mode>` | Start a focused session | mode file list and optional context bundle | `0` success |
+| `mmu snapshot --target <path>` | Run project diagnostic snapshot | terminal summary + optional markdown report | `0` success |
 | `mmu close` | End a session safely | close checklist and update reminders | `0` success |
 | `mmu doctor` | Validate operating baseline | pass/fail report for docs and codebase guardrails | `0` pass, `2` fail |
 | `mmu gate --stage <M#>` | Stage-gate readiness check | pass/fail for unresolved checklist items | `0` pass, `3` fail |
@@ -37,6 +39,33 @@ Options:
 - `--emit list|bundle`: show file list (default) or full context bundle.
 - `--output <path>`: write generated bundle to file.
 - `--clipboard`: copy bundle to clipboard on macOS (`pbcopy`).
+
+## Init command
+
+```bash
+mmu init --root .
+```
+
+Options:
+
+- `--force`: overwrite existing scaffold files.
+
+Behavior:
+
+- Creates baseline docs/checklists/prompts used by `doctor`, `gate`, and mode sessions.
+- Skips existing files unless `--force` is provided.
+
+## Snapshot command
+
+```bash
+mmu snapshot --target ../my-project --no-md
+```
+
+Options:
+
+- `--target <path>`: project path to scan (default: current directory).
+- `--output <path>`: markdown report path (default: `SNAPSHOT.md`).
+- `--no-md`: terminal-only output without saving a report.
 
 ## Modes
 
