@@ -13,9 +13,41 @@ SaaS from scratch, without execution drift.
 [![Guardrails CI](https://img.shields.io/badge/ci-doctor%20%2B%20gates-22c55e.svg)](./.github/workflows/mmu-guardrails.yml)
 [![Contributions Welcome](https://img.shields.io/badge/contributions-welcome-16a34a.svg)](./CONTRIBUTING.md)
 
-<img src="./assets/brand/unicorn-hero.svg" alt="Make Me Unicorn mascot" width="760" />
+<img src="./assets/brand/unicorn-hero.png" alt="Make Me Unicorn mascot" width="960" />
 
 </div>
+
+## Start Here
+
+If you are new, follow only these files:
+
+1. `README.md` - Overview and quick commands
+2. `Unicorn.md` - Operating hub for daily execution
+3. `current_sprint.md` - What you are doing this week
+4. `docs/checklists/from_scratch.md` - Gate checklist
+
+If you only want diagnosis (read-only):
+
+```bash
+./snapshot <target-project-path> --no-md
+```
+
+Example:
+
+```bash
+./snapshot ../vista-sphere-pro --no-md
+```
+
+## Repo Map
+
+- `docs/core/*` - product strategy and architecture context
+- `docs/ops/*` - operation, roadmap, reliability, compliance
+- `docs/checklists/*` - practical launch/risk checklists
+- `prompts/*` - start/close/ADR session templates
+- `src/mmu_cli/*` - installable `mmu` CLI code
+- `scripts/*` - shell helpers (`mmu.sh`, guardrails)
+- `examples/*` - filled sample
+- `reports/*` - local snapshot reports (generated)
 
 ## What is this
 
@@ -183,7 +215,7 @@ Branch protection baseline: `docs/ops/repo_protection.md`.
 
 ## Brand setup
 
-1. Replace the default hero image at `assets/brand/unicorn-hero.svg` (or update the README image path).
+1. Replace the hero image at `assets/brand/unicorn-hero.png` (or update the README image path).
 2. Place your social preview image at `assets/brand/og-cover.png`.
 3. In GitHub repo settings, set Social preview to `assets/brand/og-cover.png`.
 4. Verify link previews on Slack/X/Kakao/Messenger.
