@@ -4,7 +4,7 @@
 
 **FounderMode for solo SaaS builders**
 
-Build from scratch. Ship with confidence. Keep context across any LLM.
+SaaS from scratch, without execution drift.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-black.svg)](./LICENSE)
 [![Status: v0.2](https://img.shields.io/badge/status-v0.2-blue.svg)](./ROADMAP.md)
@@ -162,6 +162,11 @@ Keep markdown as the canonical source.
 ## Evolution path
 
 For staged maturation from MVP to later phases, see `docs/ops/evolution_path.md`.
+
+Execution planning and status snapshots:
+
+- `docs/ops/prd_8week_growth.md`
+- `docs/ops/status_snapshot_2026-02-23.md`
 
 ## Filled example
 
