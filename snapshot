@@ -34,8 +34,9 @@ OUTPUT_FILE="${POSITIONAL[1]:-SNAPSHOT.md}"
 TMP_REPORT=""
 
 if [ "$NO_MD" -eq 1 ]; then
-  TMP_REPORT="$(mktemp /tmp/mmu_snapshot.XXXXXX.md)"
-  OUTPUT_FILE="$TMP_REPORT"
+  TMP_REPORT="$(mktemp /tmp/mmu_snapshot.XXXXXX)"
+  OUTPUT_FILE="${TMP_REPORT}.md"
+  mv "$TMP_REPORT" "$OUTPUT_FILE"
 fi
 
 "$SCRIPT_DIR/scripts/snapshot.sh" "$TARGET_DIR" "$OUTPUT_FILE" --quiet
@@ -99,6 +100,29 @@ box_line() {
   printf "│ %-93s │\n" "$text"
 }
 
+score_badge() {
+  local score="$1"
+  local bar
+  bar="$(printf '%*s' "$score" '' | tr ' ' '#')$(printf '%*s' "$((3-score))" '' | tr ' ' '-')"
+  case "$score" in
+    0) echo "🔴 $score/3 [$bar]" ;;
+    1) echo "🟠 $score/3 [$bar]" ;;
+    2) echo "🟡 $score/3 [$bar]" ;;
+    *) echo "🟢 $score/3 [$bar]" ;;
+  esac
+}
+
+level_badge() {
+  local level="$1"
+  case "$level" in
+    critical) echo "🚨 critical" ;;
+    weak) echo "⚠️ weak" ;;
+    partial) echo "🟡 partial" ;;
+    strong) echo "✅ strong" ;;
+    *) echo "ℹ️ $level" ;;
+  esac
+}
+
 critical_domains=()
 needs_attention_domains=()
 for d in Frontend Auth Billing Compliance Reliability Analytics; do
@@ -121,64 +145,95 @@ fi
 
 echo ""
 box_top
-box_line "   /) /)      MMU Snapshot"
-box_line "  ( . .)      Target: $(cd "$TARGET_DIR" && pwd)"
-box_line "  C(\" )(\")     Status: $STATUS_TEXT"
+box_line "                  \\"
+box_line "                   \\\\"
+box_line "                    \\\\"
+box_line "              ✨     \\\\"
+box_line "                    >\\/7   ✦"
+box_line "                _.-(6'  \\      ✨"
+box_line "               (=___._/\`  \\   ✦"
+box_line "                    )  \\   |"
+box_line "           ✦       /    \\  |"
+box_line "                  /      >  /   ✨"
+box_line "                 /      < _\\ \\   ✦"
+box_mid
+box_line "MMU Snapshot"
+box_line "Target: $(cd "$TARGET_DIR" && pwd)"
+box_line "Status: $STATUS_TEXT"
 box_bottom
 
 echo ""
 echo "Domain Coverage"
-echo "┌──────────────┬───────┬──────────┬──────────────────────────────────────────────────────────┐"
-echo "│ Domain       │ Score │ Level    │ Signal                                                   │"
-echo "├──────────────┼───────┼──────────┼──────────────────────────────────────────────────────────┤"
+echo "┌──────────────┬────────────────┬────────────────┬──────────────────────────────────────────────┐"
+echo "│ Domain       │ Score          │ Level          │ Signal                                       │"
+echo "├──────────────┼────────────────┼────────────────┼──────────────────────────────────────────────┤"
 for d in Frontend Auth Billing Compliance Reliability Analytics; do
   row="$(get_coverage_row "$d")"
   [ -z "$row" ] && continue
   score="$(echo "$row" | cut -f1)"
   level="$(echo "$row" | cut -f2)"
   signal="$(echo "$row" | cut -f3-)"
-  bar="$(printf '%*s' "$score" '' | tr ' ' '#')$(printf '%*s' "$((3-score))" '' | tr ' ' '-')"
-  score_cell="$score/3 [$bar]"
-  signal="$(ellipsize "$signal" 56)"
-  printf "│ %-12s │ %-5s │ %-8s │ %-56s │\n" "$d" "$score_cell" "$level" "$signal"
+  score_cell="$(score_badge "$score")"
+  level_cell="$(level_badge "$level")"
+  signal="$(ellipsize "$signal" 44)"
+  printf "│ %-12s │ %-14s │ %-14s │ %-44s │\n" "$d" "$score_cell" "$level_cell" "$signal"
 done
-echo "└──────────────┴───────┴──────────┴──────────────────────────────────────────────────────────┘"
+echo "└──────────────┴────────────────┴────────────────┴──────────────────────────────────────────────┘"
 
 echo ""
-echo "What's Missing"
-echo "┌──────────────┬───────────────────────────────────────────────────────────────────────────────┐"
-echo "│ Domain       │ Missing Signals                                                               │"
-echo "├──────────────┼───────────────────────────────────────────────────────────────────────────────┤"
+echo "Coverage Details"
+echo "┌──────────────┬──────────────┬───────────────────────────────────────────────────────────────┐"
+echo "│ Domain       │ Status       │ Detail                                                        │"
+echo "├──────────────┼──────────────┼───────────────────────────────────────────────────────────────┤"
 missing_count=0
 for d in Frontend Auth Billing Compliance Reliability Analytics; do
   miss="$(get_missing_for_domain "$d")"
   miss="$(trim "$miss")"
+  row="$(get_coverage_row "$d")"
+  signal="$(echo "$row" | cut -f3-)"
+  signal="$(trim "$signal")"
   if [ -n "$miss" ] && [ "$miss" != "-" ]; then
     missing_count=$((missing_count + 1))
-    miss="$(ellipsize "$miss" 77)"
-    printf "│ %-12s │ %-77s │\n" "$d" "$miss"
+    miss="$(ellipsize "$miss" 61)"
+    printf "│ %-12s │ %-12s │ %-61s │\n" "$d" "❌ Missing" "$miss"
+  else
+    if [ -z "$signal" ] || [ "$signal" = "-" ]; then
+      signal="No missing signal from heuristic scan"
+    fi
+    signal="$(ellipsize "$signal" 61)"
+    printf "│ %-12s │ %-12s │ %-61s │\n" "$d" "✅ Covered" "$signal"
   fi
 done
-if [ "$missing_count" -eq 0 ]; then
-  printf "│ %-12s │ %-77s │\n" "-" "No obvious missing signals detected by heuristic scan"
-fi
-echo "└──────────────┴───────────────────────────────────────────────────────────────────────────────┘"
+echo "└──────────────┴──────────────┴───────────────────────────────────────────────────────────────┘"
 
 echo ""
 echo "Top Risks"
-awk '
+while IFS= read -r risk; do
+  [ -z "$risk" ] && continue
+  icon="ℹ️"
+  case "$risk" in
+    *"[critical]"*) icon="🚨" ;;
+    *"[high]"*) icon="🛑" ;;
+    *"[medium]"*) icon="⚠️" ;;
+    *"[info]"*) icon="ℹ️" ;;
+  esac
+  echo "- $icon $risk"
+done < <(awk '
   /^## Top Risks/ {in_risk=1; next}
   /^## / && in_risk {in_risk=0}
-  in_risk && /^[0-9]+\. / {print "- " $0}
-' "$OUTPUT_FILE"
+  in_risk && /^[0-9]+\. / {print $0}
+' "$OUTPUT_FILE")
 
 echo ""
 echo "Immediate Actions"
-awk '
+while IFS= read -r action; do
+  [ -z "$action" ] && continue
+  echo "- 👉 $action"
+done < <(awk '
   /^## Immediate Actions/ {in_act=1; next}
   /^## / && in_act {in_act=0}
-  in_act && /^[0-9]+\. / {print "- " $0}
-' "$OUTPUT_FILE"
+  in_act && /^[0-9]+\. / {print $0}
+' "$OUTPUT_FILE")
 
 echo ""
 if [ "$NO_MD" -eq 1 ]; then

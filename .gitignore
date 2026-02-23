@@ -12,3 +12,10 @@ __pycache__/
 *.egg-info/
 build/
 dist/
+
+# Snapshot outputs (local diagnostics)
+SNAPSHOT*.md
+reports/*.md
+
+# Editor temp
+*.swp
