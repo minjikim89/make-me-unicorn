@@ -1,0 +1,189 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+NO_MD=0
+POSITIONAL=()
+
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --no-md)
+      NO_MD=1
+      shift
+      ;;
+    -h|--help)
+      cat <<USAGE
+Usage: ./snapshot [target_dir] [output_file] [--no-md]
+
+Examples:
+  ./snapshot
+  ./snapshot ../vista-sphere-pro ./SNAPSHOT_vista.md
+  ./snapshot ../vista-sphere-pro --no-md
+USAGE
+      exit 0
+      ;;
+    *)
+      POSITIONAL+=("$1")
+      shift
+      ;;
+  esac
+done
+
+TARGET_DIR="${POSITIONAL[0]:-.}"
+OUTPUT_FILE="${POSITIONAL[1]:-SNAPSHOT.md}"
+TMP_REPORT=""
+
+if [ "$NO_MD" -eq 1 ]; then
+  TMP_REPORT="$(mktemp /tmp/mmu_snapshot.XXXXXX.md)"
+  OUTPUT_FILE="$TMP_REPORT"
+fi
+
+"$SCRIPT_DIR/scripts/snapshot.sh" "$TARGET_DIR" "$OUTPUT_FILE" --quiet
+
+trim() {
+  echo "$1" | sed 's/^ *//; s/ *$//'
+}
+
+ellipsize() {
+  local text="$1"
+  local max="$2"
+  if [ "${#text}" -le "$max" ]; then
+    printf "%s" "$text"
+  else
+    printf "%s..." "${text:0:$((max - 3))}"
+  fi
+}
+
+get_coverage_row() {
+  local domain="$1"
+  awk -F'|' -v d="$domain" '
+    /^## Domain Coverage/ {in_cov=1; next}
+    /^## / && in_cov {in_cov=0}
+    in_cov {
+      dom=$2; gsub(/^ +| +$/, "", dom)
+      if (dom == d) {
+        score=$3; gsub(/^ +| +$/, "", score)
+        level=$4; gsub(/^ +| +$/, "", level)
+        signal=$5; gsub(/^ +| +$/, "", signal)
+        print score "\t" level "\t" signal
+        exit
+      }
+    }
+  ' "$OUTPUT_FILE"
+}
+
+get_missing_for_domain() {
+  local domain="$1"
+  awk -F'|' -v d="$domain" '
+    /^## Missing by Domain/ {in_miss=1; next}
+    /^## / && in_miss {in_miss=0}
+    in_miss {
+      dom=$2; gsub(/^ +| +$/, "", dom)
+      if (dom == d) {
+        miss=$3; gsub(/^ +| +$/, "", miss)
+        print miss
+        exit
+      }
+    }
+  ' "$OUTPUT_FILE"
+}
+
+BOX_INNER=93
+box_top() { echo "┌───────────────────────────────────────────────────────────────────────────────────────────────┐"; }
+box_mid() { echo "├───────────────────────────────────────────────────────────────────────────────────────────────┤"; }
+box_bottom() { echo "└───────────────────────────────────────────────────────────────────────────────────────────────┘"; }
+box_line() {
+  local raw="$1"
+  local text
+  text="$(ellipsize "$raw" "$BOX_INNER")"
+  printf "│ %-93s │\n" "$text"
+}
+
+critical_domains=()
+needs_attention_domains=()
+for d in Frontend Auth Billing Compliance Reliability Analytics; do
+  row="$(get_coverage_row "$d")"
+  [ -z "$row" ] && continue
+  score="$(echo "$row" | cut -f1)"
+  if [ "$score" -eq 0 ]; then
+    critical_domains+=("$d")
+  elif [ "$score" -eq 1 ]; then
+    needs_attention_domains+=("$d")
+  fi
+done
+
+STATUS_TEXT="Balanced baseline"
+if [ "${#critical_domains[@]}" -gt 0 ]; then
+  STATUS_TEXT="Critical gaps in $(IFS=', '; echo "${critical_domains[*]}")"
+elif [ "${#needs_attention_domains[@]}" -gt 0 ]; then
+  STATUS_TEXT="Needs attention in $(IFS=', '; echo "${needs_attention_domains[*]}")"
+fi
+
+echo ""
+box_top
+box_line "   /) /)      MMU Snapshot"
+box_line "  ( . .)      Target: $(cd "$TARGET_DIR" && pwd)"
+box_line "  C(\" )(\")     Status: $STATUS_TEXT"
+box_bottom
+
+echo ""
+echo "Domain Coverage"
+echo "┌──────────────┬───────┬──────────┬──────────────────────────────────────────────────────────┐"
+echo "│ Domain       │ Score │ Level    │ Signal                                                   │"
+echo "├──────────────┼───────┼──────────┼──────────────────────────────────────────────────────────┤"
+for d in Frontend Auth Billing Compliance Reliability Analytics; do
+  row="$(get_coverage_row "$d")"
+  [ -z "$row" ] && continue
+  score="$(echo "$row" | cut -f1)"
+  level="$(echo "$row" | cut -f2)"
+  signal="$(echo "$row" | cut -f3-)"
+  bar="$(printf '%*s' "$score" '' | tr ' ' '#')$(printf '%*s' "$((3-score))" '' | tr ' ' '-')"
+  score_cell="$score/3 [$bar]"
+  signal="$(ellipsize "$signal" 56)"
+  printf "│ %-12s │ %-5s │ %-8s │ %-56s │\n" "$d" "$score_cell" "$level" "$signal"
+done
+echo "└──────────────┴───────┴──────────┴──────────────────────────────────────────────────────────┘"
+
+echo ""
+echo "What's Missing"
+echo "┌──────────────┬───────────────────────────────────────────────────────────────────────────────┐"
+echo "│ Domain       │ Missing Signals                                                               │"
+echo "├──────────────┼───────────────────────────────────────────────────────────────────────────────┤"
+missing_count=0
+for d in Frontend Auth Billing Compliance Reliability Analytics; do
+  miss="$(get_missing_for_domain "$d")"
+  miss="$(trim "$miss")"
+  if [ -n "$miss" ] && [ "$miss" != "-" ]; then
+    missing_count=$((missing_count + 1))
+    miss="$(ellipsize "$miss" 77)"
+    printf "│ %-12s │ %-77s │\n" "$d" "$miss"
+  fi
+done
+if [ "$missing_count" -eq 0 ]; then
+  printf "│ %-12s │ %-77s │\n" "-" "No obvious missing signals detected by heuristic scan"
+fi
+echo "└──────────────┴───────────────────────────────────────────────────────────────────────────────┘"
+
+echo ""
+echo "Top Risks"
+awk '
+  /^## Top Risks/ {in_risk=1; next}
+  /^## / && in_risk {in_risk=0}
+  in_risk && /^[0-9]+\. / {print "- " $0}
+' "$OUTPUT_FILE"
+
+echo ""
+echo "Immediate Actions"
+awk '
+  /^## Immediate Actions/ {in_act=1; next}
+  /^## / && in_act {in_act=0}
+  in_act && /^[0-9]+\. / {print "- " $0}
+' "$OUTPUT_FILE"
+
+echo ""
+if [ "$NO_MD" -eq 1 ]; then
+  echo "Saved report: skipped (--no-md)"
+  rm -f "$OUTPUT_FILE"
+else
+  echo "Saved report: $OUTPUT_FILE"
+fi

@@ -1,0 +1,12 @@
+# Optional tuning for snapshot heuristic
+
+# Extra directories to ignore (comma-separated)
+# SNAPSHOT_IGNORE_DIRS="dist,.next,coverage,build"
+
+# Extra regex fragments for custom stacks
+# SNAPSHOT_AUTH_KEYWORDS_EXTRA="lucia|better-auth|magic link"
+# SNAPSHOT_AUTH_FILE_PATTERNS_EXTRA="signin|members"
+# SNAPSHOT_BILLING_KEYWORDS_EXTRA="lemonsqueezy|chargebee"
+# SNAPSHOT_COMPLIANCE_KEYWORDS_EXTRA="cookie policy|dpia"
+# SNAPSHOT_RELIABILITY_KEYWORDS_EXTRA="opentelemetry|pagerduty"
+# SNAPSHOT_ANALYTICS_KEYWORDS_EXTRA="segment|heap"
