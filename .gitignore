@@ -16,6 +16,7 @@ dist/
 # Snapshot outputs (local diagnostics)
 SNAPSHOT*.md
 reports/*.md
+docs/local/
 
 # Editor temp
 *.swp

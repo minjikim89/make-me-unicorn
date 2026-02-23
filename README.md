@@ -17,16 +17,22 @@ SaaS from scratch, without execution drift.
 
 </div>
 
-## Start Here
+## 🚀 Start Here
 
-If you are new, follow only these files:
+### TL;DR
 
-1. `README.md` - Overview and quick commands
-2. `Unicorn.md` - Operating hub for daily execution
-3. `current_sprint.md` - What you are doing this week
-4. `docs/checklists/from_scratch.md` - Gate checklist
+- `Make Me Unicorn` is a read-first founder operating system.
+- Use `snapshot` for fast diagnostics, then decide what to fix.
+- Use `mmu` for structured execution (`start`, `doctor`, `gate`, `close`).
 
-If you only want diagnosis (read-only):
+### Quick Links
+
+- 📘 `Unicorn.md` - daily operating hub
+- 🗂 `current_sprint.md` - this week execution focus
+- ✅ `docs/checklists/from_scratch.md` - stage gate checklist
+- 🧭 `docs/ops/mode_playbook.md` - mode rules
+
+### 30-Second Diagnostic (Read-Only)
 
 ```bash
 ./snapshot <target-project-path> --no-md
@@ -38,24 +44,24 @@ Example:
 ./snapshot ../vista-sphere-pro --no-md
 ```
 
-## Repo Map
+### Repo Map
 
-- `docs/core/*` - product strategy and architecture context
-- `docs/ops/*` - operation, roadmap, reliability, compliance
+- `docs/core/*` - durable strategy/product/architecture context
+- `docs/ops/*` - operations, roadmap, reliability, compliance
 - `docs/checklists/*` - practical launch/risk checklists
 - `prompts/*` - start/close/ADR session templates
-- `src/mmu_cli/*` - installable `mmu` CLI code
-- `scripts/*` - shell helpers (`mmu.sh`, guardrails)
-- `examples/*` - filled sample
+- `src/mmu_cli/*` - installable `mmu` CLI implementation
+- `scripts/*` - helper scripts (`mmu.sh`, guardrails, snapshot logic)
+- `examples/*` - filled example(s)
 - `reports/*` - local snapshot reports (generated)
 
-## What is this
+## 🦄 What Is This
 
 `Make Me Unicorn` is an open-source operating system for solo founders building SaaS from scratch.
 
 It gives you a practical structure to run strategy, product, design, frontend, backend, auth, billing, compliance, growth, and launch without losing context when switching between LLMs.
 
-## Why this exists
+## ⚠️ Why This Exists
 
 Most founders do not fail because of missing code snippets.
 They fail because of execution drift.
@@ -72,7 +78,7 @@ They fail because of execution drift.
 4. Phase gates for SaaS from scratch
 5. Session start/close prompts for repeatable operation
 
-## Architecture
+## 🏗 Architecture
 
 ```mermaid
 flowchart TD
@@ -85,7 +91,7 @@ flowchart TD
   G --> H[Update Sprint + ADR + Core/Ops]
 ```
 
-## SaaS From Scratch Gates
+## 🛂 SaaS From Scratch Gates
 
 Use these gates as non-negotiable checkpoints.
 
@@ -100,7 +106,7 @@ Use these gates as non-negotiable checkpoints.
 
 See `docs/checklists/from_scratch.md` for the full checklist.
 
-## Mode System
+## 🎛 Mode System
 
 One mode per session keeps decisions coherent.
 
@@ -121,7 +127,7 @@ One mode per session keeps decisions coherent.
 
 Full rules: `docs/ops/mode_playbook.md`
 
-## What you get
+## 📦 What You Get
 
 - `Unicorn.md` as the operating hub
 - `assets/brand/*` for README and social-preview visuals
@@ -137,7 +143,7 @@ Full rules: `docs/ops/mode_playbook.md`
 - `docs/ops/evolution_path.md` for MVP -> Phase roadmap
 - `CODE_OF_CONDUCT.md` and issue/PR templates for community operations
 
-## Runtime CLI (prototype)
+## 🧪 Runtime CLI (Prototype)
 
 ```bash
 cd make-me-unicorn
@@ -162,12 +168,12 @@ PYTHONPATH=src python3 -m mmu_cli doctor
 
 Spec details: `SPEC.md`, CI enforcement: `.github/workflows/mmu-guardrails.yml`
 
-## Requirements
+## 🔧 Requirements
 
 - Python `3.10+` (recommended `3.11`)
 - `pip`
 
-## Quick start
+## ⚡ Quick Start
 
 1. Fill baseline docs in `docs/core/*`.
 2. Set weekly top goals in `current_sprint.md`.
@@ -175,7 +181,7 @@ Spec details: `SPEC.md`, CI enforcement: `.github/workflows/mmu-guardrails.yml`
 4. Capture major decisions with `prompts/adr.md`.
 5. End every session with `prompts/close.md`.
 
-## Common misses this project prevents
+## 🛡 Common Misses This Project Prevents
 
 - Missing account recovery while implementing login
 - Running payment without refund/cancellation policy
@@ -184,14 +190,14 @@ Spec details: `SPEC.md`, CI enforcement: `.github/workflows/mmu-guardrails.yml`
 - Missing OG thumbnail and social link preview validation
 - Policy pages exist but no data deletion workflow
 
-## Optional graph layer
+## 🕸 Optional Graph Layer
 
 Start without ontology/graph complexity.
 
 When needed, add a graph module as derived state from `docs/*`.
 Keep markdown as the canonical source.
 
-## Evolution path
+## 📈 Evolution Path
 
 For staged maturation from MVP to later phases, see `docs/ops/evolution_path.md`.
 
@@ -200,42 +206,42 @@ Execution planning and status snapshots:
 - `docs/ops/prd_8week_growth.md`
 - `docs/ops/status_snapshot_2026-02-23.md`
 
-## Filled example
+## 🧩 Filled Example
 
 See a concrete, filled-out SaaS operation example:
 
 - `examples/filled/tasknote/README.md`
 
-## CI guardrails
+## ✅ CI Guardrails
 
 `doctor` runs on every PR/push.
 `gate` runs only for stages listed in `docs/ops/gate_targets.txt`.
 No stages are enforced by default. Add lines such as `M0` and `M1` to enable strict gate blocking.
 Branch protection baseline: `docs/ops/repo_protection.md`.
 
-## Brand setup
+## 🎨 Brand Setup
 
 1. Replace the hero image at `assets/brand/unicorn-hero.png` (or update the README image path).
 2. Place your social preview image at `assets/brand/og-cover.png`.
 3. In GitHub repo settings, set Social preview to `assets/brand/og-cover.png`.
 4. Verify link previews on Slack/X/Kakao/Messenger.
 
-## Roadmap
+## 🗺 Roadmap
 
 See `ROADMAP.md`.
 
-## Contributing
+## 🤝 Contributing
 
 See `CONTRIBUTING.md`.
 
-## Security
+## 🔐 Security
 
 See `SECURITY.md`.
 
-## Changelog
+## 📝 Changelog
 
 See `CHANGELOG.md`.
 
-## License
+## ⚖️ License
 
 MIT. See `LICENSE`.
