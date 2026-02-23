@@ -1,0 +1,8 @@
+# Enable strict stage gates in CI by listing one stage per line.
+# Example:
+# M0
+# M1
+# M2
+# M3
+# M4
+# M5

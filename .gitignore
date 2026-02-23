@@ -1,0 +1,14 @@
+# Runtime state
+.mmu/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.venv/
+
+# Packaging
+*.egg-info/
+build/
+dist/
