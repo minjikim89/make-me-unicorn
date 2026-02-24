@@ -19,6 +19,7 @@ Operating hub for `Make Me Unicorn`.
 - Metrics: `docs/ops/metrics.md`
 - Compliance: `docs/ops/compliance.md`
 - Reliability: `docs/ops/reliability.md`
+- Blueprints: `docs/blueprints/README.md`
 - Current Sprint: `current_sprint.md`
 
 ## Decision Memory
