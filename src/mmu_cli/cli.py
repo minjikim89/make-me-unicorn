@@ -995,7 +995,7 @@ def command_scan(root: Path) -> Result:
 
     if not tech:
         lines.append(f"    {yellow('No technologies detected.')}")
-        lines.append(f"    Make sure package.json or requirements.txt exists.")
+        lines.append("    Make sure package.json or requirements.txt exists.")
         lines.append("")
 
     # Blueprint updates
