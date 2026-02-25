@@ -157,6 +157,142 @@ BLUEPRINT_NAMES = {
     "15-accessibility.md": "Accessibility",
 }
 
+# Aliases for `mmu show <name>` fuzzy matching
+BLUEPRINT_ALIASES: dict[str, str] = {}
+for _fname, _label in BLUEPRINT_NAMES.items():
+    _key = _label.lower().replace(" & ", "-").replace(" ", "-")
+    BLUEPRINT_ALIASES[_key] = _fname
+# Extra shortcuts
+BLUEPRINT_ALIASES.update({
+    "front": "01-frontend.md",
+    "back": "02-backend.md",
+    "devops": "05-devops.md",
+    "ops": "05-devops.md",
+    "sec": "06-security.md",
+    "mon": "07-monitoring.md",
+    "seo": "08-seo-marketing.md",
+    "marketing": "08-seo-marketing.md",
+    "legal": "09-legal-compliance.md",
+    "compliance": "09-legal-compliance.md",
+    "perf": "10-performance.md",
+    "test": "11-testing.md",
+    "ci": "12-cicd.md",
+    "cd": "12-cicd.md",
+    "email": "13-email-notifications.md",
+    "notif": "13-email-notifications.md",
+    "notification": "13-email-notifications.md",
+    "a11y": "15-accessibility.md",
+})
+
+
+def resolve_blueprint(name: str) -> str | None:
+    """Resolve a user-provided name to a blueprint filename, or None."""
+    key = name.lower().strip()
+    if key in BLUEPRINT_ALIASES:
+        return BLUEPRINT_ALIASES[key]
+    # Try partial match
+    for alias, fname in BLUEPRINT_ALIASES.items():
+        if key in alias or alias in key:
+            return fname
+    # Try matching against BLUEPRINT_NAMES values
+    for fname, label in BLUEPRINT_NAMES.items():
+        if key in label.lower():
+            return fname
+    return None
+
+
+def render_blueprint_detail(path: Path, label: str) -> str:
+    """Build a colorful detailed view of a single blueprint file."""
+    try:
+        text = path.read_text(encoding="utf-8")
+    except OSError:
+        return red(f"  Cannot read {path}")
+
+    lines: list[str] = []
+    section_heading = re.compile(r"^##\s+(.+)$")
+    _item_done = re.compile(r"^\s*-\s*\[x\]\s+(.+)$", re.IGNORECASE)
+    _item_todo = re.compile(r"^\s*-\s*\[\s\]\s+(.+)$")
+
+    # First pass: gather section stats
+    sections: list[tuple[str, list[tuple[bool, str]]]] = []
+    current_section = ""
+    current_items: list[tuple[bool, str]] = []
+
+    for line in text.splitlines():
+        hm = section_heading.match(line)
+        if hm:
+            if current_section and current_items:
+                sections.append((current_section, current_items))
+            current_section = hm.group(1).strip()
+            current_items = []
+            continue
+        dm = _item_done.match(line)
+        if dm:
+            current_items.append((True, dm.group(1).strip()))
+            continue
+        tm = _item_todo.match(line)
+        if tm:
+            current_items.append((False, tm.group(1).strip()))
+
+    if current_section and current_items:
+        sections.append((current_section, current_items))
+
+    # Overall stats
+    all_done = sum(1 for _, items in sections for done, _ in items if done)
+    all_total = sum(len(items) for _, items in sections)
+    all_pct = all_done / all_total if all_total else 0.0
+
+    # Header
+    lines.append("")
+    lines.append(bold(f"  🗺️  {label.upper()}") + dim(f"  ({all_done}/{all_total})  {all_pct*100:.0f}%"))
+    lines.append(f"  {progress_bar(all_done, all_total, 40)}")
+    lines.append("")
+    lines.append(dim("  ─" * 28))
+
+    # Sections with global item numbering
+    item_num = 0
+    for section_name, items in sections:
+        s_done = sum(1 for d, _ in items if d)
+        s_total = len(items)
+
+        if s_done == s_total and s_total > 0:
+            section_status = green(" ✓")
+        elif s_done > 0:
+            section_status = yellow(f" {s_done}/{s_total}")
+        else:
+            section_status = red(f" 0/{s_total}")
+
+        lines.append("")
+        lines.append(f"  {bold(section_name)}{section_status}")
+        lines.append(f"  {mini_bar(s_done, s_total)}")
+
+        for is_done, item_text in items:
+            item_num += 1
+            num_str = dim(f"{item_num:>3}")
+            if is_done:
+                lines.append(f"  {num_str}  {green('✓')} {dim(item_text)}")
+            else:
+                lines.append(f"  {num_str}  {red('✗')} {bold(item_text)}")
+
+    lines.append("")
+    lines.append(dim("  ─" * 28))
+
+    # Tip
+    if all_pct >= 1.0:
+        lines.append(f"  {green('✨')} {bold(label)} is complete!")
+    elif all_pct >= 0.7:
+        remaining = all_total - all_done
+        lines.append(f"  💡 Almost there — {bold(str(remaining))} items remaining")
+    elif all_pct >= 0.3:
+        lines.append(f"  💡 Good progress. Focus on {red('✗')} items above")
+    else:
+        lines.append(f"  💡 Start tackling {bold(label)} items — {all_total - all_done} to go")
+
+    bp_key = label.lower().replace(" & ", "-").replace(" ", "-")
+    lines.append(f"  {dim('Tip:')} {cyan(f'mmu check {bp_key} <#>')} to toggle an item")
+    lines.append("")
+    return "\n".join(lines)
+
 
 def scan_blueprint(path: Path) -> tuple[int, int]:
     """Return (done, total) checkbox counts for a blueprint file."""

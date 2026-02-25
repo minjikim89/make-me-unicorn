@@ -252,6 +252,17 @@ def parse_args() -> argparse.Namespace:
     p_status.add_argument("--json", action="store_true", help="Output structured JSON")
     p_status.add_argument("--root", default=".", help="Project root path")
 
+    p_show = sub.add_parser("show", help="Show detailed blueprint checklist")
+    p_show.add_argument("blueprint", help="Blueprint name (e.g. frontend, auth, billing, seo)")
+    p_show.add_argument("--json", action="store_true", help="Output structured JSON")
+    p_show.add_argument("--root", default=".", help="Project root path")
+
+    p_check = sub.add_parser("check", help="Toggle a checklist item in a blueprint")
+    p_check.add_argument("blueprint", help="Blueprint name (e.g. frontend, auth)")
+    p_check.add_argument("item", type=int, help="Item number to toggle (shown in `mmu show`)")
+    p_check.add_argument("--json", action="store_true", help="Output structured JSON")
+    p_check.add_argument("--root", default=".", help="Project root path")
+
     p_snapshot = sub.add_parser("snapshot", help="Run snapshot diagnostic from mmu CLI")
     p_snapshot.add_argument("--json", action="store_true", help="Output structured JSON")
     p_snapshot.add_argument("--root", default=".", help="MMU root path where snapshot script exists")
@@ -824,6 +835,102 @@ def command_snapshot(root: Path, target: str, output: str, no_md: bool) -> Resul
     return Result(exit_code=proc.returncode, command=cmd, messages=messages)
 
 
+def command_show(blueprint_name: str, root: Path) -> Result:
+    from mmu_cli.display import (
+        BLUEPRINT_NAMES,
+        render_blueprint_detail,
+        resolve_blueprint,
+    )
+
+    filename = resolve_blueprint(blueprint_name)
+    if not filename:
+        available = ", ".join(
+            label.lower() for label in BLUEPRINT_NAMES.values()
+        )
+        return Result(
+            exit_code=1,
+            messages=[
+                f"Unknown blueprint: {blueprint_name}",
+                f"Available: {available}",
+            ],
+        )
+
+    label = BLUEPRINT_NAMES[filename]
+    bp_path = root / "docs" / "blueprints" / filename
+    if not bp_path.is_file():
+        return Result(
+            exit_code=1,
+            messages=[
+                f"Blueprint file not found: {bp_path}",
+                "Run `mmu init` first to create blueprint files.",
+            ],
+        )
+
+    detail = render_blueprint_detail(bp_path, label)
+    return Result(exit_code=0, blueprint=filename, messages=[detail])
+
+
+def command_check(blueprint_name: str, item_num: int, root: Path) -> Result:
+    from mmu_cli.display import BLUEPRINT_NAMES, resolve_blueprint
+
+    filename = resolve_blueprint(blueprint_name)
+    if not filename:
+        return Result(exit_code=1, messages=[f"Unknown blueprint: {blueprint_name}"])
+
+    label = BLUEPRINT_NAMES[filename]
+    bp_path = root / "docs" / "blueprints" / filename
+    if not bp_path.is_file():
+        return Result(exit_code=1, messages=[f"Blueprint file not found: {bp_path}"])
+
+    text = read_text(bp_path)
+    if text is None:
+        return Result(exit_code=1, messages=[f"Cannot read {bp_path}"])
+
+    # Find all checklist items and their line indices
+    lines = text.splitlines()
+    check_done = re.compile(r"^(\s*-\s*)\[x\](\s+.+)$", re.IGNORECASE)
+    check_todo = re.compile(r"^(\s*-\s*)\[\s\](\s+.+)$")
+    items: list[tuple[int, bool, str]] = []  # (line_idx, is_done, item_text)
+
+    for i, line in enumerate(lines):
+        dm = check_done.match(line)
+        if dm:
+            items.append((i, True, dm.group(2).strip()))
+            continue
+        tm = check_todo.match(line)
+        if tm:
+            items.append((i, False, tm.group(2).strip()))
+
+    if item_num < 1 or item_num > len(items):
+        return Result(
+            exit_code=1,
+            messages=[f"Item #{item_num} out of range (1-{len(items)}). Use `mmu show {blueprint_name}` to see items."],
+        )
+
+    idx, was_done, item_text = items[item_num - 1]
+    line = lines[idx]
+
+    if was_done:
+        # Uncheck: [x] -> [ ]
+        lines[idx] = re.sub(r"\[x\]", "[ ]", line, count=1, flags=re.IGNORECASE)
+        action = "unchecked"
+    else:
+        # Check: [ ] -> [x]
+        lines[idx] = re.sub(r"\[\s\]", "[x]", line, count=1)
+        action = "checked"
+
+    write_text(bp_path, "\n".join(lines) + "\n" if text.endswith("\n") else "\n".join(lines))
+
+    from mmu_cli.display import green, red, bold
+
+    if action == "checked":
+        msg = f"  {green('✓')} {bold(label)} #{item_num}: {item_text}"
+    else:
+        msg = f"  {red('✗')} {bold(label)} #{item_num}: {item_text} (unchecked)"
+
+    return Result(exit_code=0, action=action, item=item_text, messages=[msg])
+
+
 def command_status(root: Path) -> Result:
     from mmu_cli.display import render_status, scan_all_blueprints, scan_gates
 
@@ -883,6 +990,12 @@ def main() -> int:
         return render_result(result, args.json)
     if args.command == "status":
         result = command_status(root)
+        return render_result(result, args.json)
+    if args.command == "show":
+        result = command_show(args.blueprint, root)
+        return render_result(result, args.json)
+    if args.command == "check":
+        result = command_check(args.blueprint, args.item, root)
         return render_result(result, args.json)
     if args.command == "snapshot":
         result = command_snapshot(root, args.target, args.output, args.no_md)
