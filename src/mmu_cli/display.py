@@ -201,6 +201,23 @@ def resolve_blueprint(name: str) -> str | None:
     return None
 
 
+_PRIORITY_RE = re.compile(r"^\[P([012])\]\s*", re.IGNORECASE)
+
+PRIORITY_LABELS = {
+    0: ("🔴", "critical"),
+    1: ("🟡", "important"),
+    2: ("", ""),  # default, no marker
+}
+
+
+def _parse_priority(text: str) -> tuple[int, str]:
+    """Extract priority tag from item text. Returns (priority, clean_text)."""
+    m = _PRIORITY_RE.match(text)
+    if m:
+        return int(m.group(1)), text[m.end():].strip()
+    return 2, text  # default priority
+
+
 def render_blueprint_detail(path: Path, label: str) -> str:
     """Build a colorful detailed view of a single blueprint file."""
     try:
@@ -214,9 +231,10 @@ def render_blueprint_detail(path: Path, label: str) -> str:
     _item_todo = re.compile(r"^\s*-\s*\[\s\]\s+(.+)$")
 
     # First pass: gather section stats
-    sections: list[tuple[str, list[tuple[bool, str]]]] = []
+    # items: (is_done, priority, clean_text)
+    sections: list[tuple[str, list[tuple[bool, int, str]]]] = []
     current_section = ""
-    current_items: list[tuple[bool, str]] = []
+    current_items: list[tuple[bool, int, str]] = []
 
     for line in text.splitlines():
         hm = section_heading.match(line)
@@ -228,35 +246,58 @@ def render_blueprint_detail(path: Path, label: str) -> str:
             continue
         dm = _item_done.match(line)
         if dm:
-            current_items.append((True, dm.group(1).strip()))
+            pri, clean = _parse_priority(dm.group(1).strip())
+            current_items.append((True, pri, clean))
             continue
         tm = _item_todo.match(line)
         if tm:
-            current_items.append((False, tm.group(1).strip()))
+            pri, clean = _parse_priority(tm.group(1).strip())
+            current_items.append((False, pri, clean))
 
     if current_section and current_items:
         sections.append((current_section, current_items))
 
     # Overall stats
-    all_done = sum(1 for _, items in sections for done, _ in items if done)
+    all_done = sum(1 for _, items in sections for done, _, _ in items if done)
     all_total = sum(len(items) for _, items in sections)
     all_pct = all_done / all_total if all_total else 0.0
+
+    # Priority stats
+    p0_total = sum(1 for _, items in sections for _, p, _ in items if p == 0)
+    p0_done = sum(1 for _, items in sections for d, p, _ in items if p == 0 and d)
+    p1_total = sum(1 for _, items in sections for _, p, _ in items if p == 1)
+    p1_done = sum(1 for _, items in sections for d, p, _ in items if p == 1 and d)
 
     # Header
     lines.append("")
     lines.append(bold(f"  🗺️  {label.upper()}") + dim(f"  ({all_done}/{all_total})  {all_pct*100:.0f}%"))
     lines.append(f"  {progress_bar(all_done, all_total, 40)}")
+
+    # Priority summary (if any priorities exist)
+    if p0_total > 0 or p1_total > 0:
+        parts = []
+        if p0_total > 0:
+            p0_color = green if p0_done == p0_total else red
+            parts.append(p0_color(f"🔴 P0: {p0_done}/{p0_total}"))
+        if p1_total > 0:
+            p1_color = green if p1_done == p1_total else yellow
+            parts.append(p1_color(f"🟡 P1: {p1_done}/{p1_total}"))
+        lines.append(f"  {' · '.join(parts)}")
+
     lines.append("")
     lines.append(dim("  ─" * 28))
 
     # Sections with global item numbering
     item_num = 0
     for section_name, items in sections:
-        s_done = sum(1 for d, _ in items if d)
+        s_done = sum(1 for d, _, _ in items if d)
         s_total = len(items)
+        s_has_p0 = any(p == 0 and not d for d, p, _ in items)
 
         if s_done == s_total and s_total > 0:
             section_status = green(" ✓")
+        elif s_has_p0:
+            section_status = red(f" {s_done}/{s_total} 🔴")
         elif s_done > 0:
             section_status = yellow(f" {s_done}/{s_total}")
         else:
@@ -266,30 +307,40 @@ def render_blueprint_detail(path: Path, label: str) -> str:
         lines.append(f"  {bold(section_name)}{section_status}")
         lines.append(f"  {mini_bar(s_done, s_total)}")
 
-        for is_done, item_text in items:
+        for is_done, priority, item_text in items:
             item_num += 1
             num_str = dim(f"{item_num:>3}")
+            pri_icon, _ = PRIORITY_LABELS.get(priority, ("", ""))
+            pri_str = f"{pri_icon} " if pri_icon else "  "
+
             if is_done:
-                lines.append(f"  {num_str}  {green('✓')} {dim(item_text)}")
+                lines.append(f"  {num_str} {pri_str}{green('✓')} {dim(item_text)}")
             else:
-                lines.append(f"  {num_str}  {red('✗')} {bold(item_text)}")
+                if priority == 0:
+                    lines.append(f"  {num_str} {pri_str}{red('✗')} {red(bold(item_text))}")
+                elif priority == 1:
+                    lines.append(f"  {num_str} {pri_str}{yellow('✗')} {bold(item_text)}")
+                else:
+                    lines.append(f"  {num_str} {pri_str}{dim('✗')} {item_text}")
 
     lines.append("")
     lines.append(dim("  ─" * 28))
 
-    # Tip
+    # Tip — priority aware
     if all_pct >= 1.0:
         lines.append(f"  {green('✨')} {bold(label)} is complete!")
+    elif p0_total > p0_done:
+        lines.append(f"  🔴 {bold(str(p0_total - p0_done))} critical items remain — fix these first")
+    elif p1_total > p1_done:
+        lines.append(f"  🟡 {bold(str(p1_total - p1_done))} important items remain")
     elif all_pct >= 0.7:
         remaining = all_total - all_done
         lines.append(f"  💡 Almost there — {bold(str(remaining))} items remaining")
-    elif all_pct >= 0.3:
-        lines.append(f"  💡 Good progress. Focus on {red('✗')} items above")
     else:
-        lines.append(f"  💡 Start tackling {bold(label)} items — {all_total - all_done} to go")
+        lines.append(f"  💡 {all_total - all_done} items to go")
 
     bp_key = label.lower().replace(" & ", "-").replace(" ", "-")
-    lines.append(f"  {dim('Tip:')} {cyan(f'mmu check {bp_key} <#>')} to toggle an item")
+    lines.append(f"  {dim('Tip:')} {cyan(f'mmu check {bp_key} <#>')} · {cyan(f'mmu uncheck {bp_key} <#>')}")
     lines.append("")
     return "\n".join(lines)
 
