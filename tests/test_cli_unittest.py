@@ -1,16 +1,16 @@
 import io
 import os
+import sys
 import tempfile
 import unittest
 from contextlib import redirect_stdout
 from pathlib import Path
-import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / "src"
 sys.path.insert(0, str(SRC))
 
-from mmu_cli import cli
+from mmu_cli import cli  # noqa: E402
 
 
 class CLITestCase(unittest.TestCase):

@@ -126,11 +126,45 @@ INIT_TEMPLATES: dict[str, str] = {
         """\
         # SaaS From Scratch Checklist
 
+        Purpose: move from idea to paid product with fewer blind spots.
+
         ## M0 Problem Fit
-        - [ ] ICP and problem statement defined
+        - [ ] One ICP is clearly defined.
+        - [ ] Problem statement is written in one sentence.
+        - [ ] Existing alternatives are mapped.
+        - [ ] One or two success metrics are defined.
 
         ## M1 Build Fit
-        - [ ] Core flow works end-to-end with error states
+        - [ ] Core value action is achievable within 1 minute.
+        - [ ] Signup/login/logout are stable.
+        - [ ] Error, empty, and loading states are implemented.
+        - [ ] Basic event instrumentation exists.
+        - [ ] `dev` and `staging` environments are separated.
+
+        ## M2 Revenue Fit
+        - [ ] Pricing page and plan comparison exist.
+        - [ ] Payment success/failure/cancellation paths are tested.
+        - [ ] Refund and cancellation policy is documented.
+        - [ ] Access control matches subscription state.
+
+        ## M3 Trust Fit
+        - [ ] Privacy policy and terms are published.
+        - [ ] Support contact path and response policy exist.
+        - [ ] Admin/operator access controls exist.
+        - [ ] Logging and monitoring are configured.
+
+        ## M4 Growth Fit
+        - [ ] OG thumbnail is configured.
+        - [ ] Title/description/canonical are configured per page.
+        - [ ] `sitemap.xml` and `robots.txt` are valid.
+        - [ ] Core funnel events are tracked.
+
+        ## M5 Scale Fit
+        - [ ] Backup and recovery playbook is documented.
+        - [ ] Alert routing for critical failures is active.
+        - [ ] Incident communication template exists.
+        - [ ] Monthly risk review ritual exists.
+        - [ ] `prod` deployments run through a controlled pipeline.
         """
     ),
     "docs/checklists/auth_security.md": dedent(
@@ -184,7 +218,9 @@ class Result(dict):
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(prog="mmu", description="Make Me Unicorn CLI")
-    sub = parser.add_subparsers(dest="command", required=True)
+    parser.add_argument("--root", default=".", help="Project root path")
+    parser.add_argument("--json", action="store_true", help="Output structured JSON")
+    sub = parser.add_subparsers(dest="command", required=False)
 
     p_init = sub.add_parser("init", help="Initialize baseline docs and checklists")
     p_init.add_argument("--json", action="store_true", help="Output structured JSON")
@@ -211,6 +247,10 @@ def parse_args() -> argparse.Namespace:
     p_gate.add_argument("--json", action="store_true", help="Output structured JSON")
     p_gate.add_argument("--stage", required=True, help="Stage key (for example: M0, M1, M6)")
     p_gate.add_argument("--root", default=".", help="Project root path")
+
+    p_status = sub.add_parser("status", help="Visual dashboard of launch progress")
+    p_status.add_argument("--json", action="store_true", help="Output structured JSON")
+    p_status.add_argument("--root", default=".", help="Project root path")
 
     p_snapshot = sub.add_parser("snapshot", help="Run snapshot diagnostic from mmu CLI")
     p_snapshot.add_argument("--json", action="store_true", help="Output structured JSON")
@@ -519,6 +559,15 @@ def command_close(root: Path) -> Result:
     return Result(exit_code=0, placeholder_goals=placeholder_found, messages=messages)
 
 
+def _find_mmu_root() -> Path | None:
+    """Find the MMU package root (where docs/blueprints/ lives)."""
+    # Walk up from this file: src/mmu_cli/cli.py -> repo root
+    pkg_root = Path(__file__).resolve().parents[2]
+    if (pkg_root / "docs" / "blueprints").is_dir():
+        return pkg_root
+    return None
+
+
 def command_init(root: Path, force: bool) -> Result:
     created: list[str] = []
     skipped: list[str] = []
@@ -540,8 +589,38 @@ def command_init(root: Path, force: bool) -> Result:
             created.append(rel)
             messages.append(f"  [create] {rel}")
 
+    # Copy blueprint files from MMU package
+    mmu_root = _find_mmu_root()
+    if mmu_root:
+        bp_src = mmu_root / "docs" / "blueprints"
+        bp_dst = root / "docs" / "blueprints"
+        for bp_file in sorted(bp_src.glob("*.md")):
+            rel = f"docs/blueprints/{bp_file.name}"
+            dst = bp_dst / bp_file.name
+            existed_before = dst.exists()
+            if existed_before and not force:
+                skipped.append(rel)
+                messages.append(f"  [skip] {rel} (already exists)")
+                continue
+            dst.parent.mkdir(parents=True, exist_ok=True)
+            dst.write_text(bp_file.read_text(encoding="utf-8"), encoding="utf-8")
+            if existed_before and force:
+                overwritten.append(rel)
+                messages.append(f"  [overwrite] {rel}")
+            else:
+                created.append(rel)
+                messages.append(f"  [create] {rel}")
+    else:
+        messages.append("  [warn] Blueprint source not found — run from MMU repo or install from PyPI")
+
     if created or overwritten:
         messages.append("Init result: workspace scaffold ready")
+        messages.append("")
+        messages.append("Next steps:")
+        messages.append("  1. mmu status          — see your launch dashboard")
+        messages.append("  2. mmu doctor          — check what's missing")
+        messages.append("  3. Edit docs/checklists/from_scratch.md — check off completed items")
+        messages.append("  4. mmu gate --stage M0 — verify M0 Problem Fit")
         return Result(
             exit_code=0,
             created=created,
@@ -745,18 +824,47 @@ def command_snapshot(root: Path, target: str, output: str, no_md: bool) -> Resul
     return Result(exit_code=proc.returncode, command=cmd, messages=messages)
 
 
+def command_status(root: Path) -> Result:
+    from mmu_cli.display import render_status, scan_all_blueprints, scan_gates
+
+    dashboard = render_status(root)
+
+    blueprints = scan_all_blueprints(root)
+    gates = scan_gates(root)
+    bp_done = sum(d for _, d, _ in blueprints)
+    bp_total = sum(t for _, _, t in blueprints)
+    gate_done = sum(d for _, d, _ in gates)
+    gate_total = sum(t for _, _, t in gates)
+
+    return Result(
+        exit_code=0,
+        dashboard=dashboard,
+        blueprint_progress={"done": bp_done, "total": bp_total},
+        gate_progress={"done": gate_done, "total": gate_total},
+        messages=[dashboard],
+    )
+
+
 def render_result(result: Result, as_json: bool) -> int:
     if as_json:
-        print(json.dumps(result, ensure_ascii=False, indent=2))
+        clean = {k: v for k, v in result.items() if k != "dashboard"}
+        print(json.dumps(clean, ensure_ascii=False, indent=2))
     else:
+        from mmu_cli.display import colorize_message
+
         for line in result.get("messages", []):
-            print(line)
+            print(colorize_message(line))
     return result.exit_code
 
 
 def main() -> int:
     args = parse_args()
     root = root_path(getattr(args, "root", "."))
+
+    # Default: `mmu` with no subcommand shows status dashboard
+    if not args.command:
+        result = command_status(root)
+        return render_result(result, False)
 
     if args.command == "init":
         result = command_init(root, args.force)
@@ -772,6 +880,9 @@ def main() -> int:
         return render_result(result, args.json)
     if args.command == "gate":
         result = command_gate(args.stage, root)
+        return render_result(result, args.json)
+    if args.command == "status":
+        result = command_status(root)
         return render_result(result, args.json)
     if args.command == "snapshot":
         result = command_snapshot(root, args.target, args.output, args.no_md)
