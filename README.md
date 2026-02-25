@@ -7,9 +7,9 @@
 SaaS from scratch, without execution drift.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-black.svg)](./LICENSE)
-[![Status: v0.3](https://img.shields.io/badge/status-v0.3-blue.svg)](./ROADMAP.md)
+[![Status: v0.4](https://img.shields.io/badge/status-v0.4-blue.svg)](./ROADMAP.md)
 [![Docs](https://img.shields.io/badge/docs-template%20pack-0ea5e9.svg)](./docs)
-[![CLI Prototype](https://img.shields.io/badge/cli-init%2Fstart%2Fsnapshot%2Fdoctor%2Fgate%2Fclose-f59e0b.svg)](./SPEC.md)
+[![CLI](https://img.shields.io/badge/cli-scan%2Fstatus%2Fshow%2Fcheck%2Fgate-f59e0b.svg)](./SPEC.md)
 [![Guardrails CI](https://img.shields.io/badge/ci-doctor%20%2B%20gates-22c55e.svg)](./.github/workflows/mmu-guardrails.yml)
 [![Contributions Welcome](https://img.shields.io/badge/contributions-welcome-16a34a.svg)](./CONTRIBUTING.md)
 
@@ -21,53 +21,40 @@ SaaS from scratch, without execution drift.
 
 ### TL;DR
 
-- `Make Me Unicorn` is a read-first founder operating system.
-- Use `snapshot` for fast diagnostics, then decide what to fix.
-- Use `mmu` for structured execution (`init`, `start`, `doctor`, `gate`, `snapshot`, `close`).
+```bash
+pip install -e .
+mmu init                    # scaffold docs + 15 blueprints (534 items)
+mmu scan                    # auto-detect your tech stack and pre-check items
+mmu                         # see your unicorn evolution dashboard
+mmu show frontend           # drill into any blueprint
+mmu check frontend 13       # check off completed items
+```
+
+### 🎬 Dashboard Preview
+
+```text
+  🦄  MAKE ME UNICORN — STATUS DASHBOARD
+
+          .--*--.
+         / °v°  \          Stage: HATCHING    ██████░░░░░░░░░░░░░░  22%
+        |       |
+         \ ___ /           📋 LAUNCH GATES  (21/26)
+          '---'              M0 Problem Fit   ████████████████  ✓ PASS
+                             M1 Build Fit     ████████████████  ✓ PASS
+  🗺️ BLUEPRINTS (124/551)   M2 Revenue Fit   ████████████████  ✓ PASS
+    Frontend    ██████░░  41%   M3 Trust Fit     ████████████████  ✓ PASS
+    Backend     ████████░ 53%   M4 Growth Fit    ████████████░░░░  ✗ OPEN
+    Auth        ██████░░  38%   M5 Scale Fit     ███░░░░░░░░░░░░░  ✗ OPEN
+    ...13 more categories
+```
+
+Your unicorn evolves as you complete items: Egg → Hatching → Foal → Young → Unicorn → Legendary.
 
 ### Quick Links
 
-- 📘 `Unicorn.md` - daily operating hub
-- 🗂 `current_sprint.md` - this week execution focus
-- ✅ `docs/checklists/from_scratch.md` - stage gate checklist
-- 🧭 `docs/ops/mode_playbook.md` - mode rules
-
-### 30-Second Diagnostic (Read-Only)
-
-```bash
-./snapshot <target-project-path> --no-md
-```
-
-Example:
-
-```bash
-./snapshot ../vista-sphere-pro --no-md
-```
-
-### 🎬 CLI Demo (Sample Output)
-
-```text
-MMU Snapshot
-Target: ../_ideas/claude-code-skills
-Status: Critical gaps in Billing
-
-Top Risks
-- 🚨 1. [critical] Product UX exists but monetization path is missing
-
-Immediate Actions
-- 👉 1. Define pricing and checkout path (success/failure/refund)
-```
-
-### Repo Map
-
-- `docs/core/*` - durable strategy/product/architecture context
-- `docs/ops/*` - operations, roadmap, reliability, compliance
-- `docs/checklists/*` - practical launch/risk checklists
-- `prompts/*` - start/close/ADR session templates
-- `src/mmu_cli/*` - installable `mmu` CLI implementation
-- `scripts/*` - helper scripts (`mmu.sh`, guardrails, snapshot logic, GitHub metadata helper)
-- `examples/*` - filled example(s)
-- `reports/*` - local snapshot reports (generated)
+- `docs/checklists/from_scratch.md` — stage gate checklist (M0–M5)
+- `docs/blueprints/*.md` — 15 category blueprints (534+ items)
+- `SPEC.md` — CLI behavior contract
 
 ## 🦄 What Is This
 
@@ -143,59 +130,66 @@ Full rules: `docs/ops/mode_playbook.md`
 
 ## 📦 What You Get
 
-- `Unicorn.md` as the operating hub
-- `assets/brand/*` for README and social-preview visuals
+- **Visual dashboard** — unicorn that evolves from egg to legendary as you build
+- **15 blueprints** (534+ items) — Frontend, Backend, Auth, Billing, DevOps, Security, Monitoring, SEO, Legal, Performance, Testing, CI/CD, Email, Analytics, Accessibility
+- **Auto-scan** — detect your tech stack and pre-check matching blueprint items
+- **6 stage gates** (M0–M5) — Problem Fit → Scale Fit checkpoints
+- **CLI item management** — `show`, `check`, `uncheck` for terminal-native workflow
 - `docs/core/*` for durable product strategy context
 - `docs/ops/*` for operational control
-- `docs/checklists/*` for blind-spot prevention
-- `docs/adr/*` for decision memory
 - `prompts/*` for repeatable session start/close workflows
-- `current_sprint.md` for active execution
-- `scripts/mmu.sh` as runtime helper CLI (prototype)
 - installable `mmu` CLI (`pip install -e .`)
-- `SPEC.md` for CLI behavior contract
-- `docs/ops/evolution_path.md` for MVP -> Phase roadmap
-- `CODE_OF_CONDUCT.md` and issue/PR templates for community operations
 
-## 🧪 Runtime CLI (Prototype)
+## 🧪 CLI Commands
+
+| Command | What it does |
+|---------|-------------|
+| `mmu` | Visual dashboard — unicorn evolution + gates + blueprints |
+| `mmu scan` | Auto-detect tech stack and pre-check blueprint items |
+| `mmu show <blueprint>` | Detailed blueprint view with numbered items |
+| `mmu check <blueprint> <#>` | Mark an item as done |
+| `mmu uncheck <blueprint> <#>` | Mark an item as not done |
+| `mmu init` | Scaffold docs, checklists, and 15 blueprints |
+| `mmu gate --stage M0` | Check if a gate stage is ready to pass |
+| `mmu doctor` | Run guardrail health checks |
+| `mmu start --mode product` | Start a focused working session |
+| `mmu close` | Close current session |
+
+Blueprint aliases: `frontend`, `front`, `back`, `auth`, `billing`, `seo`, `perf`, `a11y`, `ci`, etc.
+
+### Install
 
 ```bash
 cd make-me-unicorn
 pip install -e .
-mmu init --root .
-mmu start --mode product
-mmu doctor
-mmu gate --stage M2
-mmu snapshot --target ../vista-sphere-pro --no-md
-mmu close
 ```
 
-Wrapper usage also works:
+### Typical Workflow
 
 ```bash
-./scripts/mmu.sh start --mode product
+mmu init --root ~/my-saas       # 1. scaffold
+mmu scan --root ~/my-saas       # 2. auto-detect existing work
+mmu --root ~/my-saas            # 3. see dashboard
+mmu show auth --root ~/my-saas  # 4. drill into category
+mmu check auth 5 --root ~/my-saas  # 5. check off items
 ```
 
-No-install fallback:
-
-```bash
-PYTHONPATH=src python3 -m mmu_cli doctor
-```
-
-Spec details: `SPEC.md`, CI enforcement: `.github/workflows/mmu-guardrails.yml`
+Spec details: `SPEC.md` · CI enforcement: `.github/workflows/mmu-guardrails.yml`
 
 ## 🔧 Requirements
 
-- Python `3.10+` (recommended `3.11`)
+- Python `3.10+` (recommended `3.12`)
 - `pip`
+- No external dependencies — pure Python stdlib
 
 ## ⚡ Quick Start
 
-1. Fill baseline docs in `docs/core/*`.
-2. Set weekly top goals in `current_sprint.md`.
-3. Start each session with `prompts/start.md`.
-4. Capture major decisions with `prompts/adr.md`.
-5. End every session with `prompts/close.md`.
+1. `mmu init` — scaffold baseline docs and blueprints.
+2. `mmu scan` — auto-detect your tech stack and pre-check items.
+3. `mmu` — see your unicorn dashboard.
+4. `mmu show <blueprint>` — find what's missing.
+5. Build, then `mmu check <blueprint> <#>` as you go.
+6. `mmu gate --stage M0` — verify each gate before moving on.
 
 ## 🛡 Common Misses This Project Prevents
 
