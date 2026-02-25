@@ -257,11 +257,21 @@ def parse_args() -> argparse.Namespace:
     p_show.add_argument("--json", action="store_true", help="Output structured JSON")
     p_show.add_argument("--root", default=".", help="Project root path")
 
-    p_check = sub.add_parser("check", help="Toggle a checklist item in a blueprint")
+    p_check = sub.add_parser("check", help="Mark a checklist item as done")
     p_check.add_argument("blueprint", help="Blueprint name (e.g. frontend, auth)")
-    p_check.add_argument("item", type=int, help="Item number to toggle (shown in `mmu show`)")
+    p_check.add_argument("item", type=int, help="Item number (shown in `mmu show`)")
     p_check.add_argument("--json", action="store_true", help="Output structured JSON")
     p_check.add_argument("--root", default=".", help="Project root path")
+
+    p_uncheck = sub.add_parser("uncheck", help="Mark a checklist item as not done")
+    p_uncheck.add_argument("blueprint", help="Blueprint name (e.g. frontend, auth)")
+    p_uncheck.add_argument("item", type=int, help="Item number (shown in `mmu show`)")
+    p_uncheck.add_argument("--json", action="store_true", help="Output structured JSON")
+    p_uncheck.add_argument("--root", default=".", help="Project root path")
+
+    p_scan = sub.add_parser("scan", help="Auto-detect tech stack and pre-check blueprint items")
+    p_scan.add_argument("--json", action="store_true", help="Output structured JSON")
+    p_scan.add_argument("--root", default=".", help="Project root path")
 
     p_snapshot = sub.add_parser("snapshot", help="Run snapshot diagnostic from mmu CLI")
     p_snapshot.add_argument("--json", action="store_true", help="Output structured JSON")
@@ -870,7 +880,11 @@ def command_show(blueprint_name: str, root: Path) -> Result:
     return Result(exit_code=0, blueprint=filename, messages=[detail])
 
 
-def command_check(blueprint_name: str, item_num: int, root: Path) -> Result:
+def command_check(blueprint_name: str, item_num: int, root: Path, *, force_state: str | None = None) -> Result:
+    """Check/uncheck a blueprint item.
+
+    force_state: "check" = always mark [x], "uncheck" = always mark [ ], None = toggle.
+    """
     from mmu_cli.display import BLUEPRINT_NAMES, resolve_blueprint
 
     filename = resolve_blueprint(blueprint_name)
@@ -910,14 +924,29 @@ def command_check(blueprint_name: str, item_num: int, root: Path) -> Result:
     idx, was_done, item_text = items[item_num - 1]
     line = lines[idx]
 
-    if was_done:
-        # Uncheck: [x] -> [ ]
+    # Determine action
+    if force_state == "check":
+        if was_done:
+            from mmu_cli.display import dim
+            return Result(exit_code=0, action="already_checked", item=item_text,
+                          messages=[f"  {dim('already ✓')} {label} #{item_num}: {item_text}"])
+        lines[idx] = re.sub(r"\[\s\]", "[x]", line, count=1)
+        action = "checked"
+    elif force_state == "uncheck":
+        if not was_done:
+            from mmu_cli.display import dim
+            return Result(exit_code=0, action="already_unchecked", item=item_text,
+                          messages=[f"  {dim('already ✗')} {label} #{item_num}: {item_text}"])
         lines[idx] = re.sub(r"\[x\]", "[ ]", line, count=1, flags=re.IGNORECASE)
         action = "unchecked"
     else:
-        # Check: [ ] -> [x]
-        lines[idx] = re.sub(r"\[\s\]", "[x]", line, count=1)
-        action = "checked"
+        # Toggle
+        if was_done:
+            lines[idx] = re.sub(r"\[x\]", "[ ]", line, count=1, flags=re.IGNORECASE)
+            action = "unchecked"
+        else:
+            lines[idx] = re.sub(r"\[\s\]", "[x]", line, count=1)
+            action = "checked"
 
     write_text(bp_path, "\n".join(lines) + "\n" if text.endswith("\n") else "\n".join(lines))
 
@@ -929,6 +958,86 @@ def command_check(blueprint_name: str, item_num: int, root: Path) -> Result:
         msg = f"  {red('✗')} {bold(label)} #{item_num}: {item_text} (unchecked)"
 
     return Result(exit_code=0, action=action, item=item_text, messages=[msg])
+
+
+def command_scan(root: Path) -> Result:
+    from mmu_cli.display import (
+        BLUEPRINT_NAMES,
+        bold,
+        cyan,
+        dim,
+        green,
+        magenta,
+        mini_bar,
+        progress_bar,
+        scan_all_blueprints,
+        yellow,
+    )
+    from mmu_cli.scan import run_scan
+
+    result = run_scan(root)
+    tech = result["tech_stack"]
+    checked = result["checked_count"]
+    total_new = result["total_newly_checked"]
+
+    lines: list[str] = []
+    lines.append("")
+    lines.append(bold("  🔍  CODEBASE SCAN RESULTS"))
+    lines.append(dim("  ─" * 28))
+    lines.append("")
+
+    # Detected tech stack
+    lines.append(bold("  Detected Stack:"))
+    for category, items in tech.items():
+        items_str = ", ".join(bold(i) for i in items)
+        lines.append(f"    {cyan(category + ':')}  {items_str}")
+    lines.append("")
+
+    if not tech:
+        lines.append(f"    {yellow('No technologies detected.')}")
+        lines.append(f"    Make sure package.json or requirements.txt exists.")
+        lines.append("")
+
+    # Blueprint updates
+    lines.append(dim("  ─" * 28))
+    if checked:
+        lines.append(bold(f"  📝  Auto-checked {total_new} items across {len(checked)} blueprints:"))
+        lines.append("")
+        for bp_file, count in sorted(checked.items()):
+            label = BLUEPRINT_NAMES.get(bp_file, bp_file)
+            lines.append(f"    {green('+')} {label}: {bold(str(count))} items newly checked")
+    else:
+        lines.append(f"  {dim('No new items to auto-check (already up to date or no blueprints found).')}")
+
+    # Show updated totals
+    blueprints = scan_all_blueprints(root)
+    if blueprints:
+        bp_done = sum(d for _, d, _ in blueprints)
+        bp_total = sum(t for _, _, t in blueprints)
+        lines.append("")
+        lines.append(dim("  ─" * 28))
+        lines.append(f"  {bold('Updated totals:')}  {progress_bar(bp_done, bp_total)}")
+        lines.append("")
+        for label, d, t in blueprints:
+            lines.append(f"    {label:<18} {mini_bar(d, t)}")
+        lines.append("")
+
+    lines.append(dim("  ─" * 28))
+    if total_new > 0:
+        lines.append(f"  {magenta('✨')} Scan complete! {bold(str(total_new))} items auto-checked")
+        lines.append(f"  {dim('Review with:')} {cyan('mmu show <blueprint>')} {dim('— edit with:')} {cyan('mmu check/uncheck <blueprint> <#>')}")
+    else:
+        lines.append(f"  💡 Run {cyan('mmu init')} first if blueprints don't exist yet")
+    lines.append("")
+
+    dashboard = "\n".join(lines)
+    return Result(
+        exit_code=0,
+        tech_stack=tech,
+        newly_checked=total_new,
+        checked_by_blueprint=checked,
+        messages=[dashboard],
+    )
 
 
 def command_status(root: Path) -> Result:
@@ -995,7 +1104,13 @@ def main() -> int:
         result = command_show(args.blueprint, root)
         return render_result(result, args.json)
     if args.command == "check":
-        result = command_check(args.blueprint, args.item, root)
+        result = command_check(args.blueprint, args.item, root, force_state="check")
+        return render_result(result, args.json)
+    if args.command == "uncheck":
+        result = command_check(args.blueprint, args.item, root, force_state="uncheck")
+        return render_result(result, args.json)
+    if args.command == "scan":
+        result = command_scan(root)
         return render_result(result, args.json)
     if args.command == "snapshot":
         result = command_snapshot(root, args.target, args.output, args.no_md)
