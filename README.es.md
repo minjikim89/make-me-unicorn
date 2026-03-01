@@ -4,7 +4,7 @@
 
 **Deja de construir a ciegas. Lanza tu SaaS con confianza.**
 
-El checklist de lanzamiento y sistema operativo open-source para builders independientes.
+La checklist de lanzamiento y sistema operativo de código abierto para creadores independientes.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-black.svg)](./LICENSE)
 [![Status: v0.4](https://img.shields.io/badge/status-v0.4-blue.svg)](./ROADMAP.md)
@@ -26,19 +26,19 @@ Estás construyendo un producto SaaS. Usas IA para programar más rápido que nu
 >
 > "El webhook de pagos... ¿es idempotente?"
 >
-> "¿Tengo política de privacidad? ¿Política de reembolsos? ¿OG tags?"
+> "¿Tengo política de privacidad? ¿Política de reembolsos? ¿etiquetas OG?"
 >
-> "¿Qué decidí la semana pasada sobre el proveedor de auth? ¿Por qué?"
+> "¿Qué decidí la semana pasada sobre el proveedor de autenticación? ¿Por qué?"
 
-**No estás fallando en programar. Estás fallando en rastrear lo que importa.**
+**No estás fallando al programar. Estás fallando en dar seguimiento a lo que importa.**
 
-Todo builder independiente se topa con los mismos muros:
+Todo creador independiente se topa con los mismos muros:
 
 | Qué sale mal | Qué te cuesta |
 |--------------|---------------|
-| Te olvidas del reset de contraseña mientras construyes el login | Los usuarios se quedan bloqueados el día 1 |
+| Te olvidas del restablecimiento de contraseña mientras construyes el inicio de sesión | Los usuarios se quedan bloqueados el día 1 |
 | Te saltas la verificación de firma del webhook | Los atacantes replican eventos de pago |
-| Lanzas sin OG tags | Cada link compartido se ve roto |
+| Lanzas sin etiquetas OG | Cada enlace compartido se ve roto |
 | Pierdes el contexto entre sesiones de IA | Re-explicas tu proyecto desde cero, cada vez |
 | No tienes política de reembolsos | Primera disputa = cuenta de Stripe congelada |
 
@@ -47,9 +47,9 @@ MMU atrapa estos problemas **antes de que te cuesten usuarios, dinero o confianz
 ## Cómo Funciona
 
 ```
-mmu init                    # 1. Get 534+ checklist items across 15 categories
-mmu scan                    # 2. Auto-detect your stack — pre-check what you already have
-mmu                         # 3. See what's done, what's missing
+mmu init                    # 1. Obtén más de 534 elementos de checklist en 15 categorías
+mmu scan                    # 2. Detecta tu stack automáticamente y marca lo que ya tienes
+mmu                         # 3. Ve qué está hecho y qué falta
 ```
 
 ```text
@@ -77,95 +77,95 @@ Tu unicornio evoluciona mientras construyes: Egg → Hatching → Foal → Young
 <td width="33%">
 
 **Construir el producto**
-- Frontend (responsive, a11y, formularios)
+- Frontend (responsive, accesibilidad, formularios)
 - Backend (API, DB, colas)
-- Auth (login, reset, OAuth, sesiones)
+- Autenticación (inicio de sesión, restablecimiento, OAuth, sesiones)
 - Facturación (Stripe, webhooks, reembolsos)
-- Testing (unitario, E2E, seguridad de agentes)
+- Pruebas (unitarias, E2E, seguridad de agentes)
 
 </td>
 <td width="33%">
 
 **Preparar el lanzamiento**
-- SEO (OG tags, sitemap, meta)
+- SEO (etiquetas OG, mapa del sitio, metadatos)
 - Legal (privacidad, términos, GDPR)
-- Seguridad (CORS, rate limits, secrets)
-- Rendimiento (caching, lazy load)
-- CI/CD (pipeline, plan de rollback)
+- Seguridad (CORS, límites de tasa, gestión de secretos)
+- Rendimiento (caché, carga diferida)
+- CI/CD (pipeline, plan de reversión)
 
 </td>
 <td width="34%">
 
 **Operarlo después del lanzamiento**
-- Monitoreo (errores, uptime, alertas)
-- Analytics (funnel, retención, eventos)
-- Email (transaccional, templates)
+- Monitoreo (errores, disponibilidad, alertas)
+- Analítica (embudo, retención, eventos)
+- Correo (transaccional, plantillas)
 - Accesibilidad (WCAG, navegación por teclado)
-- Confiabilidad (backups, plan de incidentes)
+- Confiabilidad (copias de seguridad, plan de incidentes)
 
 </td>
 </tr>
 </table>
 
-**534+ items. 15 categorías. Cero improvisación.**
+**534+ elementos. 15 categorías. Cero improvisación.**
 
 ## Para Quién Es
 
 | Tú eres... | MMU te ayuda a... |
 |-------------|-------------------|
-| **Un founder que programa con IA** | Dejar de re-explicar tu proyecto en cada sesión. Mantener el contexto entre herramientas. |
-| **Un desarrollador frontend** | Saber exactamente qué construir: flujos de auth, estados de error, breakpoints responsive, OG tags. |
-| **Un product manager / planner** | Obtener un PRD estructurado, estrategia de precios y checklist de lanzamiento — todo en markdown. |
-| **Un builder fullstack** | Rastrear frontend, backend, facturación y compliance en un solo lugar. Que no se escape nada. |
+| **Un fundador que programa con IA** | Dejar de re-explicar tu proyecto en cada sesión. Mantener el contexto entre herramientas. |
+| **Un desarrollador frontend** | Saber exactamente qué construir: flujos de autenticación, estados de error, puntos de quiebre responsive y etiquetas OG. |
+| **Un product manager / planificador** | Obtener un PRD estructurado, estrategia de precios y checklist de lanzamiento, todo en Markdown. |
+| **Un desarrollador fullstack** | Rastrear frontend, backend, facturación y cumplimiento en un solo lugar. Que no se escape nada. |
 
 ## Inicio Rápido
 
 ```bash
 pip install -e .
 
-# Option A: Start with empty templates, fill them yourself
+# Opción A: Empieza con plantillas vacías y complétalas tú
 mmu init
 
-# Option B: Let Claude generate your project docs (requires API key)
+# Opción B: Deja que Claude genere la documentación del proyecto (requiere API key)
 pip install -e ".[llm]"
 export ANTHROPIC_API_KEY=sk-ant-...
-mmu init --interactive        # answer 5 questions → get filled strategy, product, pricing docs
+mmu init --interactive        # responde 5 preguntas y obtiene docs de estrategia, producto y precios
 ```
 
 Luego:
 
 ```bash
-mmu scan                      # auto-detect your tech stack
-mmu                           # see your dashboard
-mmu show frontend             # drill into any category
-mmu check frontend 3          # mark items as done
-mmu gate --stage M0           # verify you're ready for the next phase
-mmu doctor                    # run guardrail health checks
+mmu scan                      # detecta automáticamente tu stack técnico
+mmu                           # mira tu panel
+mmu show frontend             # entra en detalle de cualquier categoría
+mmu check frontend 3          # marca elementos como completados
+mmu gate --stage M0           # verifica si estás listo para la siguiente fase
+mmu doctor                    # ejecuta chequeos de salud de guardrails
 ```
 
-## 6 Launch Gates
+## 6 Puertas de Lanzamiento
 
 Piensa en estas como salidas de fase. No te las saltes.
 
 ```
-M0 Problem Fit    →  Do you know WHO you're building for and WHY?
-M1 Build Fit      →  Does the core product actually work end-to-end?
-M2 Revenue Fit    →  Can someone pay you? And get a refund?
-M3 Trust Fit      →  Privacy policy? Support path? Logging?
-M4 Growth Fit     →  Will shared links look right? Can people find you?
-M5 Scale Fit      →  What happens when something breaks at 3am?
+M0 Problem Fit    →  ¿Sabes para QUIÉN construyes y POR QUÉ?
+M1 Build Fit      →  ¿El producto principal funciona de punta a punta?
+M2 Revenue Fit    →  ¿Alguien puede pagarte? ¿Y recibir un reembolso?
+M3 Trust Fit      →  ¿Política de privacidad? ¿Canal de soporte? ¿Logs?
+M4 Growth Fit     →  ¿Los enlaces compartidos se ven bien? ¿Pueden encontrarte?
+M5 Scale Fit      →  ¿Qué pasa cuando algo falla a las 3 a. m.?
 ```
 
-Ejecuta `mmu gate --stage M0` para verificar. Todos los items sin marcar = NOT PASS.
+Ejecuta `mmu gate --stage M0` para verificar. Todos los elementos sin marcar = NOT PASS.
 
 ## 12 Modos de Operación
 
 Un modo por sesión. Cada modo carga solo los documentos que necesitas.
 
 ```bash
-mmu start --mode backend      # loads: architecture.md, sprint, ADR logs
-mmu start --mode billing      # loads: pricing.md, billing checklist, compliance
-mmu start --mode growth       # loads: SEO checklist, metrics
+mmu start --mode backend      # carga: architecture.md, sprint, registros ADR
+mmu start --mode billing      # carga: pricing.md, checklist de facturación, cumplimiento
+mmu start --mode growth       # carga: checklist SEO, métricas
 ```
 
 Esto previene el problema #1 de programar con IA: **sobrecarga de contexto**. Tu asistente de IA recibe solo lo que necesita — no tu proyecto entero.
@@ -181,24 +181,24 @@ export ANTHROPIC_API_KEY=sk-ant-...
 
 | Comando | Qué hace |
 |---------|----------|
-| `mmu init --interactive` | Responde 5 preguntas sobre tu producto. Claude escribe tu estrategia, spec de producto, precios, arquitectura y docs de UX. |
+| `mmu init --interactive` | Responde 5 preguntas sobre tu producto. Claude escribe tu estrategia, especificación de producto, precios, arquitectura y documentos de UX. |
 | `mmu start --mode X --agent` | Auto-formatea el contexto de tu sesión — pega directamente en Claude Code o cualquier LLM. |
 | `mmu doctor --deep` | Claude lee tu código y docs, detecta inconsistencias, brechas de seguridad y puntos ciegos. |
-| `mmu generate strategy` | Genera o actualiza cualquier doc core basado en el estado actual de tu proyecto. |
+| `mmu generate strategy` | Genera o actualiza cualquier documento clave según el estado actual de tu proyecto. |
 
-El CLI core no tiene dependencias externas. Las funciones de IA son opcionales y degradan elegantemente.
+El CLI core no tiene dependencias externas. Las funciones de IA son opcionales y se degradan de forma segura.
 
 ## Flujo de Sesión
 
 Cada sesión sigue el mismo ritmo:
 
 ```
-1. mmu start --mode backend      ← pick a focus, load relevant docs
-2. Build / decide / validate      ← do the work
-3. mmu close                      ← log what changed, what's next
+1. mmu start --mode backend      ← elige un foco y carga los docs relevantes
+2. Build / decide / validate      ← haz el trabajo
+3. mmu close                      ← registra qué cambió y qué sigue
 ```
 
-El cierre de sesión usa tags estructurados para la memoria:
+El cierre de sesión usa etiquetas estructuradas para la memoria:
 
 - `[DONE]` — lo que completaste
 - `[DECISION]` — decisiones tomadas (crear ADR si es significativo)
@@ -209,16 +209,16 @@ Esto significa que tu próxima sesión arranca en **5 segundos**, no en 15 minut
 
 ## Ejemplo: TaskNote
 
-Mira un ejemplo completamente llenado de MMU en acción:
+Mira un ejemplo completo de MMU en acción:
 
 ```
 examples/filled/tasknote/
-├── docs/core/strategy.md      ← ICP, value prop, competitors
-├── docs/core/product.md       ← MVP scope, user journey, P0/P1
-├── docs/core/pricing.md       ← Free/Pro/Team, billing rules
+├── docs/core/strategy.md      ← ICP, propuesta de valor, competidores
+├── docs/core/product.md       ← alcance del MVP, recorrido de usuario, P0/P1
+├── docs/core/pricing.md       ← Free/Pro/Team, reglas de facturación
 ├── docs/core/architecture.md  ← Next.js + FastAPI + Postgres
-├── docs/adr/001_billing_provider_choice.md  ← Why Stripe?
-└── current_sprint.md          ← This week's 3 goals
+├── docs/adr/001_billing_provider_choice.md  ← ¿Por qué Stripe?
+└── current_sprint.md          ← 3 objetivos de esta semana
 ```
 
 ## Requisitos
@@ -244,7 +244,7 @@ make-me-unicorn/
 └── tests/                 # Unit tests
 ```
 
-## CI Guardrails
+## Controles de CI
 
 `mmu doctor` se ejecuta en cada PR. `mmu gate` se ejecuta para las etapas listadas en `docs/ops/gate_targets.txt`.
 

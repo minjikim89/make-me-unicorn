@@ -26,7 +26,7 @@
 >
 > 「決済の webhook…冪等性ちゃんと担保してる？」
 >
-> 「プライバシーポリシーは？返金ポリシーは？OG tags は？」
+> 「プライバシーポリシーは？返金ポリシーは？OGタグは？」
 >
 > 「先週、認証プロバイダについて何を決めたんだっけ？なんでその結論になったんだ？」
 
@@ -38,7 +38,7 @@
 |-------------|---------|
 | ログイン実装に集中して、パスワードリセットを忘れる | 初日からユーザーがロックアウトされる |
 | webhook の署名検証をスキップする | 攻撃者に決済イベントをリプレイされる |
-| OG tags なしでリリースする | SNS でシェアされたリンクが全部壊れて見える |
+| OGタグなしでリリースする | SNS でシェアされたリンクが全部壊れて見える |
 | AI セッション間でコンテキストが消える | 毎回プロジェクトの説明をゼロからやり直す |
 | 返金ポリシーがない | 最初のチャージバック = Stripe アカウント凍結 |
 
@@ -87,7 +87,7 @@ mmu                         # 3. 完了項目と未対応項目を一覧表示
 <td width="33%">
 
 **ローンチ準備**
-- SEO（OG tags、サイトマップ、メタ情報）
+- SEO（OGタグ、サイトマップ、メタ情報）
 - Legal（プライバシー、利用規約、GDPR）
 - Security（CORS、レート制限、シークレット管理）
 - Performance（キャッシュ、遅延読み込み）
@@ -114,7 +114,7 @@ mmu                         # 3. 完了項目と未対応項目を一覧表示
 | あなたは… | MMU がこう助けます |
 |----------|------------------|
 | **AI を使ってコードを書いている個人開発者** | 毎セッション、プロジェクトの説明をやり直す必要がなくなります。ツール間でコンテキストを維持できます。 |
-| **フロントエンドエンジニア** | 何を実装すべきかが明確になります：認証フロー、エラーステート、レスポンシブ対応、OG tags。 |
+| **フロントエンドエンジニア** | 何を実装すべきかが明確になります：認証フロー、エラーステート、レスポンシブ対応、OGタグ。 |
 | **PM / プロダクト企画** | 構造化された PRD、料金設計、ローンチチェックリストが手に入ります。すべて Markdown で。 |
 | **フルスタックエンジニア** | フロントエンド、バックエンド、課金、コンプライアンスを一箇所で管理。見落としがなくなります。 |
 
@@ -123,10 +123,10 @@ mmu                         # 3. 完了項目と未対応項目を一覧表示
 ```bash
 pip install -e .
 
-# Option A: 空のテンプレートから始めて、自分で埋める
+# オプションA: 空のテンプレートから始めて、自分で埋める
 mmu init
 
-# Option B: Claude にプロジェクトドキュメントを生成させる（API キーが必要）
+# オプションB: Claude にプロジェクトドキュメントを生成させる（API キーが必要）
 pip install -e ".[llm]"
 export ANTHROPIC_API_KEY=sk-ant-...
 mmu init --interactive        # 5つの質問に答える → 戦略・プロダクト・料金設計のドキュメントが生成される
@@ -163,9 +163,9 @@ M5 Scale Fit      →  深夜3時に障害が起きたらどうなる？
 1セッションにつき1モード。そのモードに必要なドキュメントだけが読み込まれます。
 
 ```bash
-mmu start --mode backend      # loads: architecture.md, sprint, ADR logs
-mmu start --mode billing      # loads: pricing.md, billing checklist, compliance
-mmu start --mode growth       # loads: SEO checklist, metrics
+mmu start --mode backend      # 読み込み: architecture.md, sprint, ADRログ
+mmu start --mode billing      # 読み込み: pricing.md, 課金チェックリスト, コンプライアンス
+mmu start --mode growth       # 読み込み: SEOチェックリスト, 指標
 ```
 
 これにより、AI コーディングにおける最大の問題である**コンテキストの過負荷**を防ぎます。AI アシスタントには必要な情報だけが渡されます。プロジェクト全体ではありません。
@@ -183,7 +183,7 @@ export ANTHROPIC_API_KEY=sk-ant-...
 |---------|---------|
 | `mmu init --interactive` | プロダクトについて5つの質問に答えます。Claude が戦略、プロダクト仕様、料金設計、アーキテクチャ、UX のドキュメントを生成します。 |
 | `mmu start --mode X --agent` | セッションコンテキストを自動整形します。Claude Code や他の LLM にそのまま貼り付けできます。 |
-| `mmu doctor --deep` | Claude がコードとドキュメントを読み込み、不整合、セキュリティの隙間、見落としを指摘します。 |
+| `mmu doctor --deep` | Claude がコードとドキュメントを読み込み、不整合、セキュリティ上の抜け漏れ、見落としを指摘します。 |
 | `mmu generate strategy` | 現在のプロジェクト状態に基づいて、コアドキュメントを生成・更新します。 |
 
 コア CLI は外部依存ゼロ。AI 機能はオプションであり、なくても正常に動作します。
@@ -217,7 +217,7 @@ examples/filled/tasknote/
 ├── docs/core/product.md       ← MVP スコープ、ユーザージャーニー、P0/P1
 ├── docs/core/pricing.md       ← Free/Pro/Team、課金ルール
 ├── docs/core/architecture.md  ← Next.js + FastAPI + Postgres
-├── docs/adr/001_billing_provider_choice.md  ← なぜ Stripe を選んだか？
+├── docs/adr/001_billing_provider_choice.md  ← なぜ決済プロバイダとして Stripe を選んだか？
 └── current_sprint.md          ← 今週の3つの目標
 ```
 

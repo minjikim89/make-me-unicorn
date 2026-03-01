@@ -26,9 +26,9 @@
 >
 > "支付 webhook... 做幂等了吗？"
 >
-> "隐私政策写了没？退款政策呢？OG tags 呢？"
+> "隐私政策写了没？退款政策呢？OG 标签呢？"
 >
-> "上周关于 auth 方案的决定是什么来着？为什么选的它？"
+> "上周关于认证方案的决定是什么来着？为什么选它？"
 
 **你不是代码写不好，而是没有管好该管的事。**
 
@@ -38,7 +38,7 @@
 |-------------|-----------|
 | 做登录的时候忘了密码重置 | 上线第一天用户就被锁在门外 |
 | 跳过了 webhook 签名验证 | 攻击者重放支付事件 |
-| 没加 OG tags 就上线了 | 分享出去的链接全是白板 |
+| 没加 OG 标签就上线了 | 分享出去的链接看起来都像坏掉了一样 |
 | AI 会话之间丢失上下文 | 每次都要从头给 AI 解释你的项目 |
 | 没有退款政策 | 第一次争议 = Stripe 账户直接冻结 |
 
@@ -48,7 +48,7 @@ MMU 在这些问题**让你损失用户、金钱或信任之前**就帮你拦住
 
 ```
 mmu init                    # 1. 获取 15 个类别、534+ 检查项
-mmu scan                    # 2. 自动检测你的技术栈——预勾已完成的项目
+mmu scan                    # 2. 自动检测你的技术栈，并自动勾选已完成项
 mmu                         # 3. 一眼看到哪些做了、哪些没做
 ```
 
@@ -81,13 +81,13 @@ mmu                         # 3. 一眼看到哪些做了、哪些没做
 - 后端（API、数据库、队列）
 - 认证（登录、重置、OAuth、会话）
 - 计费（Stripe、webhook、退款）
-- 测试（单元测试、E2E、Agent 安全）
+- 测试（单元测试、E2E、智能体安全）
 
 </td>
 <td width="33%">
 
 **准备上线**
-- SEO（OG tags、sitemap、meta）
+- SEO（OG 标签、站点地图、元数据）
 - 法务（隐私政策、用户条款、GDPR）
 - 安全（CORS、限流、密钥管理）
 - 性能（缓存、懒加载）
@@ -114,8 +114,8 @@ mmu                         # 3. 一眼看到哪些做了、哪些没做
 | 你是... | MMU 帮你... |
 |---------|------------|
 | **用 AI 写代码的创业者** | 不用每次开会话都从头解释项目。跨工具保持上下文。 |
-| **前端开发者** | 清楚知道要做什么：认证流程、错误状态、响应式断点、OG tags。 |
-| **产品经理 / 策划** | 拿到结构化的 PRD、定价策略和上线清单——全是 markdown。 |
+| **前端开发者** | 清楚知道要做什么：认证流程、错误状态、响应式断点、OG 标签。 |
+| **产品经理 / 策划** | 拿到结构化的 PRD、定价策略和上线清单——全是 Markdown。 |
 | **全栈独立开发者** | 前端、后端、计费、合规，一个地方统一追踪。不遗漏任何细节。 |
 
 ## 快速开始
@@ -126,7 +126,7 @@ pip install -e .
 # 方式 A：生成空模板，自己填写
 mmu init
 
-# 方式 B：让 Claude 生成项目文档（需要 API key）
+# 方式 B：让 Claude 生成项目文档（需要 API 密钥）
 pip install -e ".[llm]"
 export ANTHROPIC_API_KEY=sk-ant-...
 mmu init --interactive        # 回答 5 个问题 → 自动生成战略、产品、定价文档
@@ -135,12 +135,12 @@ mmu init --interactive        # 回答 5 个问题 → 自动生成战略、产�
 然后：
 
 ```bash
-mmu scan                      # auto-detect your tech stack
-mmu                           # see your dashboard
-mmu show frontend             # drill into any category
-mmu check frontend 3          # mark items as done
-mmu gate --stage M0           # verify you're ready for the next phase
-mmu doctor                    # run guardrail health checks
+mmu scan                      # 自动检测你的技术栈
+mmu                           # 查看你的仪表盘
+mmu show frontend             # 深入查看任意类别
+mmu check frontend 3          # 将条目标记为已完成
+mmu gate --stage M0           # 验证你是否准备好进入下一阶段
+mmu doctor                    # 运行护栏健康检查
 ```
 
 ## 6 个上线关卡
@@ -163,9 +163,9 @@ M5 Scale Fit      →  凌晨三点出故障了怎么办？
 每次会话一个模式。每个模式只加载你需要的文档。
 
 ```bash
-mmu start --mode backend      # loads: architecture.md, sprint, ADR logs
-mmu start --mode billing      # loads: pricing.md, billing checklist, compliance
-mmu start --mode growth       # loads: SEO checklist, metrics
+mmu start --mode backend      # 加载：architecture.md、sprint、ADR 日志
+mmu start --mode billing      # 加载：pricing.md、计费清单、合规文档
+mmu start --mode growth       # 加载：SEO 清单、指标文档
 ```
 
 这解决了 AI 编程的头号问题：**上下文过载**。你的 AI 助手只拿到它需要的——而不是你整个项目的所有东西。
@@ -186,7 +186,7 @@ export ANTHROPIC_API_KEY=sk-ant-...
 | `mmu doctor --deep` | Claude 阅读你的代码和文档，标记不一致、安全漏洞和盲区。 |
 | `mmu generate strategy` | 基于当前项目状态生成或更新任何核心文档。 |
 
-核心 CLI 零依赖。AI 功能可选，优雅降级。
+核心 CLI 零依赖。AI 功能可选，可平滑降级。
 
 ## 会话工作流
 
@@ -205,7 +205,7 @@ export ANTHROPIC_API_KEY=sk-ant-...
 - `[ISSUE]` — 遇到了什么问题（分类：上下文丢失 / 方向错误 / 文档与代码不一致）
 - `[NEXT]` — 下次会话的第一件事
 
-这意味着你下次开工只需 **5 秒**，而不是花 15 分钟回忆"我上次做到哪了？"
+这意味着你下次开工只需 **5 秒**，而不是花 15 分钟回忆“我上次做到哪了？”
 
 ## 示例：TaskNote
 
@@ -213,12 +213,12 @@ export ANTHROPIC_API_KEY=sk-ant-...
 
 ```
 examples/filled/tasknote/
-├── docs/core/strategy.md      ← ICP, value prop, competitors
-├── docs/core/product.md       ← MVP scope, user journey, P0/P1
-├── docs/core/pricing.md       ← Free/Pro/Team, billing rules
+├── docs/core/strategy.md      ← ICP、价值主张、竞品分析
+├── docs/core/product.md       ← MVP 范围、用户旅程、P0/P1
+├── docs/core/pricing.md       ← Free/Pro/Team、计费规则
 ├── docs/core/architecture.md  ← Next.js + FastAPI + Postgres
-├── docs/adr/001_billing_provider_choice.md  ← Why Stripe?
-└── current_sprint.md          ← This week's 3 goals
+├── docs/adr/001_billing_provider_choice.md  ← 为什么选 Stripe？
+└── current_sprint.md          ← 本周的 3 个目标
 ```
 
 ## 环境要求
