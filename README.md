@@ -1,5 +1,3 @@
-🌍 **English** | [한국어](./README.ko.md) | [日本語](./README.ja.md) | [简体中文](./README.zh-CN.md) | [Español](./README.es.md)
-
 <div align="center">
 
 # Make Me Unicorn
@@ -13,6 +11,8 @@ The open-source launch checklist and operating system for solo builders.
 [![CLI](https://img.shields.io/badge/cli-mmu-f59e0b.svg)](./SPEC.md)
 [![Guardrails CI](https://img.shields.io/badge/ci-doctor%20%2B%20gates-22c55e.svg)](./.github/workflows/mmu-guardrails.yml)
 [![Contributions Welcome](https://img.shields.io/badge/contributions-welcome-16a34a.svg)](./CONTRIBUTING.md)
+
+**English** · [🇰🇷 한국어](./README.ko.md) · [🇯🇵 日本語](./README.ja.md) · [🇨🇳 简体中文](./README.zh-CN.md) · [🇪🇸 Español](./README.es.md)
 
 <img src="./assets/brand/unicorn-hero.png" alt="Make Me Unicorn mascot" width="960" />
 
