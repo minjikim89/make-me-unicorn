@@ -30,7 +30,10 @@
 
 ## Web Analytics
 
-- [ ] Set up privacy-friendly web analytics (Plausible, Fathom, or PostHog).
+- [ ] Set up GA4 property and install Measurement ID in app.
+- [ ] Verify GA4 receives data via Realtime report or DebugView.
+- [ ] Link GA4 to Google Search Console for organic search query data.
+- [ ] Optionally add privacy-friendly analytics (Plausible, Fathom, or PostHog).
 - [ ] Track page views and unique visitors.
 - [ ] Track referral sources and UTM parameters.
 - [ ] Monitor bounce rate for key landing pages.
@@ -60,4 +63,5 @@
 | Plausible | Web Analytics | $9/mo | Privacy-friendly, lightweight, no cookies |
 | Stripe Dashboard | Revenue Metrics | Free | Built-in MRR, churn, LTV tracking |
 | GrowthBook | A/B Testing | Free (self-hosted) | Open-source experimentation platform |
+| Google Analytics 4 | Web Analytics | Free | Industry standard, Search Console linkable |
 | Statsig | Feature Flags + A/B | Free tier | Feature gates with auto-analysis |

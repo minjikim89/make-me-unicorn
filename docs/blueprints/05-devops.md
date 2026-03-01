@@ -42,6 +42,15 @@
 - [ ] Set up `www` to apex domain redirect (or vice versa).
 - [ ] Configure HSTS headers.
 - [ ] Add CAA DNS records for certificate authority restriction.
+- [ ] Verify DNS propagation after changes (e.g., `dig` or whatsmydns.net).
+
+## Email DNS (Transactional/Marketing Email)
+
+- [ ] Configure SPF record to authorize sending servers.
+- [ ] Set up DKIM signing for outbound email.
+- [ ] Publish DMARC policy record.
+- [ ] Test email deliverability (mail-tester.com or similar).
+- [ ] Verify sender domain in email provider (Resend, SendGrid, SES, etc.).
 
 ## Secrets Management
 
