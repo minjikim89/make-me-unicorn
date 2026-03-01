@@ -20,10 +20,16 @@
 - Filled examples by SaaS category
 - `start --emit bundle` workflow for practical LLM handoff
 
-## v0.4 Optional Graph Layer
+## v0.4 LLM Integration + Agentic Engineering
 
-- Decision relation extraction from docs
-- Visual decision graph for founders
+- Optional Claude integration via `pip install make-me-unicorn[llm]`
+- `init --interactive`: Claude-guided project setup (5 questions → 5 docs)
+- `start --agent`: auto-format context for LLM injection
+- `doctor --deep`: semantic code review with Claude
+- `generate <doc>`: LLM-powered doc generation
+- Failure recovery framework (`docs/ops/known_issues.md`)
+- Agent safety rules for testing blueprints
+- Structured session memory with `[DECISION]/[DONE]/[ISSUE]/[NEXT]` tags
 
 ## v1.0 Founder OS
 

@@ -226,6 +226,7 @@ def parse_args() -> argparse.Namespace:
     p_init.add_argument("--json", action="store_true", help="Output structured JSON")
     p_init.add_argument("--root", default=".", help="Project root path")
     p_init.add_argument("--force", action="store_true", help="Overwrite existing files")
+    p_init.add_argument("--interactive", action="store_true", help="LLM-guided project setup (requires anthropic SDK)")
 
     p_start = sub.add_parser("start", help="Start a focused mode session")
     p_start.add_argument("--json", action="store_true", help="Output structured JSON")
@@ -234,6 +235,7 @@ def parse_args() -> argparse.Namespace:
     p_start.add_argument("--emit", choices=["list", "bundle"], default="list", help="Output format")
     p_start.add_argument("--output", help="Write bundle output to a file")
     p_start.add_argument("--clipboard", action="store_true", help="Copy bundle output to clipboard")
+    p_start.add_argument("--agent", action="store_true", help="Format context for LLM agent injection")
 
     p_close = sub.add_parser("close", help="Close current session")
     p_close.add_argument("--json", action="store_true", help="Output structured JSON")
@@ -242,6 +244,7 @@ def parse_args() -> argparse.Namespace:
     p_doctor = sub.add_parser("doctor", help="Run guardrail checks")
     p_doctor.add_argument("--json", action="store_true", help="Output structured JSON")
     p_doctor.add_argument("--root", default=".", help="Project root path")
+    p_doctor.add_argument("--deep", action="store_true", help="LLM-powered semantic analysis (requires anthropic SDK)")
 
     p_gate = sub.add_parser("gate", help="Check stage gate readiness")
     p_gate.add_argument("--json", action="store_true", help="Output structured JSON")
@@ -272,6 +275,11 @@ def parse_args() -> argparse.Namespace:
     p_scan = sub.add_parser("scan", help="Auto-detect tech stack and pre-check blueprint items")
     p_scan.add_argument("--json", action="store_true", help="Output structured JSON")
     p_scan.add_argument("--root", default=".", help="Project root path")
+
+    p_generate = sub.add_parser("generate", help="Generate or update a doc using LLM")
+    p_generate.add_argument("doc", help="Doc to generate (strategy, product, pricing, architecture, ux)")
+    p_generate.add_argument("--json", action="store_true", help="Output structured JSON")
+    p_generate.add_argument("--root", default=".", help="Project root path")
 
     p_snapshot = sub.add_parser("snapshot", help="Run snapshot diagnostic from mmu CLI")
     p_snapshot.add_argument("--json", action="store_true", help="Output structured JSON")
@@ -502,7 +510,159 @@ def try_copy_clipboard(content: str) -> tuple[bool, str]:
     return True, "bundle copied to clipboard"
 
 
-def command_start(mode: str, root: Path, emit: str, output: str | None, clipboard: bool) -> Result:
+def command_init_interactive(root: Path) -> Result:
+    """LLM-guided interactive project initialization."""
+    from mmu_cli.llm import LLMClient, generate_core_docs, interactive_questions
+
+    client = LLMClient(root)
+    answers = interactive_questions()
+
+    if not answers:
+        return Result(exit_code=1, messages=["No answers provided. Aborting interactive setup."])
+
+    # Find examples directory for few-shot prompts
+    mmu_root = _find_mmu_root()
+    examples_dir = (mmu_root / "examples" / "filled" / "tasknote" / "docs" / "core") if mmu_root else Path()
+
+    output_dir = root / "docs" / "core"
+    generated = generate_core_docs(client, answers, examples_dir, output_dir)
+
+    # Run normal init for remaining files (blueprints, checklists, etc.)
+    init_result = command_init(root, force=False)
+
+    messages = ["\n  🦄 Interactive setup complete!\n"]
+    messages.append("  LLM-generated docs:")
+    for g in generated:
+        messages.append(f"    [create] {g}")
+    messages.append("")
+    messages.extend(init_result.get("messages", []))
+
+    client.log_usage(root)
+
+    return Result(
+        exit_code=0,
+        generated=generated,
+        created=init_result.get("created", []),
+        messages=messages,
+    )
+
+
+def command_doctor_deep(root: Path) -> Result:
+    """LLM-powered semantic code analysis on top of regular doctor."""
+    from mmu_cli.llm import LLMClient
+
+    base_result = command_doctor(root)
+    client = LLMClient(root)
+
+    # Collect docs for analysis
+    docs_content: dict[str, str] = {}
+    for name in ["strategy.md", "product.md", "architecture.md", "pricing.md"]:
+        path = root / f"docs/core/{name}"
+        content = read_text(path)
+        if content and content.strip():
+            docs_content[name] = content
+
+    # Collect code files (limited)
+    skip_paths = doctor_skip_paths(root)
+    code_files = gather_code_files(root, skip_paths)[:15]
+    code_content: dict[str, str] = {}
+    for f in code_files:
+        content = read_text(f)
+        if content and len(content) < 8000:
+            code_content[f.relative_to(root).as_posix()] = content
+
+    if not docs_content and not code_content:
+        messages = base_result.get("messages", [])
+        messages.append("\n  [skip] Deep analysis: no docs or code to analyze")
+        return Result(exit_code=base_result.exit_code, messages=messages)
+
+    system = (
+        "You are a SaaS code reviewer. Analyze the project documentation and source code. "
+        "Report concisely:\n"
+        "1. Doc-code mismatches (docs say one thing, code does another)\n"
+        "2. Missing error handling or security concerns\n"
+        "3. Incomplete implementations (stubs, TODOs)\n"
+        "4. Blind spots the founder might miss\n"
+        "Be specific with file references. Format as a concise checklist."
+    )
+
+    user_parts: list[str] = []
+    if docs_content:
+        user_parts.append("## Documentation\n")
+        for name, content in docs_content.items():
+            user_parts.append(f"### {name}\n{content}\n")
+    if code_content:
+        user_parts.append("## Code\n")
+        for name, content in code_content.items():
+            user_parts.append(f"### {name}\n```\n{content}\n```\n")
+
+    analysis = client.complete(system, "\n".join(user_parts), max_tokens=2000)
+    client.log_usage(root)
+
+    messages = base_result.get("messages", [])
+    messages.append("")
+    messages.append("  === Deep Analysis (Claude) ===")
+    messages.append(analysis)
+
+    return Result(exit_code=base_result.exit_code, messages=messages)
+
+
+def command_generate(doc_name: str, root: Path) -> Result:
+    """Generate or update a core doc using LLM."""
+    from mmu_cli.llm import LLMClient
+
+    valid_docs = {"strategy", "product", "pricing", "architecture", "ux"}
+    if doc_name not in valid_docs:
+        return Result(exit_code=1, messages=[f"Unknown doc: {doc_name}. Choose from: {', '.join(sorted(valid_docs))}"])
+
+    filename = f"{doc_name}.md"
+    target = root / "docs" / "core" / filename
+    existing = read_text(target) if target.is_file() else None
+
+    # Gather project context
+    context_parts: list[str] = []
+    for name in ["strategy.md", "product.md", "architecture.md"]:
+        path = root / f"docs/core/{name}"
+        content = read_text(path)
+        if content and content.strip() and name != filename:
+            context_parts.append(f"### {name}\n{content}")
+
+    sprint = read_text(root / "current_sprint.md")
+    if sprint:
+        context_parts.append(f"### current_sprint.md\n{sprint}")
+
+    # Load example
+    mmu_root = _find_mmu_root()
+    example = ""
+    if mmu_root:
+        example_path = mmu_root / "examples" / "filled" / "tasknote" / "docs" / "core" / filename
+        if example_path.is_file():
+            example = example_path.read_text(encoding="utf-8")
+
+    client = LLMClient(root)
+
+    system = (
+        "You are a SaaS strategy assistant. Generate or update the requested document "
+        "based on the project's current state. Follow the reference format exactly. "
+        "Be specific and actionable. Output ONLY the markdown content."
+    )
+    user_prompt = f"Generate docs/core/{filename}.\n\n"
+    if existing and existing.strip():
+        user_prompt += f"Current content (update and improve):\n{existing}\n\n"
+    if context_parts:
+        user_prompt += f"Project context:\n\n{''.join(context_parts)}\n\n"
+    if example:
+        user_prompt += f"Reference format:\n{example}\n"
+
+    print(f"\n  Generating docs/core/{filename}...")
+    content = client.complete(system, user_prompt)
+    write_text(target, content)
+    client.log_usage(root)
+
+    return Result(exit_code=0, messages=[f"  [create] docs/core/{filename} generated"])
+
+
+def command_start(mode: str, root: Path, emit: str, output: str | None, clipboard: bool, agent: bool = False) -> Result:
     mode_files = MODES[mode]
     write_text(root / ".mmu/last_mode", f"{mode}\n")
     write_text(root / ".mmu/last_started_at", f"{utc_now()}\n")
@@ -523,11 +683,40 @@ def command_start(mode: str, root: Path, emit: str, output: str | None, clipboar
 
     bundle = ""
     read_errors: list[str] = []
-    if emit == "bundle" or output or clipboard:
+    if emit == "bundle" or output or clipboard or agent:
         bundle, bundle_missing = build_bundle(root, mode_files, read_errors)
         for rel in bundle_missing:
             if rel not in missing:
                 missing.append(rel)
+
+    # --agent: format context for LLM injection
+    if agent:
+        from mmu_cli.llm import format_agent_context
+
+        agent_ctx = format_agent_context(mode, bundle, root)
+        if clipboard:
+            ok, note = try_copy_clipboard(agent_ctx)
+            messages.append(("  [ok] " if ok else "  [warn] ") + note)
+        if output:
+            out_path = (root / output).resolve() if not Path(output).is_absolute() else Path(output)
+            write_text(out_path, agent_ctx)
+            messages.append(f"Agent context written: {out_path}")
+        messages.append("--- AGENT CONTEXT ---")
+        messages.append(agent_ctx)
+        messages.append("--- END ---")
+
+        for err in read_errors:
+            messages.append(f"  [warn] {err}")
+
+        return Result(
+            exit_code=0,
+            mode=mode,
+            injected_files=mode_files,
+            present_files=present,
+            missing_files=missing,
+            output_file=output,
+            messages=messages,
+        )
 
     if output:
         out_path = (root / output).resolve() if not Path(output).is_absolute() else Path(output)
@@ -1083,16 +1272,25 @@ def main() -> int:
         return render_result(result, False)
 
     if args.command == "init":
-        result = command_init(root, args.force)
+        if getattr(args, "interactive", False):
+            result = command_init_interactive(root)
+        else:
+            result = command_init(root, args.force)
         return render_result(result, args.json)
     if args.command == "start":
-        result = command_start(args.mode, root, args.emit, args.output, args.clipboard)
+        result = command_start(args.mode, root, args.emit, args.output, args.clipboard, agent=getattr(args, "agent", False))
         return render_result(result, args.json)
     if args.command == "close":
         result = command_close(root)
         return render_result(result, args.json)
     if args.command == "doctor":
-        result = command_doctor(root)
+        if getattr(args, "deep", False):
+            result = command_doctor_deep(root)
+        else:
+            result = command_doctor(root)
+        return render_result(result, args.json)
+    if args.command == "generate":
+        result = command_generate(args.doc, root)
         return render_result(result, args.json)
     if args.command == "gate":
         result = command_gate(args.stage, root)

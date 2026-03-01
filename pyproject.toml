@@ -19,7 +19,15 @@ classifiers = [
 ]
 
 [project.optional-dependencies]
+llm = [
+  "anthropic>=0.40",
+]
 dev = [
+  "mypy>=1.8",
+  "ruff>=0.6",
+]
+all = [
+  "anthropic>=0.40",
   "mypy>=1.8",
   "ruff>=0.6",
 ]

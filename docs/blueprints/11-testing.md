@@ -63,3 +63,16 @@
 | MSW | API Mocking | Free | Mock Service Worker for realistic API mocks |
 | Storybook | Component Dev | Free | Isolated component development and docs |
 | Faker.js | Test Data | Free | Realistic fake data generation |
+
+## Agent Safety Rules
+
+Rules for AI-assisted coding sessions to prevent false completion.
+
+- [ ] [P0] No test stubs or placeholder assertions (`assert True`, `pass`, `return nil`).
+- [ ] [P0] Existing tests must not be modified solely to make them pass.
+- [ ] [P0] Code coverage must not decrease after an agent session.
+- [ ] [P0] No `# TODO` or `# FIXME` left as implementation placeholders.
+- [ ] [P1] All new public functions have at least one test.
+- [ ] [P1] Edge cases are covered (null, empty, boundary values).
+- [ ] [P1] No tests skip or xfail without a documented reason.
+- [ ] Agent must report: what was done, what DoD items are met, what remains.

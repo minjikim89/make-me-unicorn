@@ -176,11 +176,35 @@ mmu check auth 5 --root ~/my-saas  # 5. check off items
 
 Spec details: `SPEC.md` · CI enforcement: `.github/workflows/mmu-guardrails.yml`
 
+## 🤖 LLM Integration (Optional)
+
+MMU can use Claude to generate project documentation and provide semantic analysis.
+
+```bash
+pip install make-me-unicorn[llm]      # install with Claude support
+export ANTHROPIC_API_KEY=sk-ant-...
+
+mmu init --interactive                # Claude-guided project setup
+mmu start --mode backend --agent      # auto-format context for LLM injection
+mmu doctor --deep                     # semantic code review with Claude
+mmu generate strategy                 # generate/update a specific doc
+```
+
+Core CLI remains zero-dependency. LLM features are fully optional and degrade gracefully when unavailable.
+
+| Command | What it does |
+|---------|-------------|
+| `mmu init --interactive` | Answer 5 questions, Claude generates strategy/product/pricing/architecture/ux docs |
+| `mmu start --mode X --agent` | Format session context for direct LLM injection |
+| `mmu doctor --deep` | Semantic analysis: doc-code mismatches, security gaps, blind spots |
+| `mmu generate <doc>` | Generate or update a core doc based on current project state |
+
 ## 🔧 Requirements
 
 - Python `3.10+` (recommended `3.12`)
 - `pip`
-- No external dependencies — pure Python stdlib
+- Core CLI: no external dependencies — pure Python stdlib
+- LLM features: `pip install make-me-unicorn[llm]` (adds `anthropic` SDK)
 
 ## ⚡ Quick Start
 

@@ -81,3 +81,17 @@ Modes lock context and reduce execution drift.
 - Purpose: release and operational handoff
 - Inject: `docs/checklists/release_readiness.md`, `docs/ops/roadmap.md`
 - Output: go/no-go release decision
+
+## Parallel Session Rules
+
+When running multiple agent sessions simultaneously (e.g., git worktrees):
+
+1. **Branch isolation**: each session works on a separate branch.
+2. **No shared state files**: `current_sprint.md` and `.mmu/` are branch-local.
+3. **Conflict prevention**:
+   - Only one session modifies `docs/core/*` at a time.
+   - `docs/ops/known_issues.md` uses append-only entries.
+   - ADR files use timestamp-prefixed names to avoid collisions.
+4. **Worktree setup**: `git worktree add ../project-billing billing-work`
+5. **Sync points**: check in after each session close before starting the next.
+6. **Merge order**: merge decision-heavy sessions first, execution sessions second.
