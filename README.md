@@ -2,14 +2,13 @@
 
 # Make Me Unicorn
 
-**FounderMode for solo SaaS builders**
+**Stop building blind. Ship your SaaS with confidence.**
 
-SaaS from scratch, without execution drift.
+The open-source launch checklist and operating system for solo builders.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-black.svg)](./LICENSE)
 [![Status: v0.4](https://img.shields.io/badge/status-v0.4-blue.svg)](./ROADMAP.md)
-[![Docs](https://img.shields.io/badge/docs-template%20pack-0ea5e9.svg)](./docs)
-[![CLI](https://img.shields.io/badge/cli-scan%2Fstatus%2Fshow%2Fcheck%2Fgate-f59e0b.svg)](./SPEC.md)
+[![CLI](https://img.shields.io/badge/cli-mmu-f59e0b.svg)](./SPEC.md)
 [![Guardrails CI](https://img.shields.io/badge/ci-doctor%20%2B%20gates-22c55e.svg)](./.github/workflows/mmu-guardrails.yml)
 [![Contributions Welcome](https://img.shields.io/badge/contributions-welcome-16a34a.svg)](./CONTRIBUTING.md)
 
@@ -17,20 +16,39 @@ SaaS from scratch, without execution drift.
 
 </div>
 
-## 🚀 Start Here
+## The Problem
 
-### TL;DR
+You are building a SaaS product. You use AI to code faster than ever. But then:
 
-```bash
-pip install -e .
-mmu init                    # scaffold docs + 15 blueprints (534 items)
-mmu scan                    # auto-detect your tech stack and pre-check items
-mmu                         # see your unicorn evolution dashboard
-mmu show frontend           # drill into any blueprint
-mmu check frontend 13       # check off completed items
+> "Wait, did I add a password reset flow?"
+>
+> "The payment webhook... is it idempotent?"
+>
+> "Do I have a privacy policy? A refund policy? OG meta tags?"
+>
+> "What did I decide last week about the auth provider? Why?"
+
+**You are not failing at coding. You are failing at tracking what matters.**
+
+Every solo builder hits the same walls:
+
+| What goes wrong | What it costs you |
+|-----------------|-------------------|
+| You forget password reset while building login | Users get locked out on day 1 |
+| You skip webhook signature verification | Attackers replay payment events |
+| You launch without OG tags | Every shared link looks broken |
+| You lose context between AI sessions | You re-explain your project from scratch, every time |
+| You have no refund policy | First dispute = frozen Stripe account |
+
+MMU catches these **before they cost you users, money, or trust**.
+
+## How It Works
+
 ```
-
-### 🎬 Dashboard Preview
+mmu init                    # 1. Get 534+ checklist items across 15 categories
+mmu scan                    # 2. Auto-detect your stack — pre-check what you already have
+mmu                         # 3. See what's done, what's missing
+```
 
 ```text
   🦄  MAKE ME UNICORN — STATUS DASHBOARD
@@ -38,245 +56,200 @@ mmu check frontend 13       # check off completed items
           .--*--.
          / °v°  \          Stage: HATCHING    ██████░░░░░░░░░░░░░░  22%
         |       |
-         \ ___ /           📋 LAUNCH GATES  (21/26)
+         \ ___ /           📋 LAUNCH GATES
           '---'              M0 Problem Fit   ████████████████  ✓ PASS
                              M1 Build Fit     ████████████████  ✓ PASS
   🗺️ BLUEPRINTS (124/551)   M2 Revenue Fit   ████████████████  ✓ PASS
-    Frontend    ██████░░  41%   M3 Trust Fit     ████████████████  ✓ PASS
-    Backend     ████████░ 53%   M4 Growth Fit    ████████████░░░░  ✗ OPEN
-    Auth        ██████░░  38%   M5 Scale Fit     ███░░░░░░░░░░░░░  ✗ OPEN
-    ...13 more categories
+    Frontend    ██████░░ 41%   M3 Trust Fit     ████████████████  ✓ PASS
+    Backend     ████████ 53%   M4 Growth Fit    ████████████░░░░  ✗ OPEN
+    Auth        ██████░░ 38%   M5 Scale Fit     ███░░░░░░░░░░░░░  ✗ OPEN
+    ...13 more
 ```
 
-Your unicorn evolves as you complete items: Egg → Hatching → Foal → Young → Unicorn → Legendary.
+Your unicorn evolves as you build: Egg → Hatching → Foal → Young → Unicorn → Legendary.
 
-### Quick Links
+## What MMU Covers (So You Don't Have To Remember)
 
-- `docs/checklists/from_scratch.md` — stage gate checklist (M0–M5)
-- `docs/blueprints/*.md` — 15 category blueprints (534+ items)
-- `SPEC.md` — CLI behavior contract
+<table>
+<tr>
+<td width="33%">
 
-## 🦄 What Is This
+**Building the product**
+- Frontend (responsive, a11y, forms)
+- Backend (API, DB, queues)
+- Auth (login, reset, OAuth, sessions)
+- Billing (Stripe, webhooks, refunds)
+- Testing (unit, E2E, agent safety)
 
-`Make Me Unicorn` is an open-source operating system for solo founders building SaaS from scratch.
+</td>
+<td width="33%">
 
-It gives you a practical structure to run strategy, product, design, frontend, backend, auth, billing, compliance, growth, and launch without losing context when switching between LLMs.
+**Preparing to launch**
+- SEO (OG tags, sitemap, meta)
+- Legal (privacy, terms, GDPR)
+- Security (CORS, rate limits, secrets)
+- Performance (caching, lazy load)
+- CI/CD (pipeline, rollback plan)
 
-## ⚠️ Why This Exists
+</td>
+<td width="34%">
 
-Most founders do not fail because of missing code snippets.
-They fail because of execution drift.
+**Running it after launch**
+- Monitoring (errors, uptime, alerts)
+- Analytics (funnel, retention, events)
+- Email (transactional, templates)
+- Accessibility (WCAG, keyboard nav)
+- Reliability (backup, incident plan)
 
-- Context resets every time you switch model/tool.
-- Decisions are made but the rationale is not preserved.
-- Critical blind spots are missed: auth recovery, webhook idempotency, legal pages, OG preview metadata, staging separation.
+</td>
+</tr>
+</table>
 
-`Make Me Unicorn` solves this with:
+**534+ items. 15 categories. Zero guesswork.**
 
-1. Structured docs as source of truth
-2. Mode-based context injection
-3. Decision logs (ADR) as memory
-4. Phase gates for SaaS from scratch
-5. Session start/close prompts for repeatable operation
+## Who This Is For
 
-## 🏗 Architecture
+| You are... | MMU helps you... |
+|------------|------------------|
+| **A founder coding with AI** | Stop re-explaining your project every session. Keep context across tools. |
+| **A frontend developer** | Know exactly what to build: auth flows, error states, responsive breakpoints, OG tags. |
+| **A product manager / planner** | Get a structured PRD, pricing strategy, and launch checklist — all in markdown. |
+| **A fullstack builder** | Track frontend, backend, billing, and compliance in one place. Nothing slips through. |
 
-```mermaid
-flowchart TD
-  A[Core Docs] --> B[Mode-based Session]
-  C[Ops Docs] --> B
-  D[Checklists] --> B
-  E[ADR Logs] --> B
-  B --> F[Execution: Build / Decide / Validate]
-  F --> G[Session Close Prompt]
-  G --> H[Update Sprint + ADR + Core/Ops]
-```
-
-## 🛂 SaaS From Scratch Gates
-
-Use these gates as non-negotiable checkpoints.
-
-| Gate | Objective | Exit Criteria |
-|---|---|---|
-| `M0 Problem Fit` | Validate customer and problem | ICP, problem statement, success metric defined |
-| `M1 Build Fit` | Deliver core product value | End-to-end core flow works with error states |
-| `M2 Revenue Fit` | Add pricing and payment | Paid plan, success/failure/refund paths verified |
-| `M3 Trust Fit` | Establish trust baseline | Privacy/terms/support path/logging in place |
-| `M4 Growth Fit` | Enable discoverability | Metadata, OG image, sitemap, analytics live |
-| `M5 Scale Fit` | Prepare resilient operation | Backup/recovery/incident playbook enforced |
-
-See `docs/checklists/from_scratch.md` for the full checklist.
-
-## 🎛 Mode System
-
-One mode per session keeps decisions coherent.
-
-| Mode | Purpose | Primary Inputs |
-|---|---|---|
-| `problem` | ICP, pain, hypothesis | `docs/core/strategy.md`, `docs/research/*` |
-| `product` | Scope and prioritization | `docs/core/product.md`, `docs/ops/roadmap.md` |
-| `design` | UX/UI and content | `docs/core/ux.md`, `docs/core/product.md` |
-| `frontend` | Client implementation | `docs/core/architecture.md`, `current_sprint.md` |
-| `backend` | API/data/jobs | `docs/core/architecture.md`, `current_sprint.md`, `docs/adr/*` |
-| `auth` | Identity and access | `docs/checklists/auth_security.md`, `docs/core/architecture.md` |
-| `billing` | Plans/payment/refunds | `docs/core/pricing.md`, `docs/checklists/billing_tax.md`, `docs/ops/compliance.md` |
-| `growth` | SEO/distribution | `docs/checklists/seo_distribution.md`, `docs/ops/metrics.md` |
-| `compliance` | Policy/data/legal baseline | `docs/ops/compliance.md`, `docs/core/pricing.md` |
-| `reliability` | Monitoring/backup/incident | `docs/ops/reliability.md`, `docs/checklists/release_readiness.md` |
-| `analytics` | Event model/experiments | `docs/ops/metrics.md`, `docs/core/product.md` |
-| `launch` | Release readiness | `docs/checklists/release_readiness.md`, `docs/ops/roadmap.md` |
-
-Full rules: `docs/ops/mode_playbook.md`
-
-## 📦 What You Get
-
-- **Visual dashboard** — unicorn that evolves from egg to legendary as you build
-- **15 blueprints** (534+ items) — Frontend, Backend, Auth, Billing, DevOps, Security, Monitoring, SEO, Legal, Performance, Testing, CI/CD, Email, Analytics, Accessibility
-- **Auto-scan** — detect your tech stack and pre-check matching blueprint items
-- **6 stage gates** (M0–M5) — Problem Fit → Scale Fit checkpoints
-- **CLI item management** — `show`, `check`, `uncheck` for terminal-native workflow
-- `docs/core/*` for durable product strategy context
-- `docs/ops/*` for operational control
-- `prompts/*` for repeatable session start/close workflows
-- installable `mmu` CLI (`pip install -e .`)
-
-## 🧪 CLI Commands
-
-| Command | What it does |
-|---------|-------------|
-| `mmu` | Visual dashboard — unicorn evolution + gates + blueprints |
-| `mmu scan` | Auto-detect tech stack and pre-check blueprint items |
-| `mmu show <blueprint>` | Detailed blueprint view with numbered items |
-| `mmu check <blueprint> <#>` | Mark an item as done |
-| `mmu uncheck <blueprint> <#>` | Mark an item as not done |
-| `mmu init` | Scaffold docs, checklists, and 15 blueprints |
-| `mmu gate --stage M0` | Check if a gate stage is ready to pass |
-| `mmu doctor` | Run guardrail health checks |
-| `mmu start --mode product` | Start a focused working session |
-| `mmu close` | Close current session |
-
-Blueprint aliases: `frontend`, `front`, `back`, `auth`, `billing`, `seo`, `perf`, `a11y`, `ci`, etc.
-
-### Install
+## Quick Start
 
 ```bash
-cd make-me-unicorn
 pip install -e .
-```
 
-### Typical Workflow
+# Option A: Start with empty templates, fill them yourself
+mmu init
 
-```bash
-mmu init --root ~/my-saas       # 1. scaffold
-mmu scan --root ~/my-saas       # 2. auto-detect existing work
-mmu --root ~/my-saas            # 3. see dashboard
-mmu show auth --root ~/my-saas  # 4. drill into category
-mmu check auth 5 --root ~/my-saas  # 5. check off items
-```
-
-Spec details: `SPEC.md` · CI enforcement: `.github/workflows/mmu-guardrails.yml`
-
-## 🤖 LLM Integration (Optional)
-
-MMU can use Claude to generate project documentation and provide semantic analysis.
-
-```bash
-pip install make-me-unicorn[llm]      # install with Claude support
+# Option B: Let Claude generate your project docs (requires API key)
+pip install -e ".[llm]"
 export ANTHROPIC_API_KEY=sk-ant-...
-
-mmu init --interactive                # Claude-guided project setup
-mmu start --mode backend --agent      # auto-format context for LLM injection
-mmu doctor --deep                     # semantic code review with Claude
-mmu generate strategy                 # generate/update a specific doc
+mmu init --interactive        # answer 5 questions → get filled strategy, product, pricing docs
 ```
 
-Core CLI remains zero-dependency. LLM features are fully optional and degrade gracefully when unavailable.
+Then:
 
-| Command | What it does |
+```bash
+mmu scan                      # auto-detect your tech stack
+mmu                           # see your dashboard
+mmu show frontend             # drill into any category
+mmu check frontend 3          # mark items as done
+mmu gate --stage M0           # verify you're ready for the next phase
+mmu doctor                    # run guardrail health checks
+```
+
+## 6 Launch Gates
+
+Think of these as phase exits. Don't skip ahead.
+
+```
+M0 Problem Fit    →  Do you know WHO you're building for and WHY?
+M1 Build Fit      →  Does the core product actually work end-to-end?
+M2 Revenue Fit    →  Can someone pay you? And get a refund?
+M3 Trust Fit      →  Privacy policy? Support path? Logging?
+M4 Growth Fit     →  Will shared links look right? Can people find you?
+M5 Scale Fit      →  What happens when something breaks at 3am?
+```
+
+Run `mmu gate --stage M0` to verify. All unchecked items = NOT PASS.
+
+## 12 Operating Modes
+
+One mode per session. Each mode loads only the docs you need.
+
+```bash
+mmu start --mode backend      # loads: architecture.md, sprint, ADR logs
+mmu start --mode billing      # loads: pricing.md, billing checklist, compliance
+mmu start --mode growth       # loads: SEO checklist, metrics
+```
+
+This prevents the #1 problem with AI coding: **context overload**. Your AI assistant gets only what it needs — not your entire project.
+
+## AI Integration (Optional)
+
+MMU works without any AI. But with Claude, it gets powerful:
+
+```bash
+pip install make-me-unicorn[llm]
+export ANTHROPIC_API_KEY=sk-ant-...
+```
+
+| Command | What happens |
 |---------|-------------|
-| `mmu init --interactive` | Answer 5 questions, Claude generates strategy/product/pricing/architecture/ux docs |
-| `mmu start --mode X --agent` | Format session context for direct LLM injection |
-| `mmu doctor --deep` | Semantic analysis: doc-code mismatches, security gaps, blind spots |
-| `mmu generate <doc>` | Generate or update a core doc based on current project state |
+| `mmu init --interactive` | Answer 5 questions about your product. Claude writes your strategy, product spec, pricing, architecture, and UX docs. |
+| `mmu start --mode X --agent` | Auto-formats your session context — paste directly into Claude Code or any LLM. |
+| `mmu doctor --deep` | Claude reads your code and docs, flags mismatches, security gaps, and blind spots. |
+| `mmu generate strategy` | Generates or updates any core doc based on your current project state. |
 
-## 🔧 Requirements
+Core CLI stays zero-dependency. AI features are optional and degrade gracefully.
 
-- Python `3.10+` (recommended `3.12`)
+## Session Workflow
+
+Every session follows the same rhythm:
+
+```
+1. mmu start --mode backend      ← pick a focus, load relevant docs
+2. Build / decide / validate      ← do the work
+3. mmu close                      ← log what changed, what's next
+```
+
+Session close uses structured tags for memory:
+
+- `[DONE]` — what you completed
+- `[DECISION]` — choices made (create ADR if significant)
+- `[ISSUE]` — what went wrong (categorize: context gap / wrong direction / doc-code conflict)
+- `[NEXT]` — first task for next session
+
+This means your next session starts in **5 seconds**, not 15 minutes of "where was I?"
+
+## Example: TaskNote
+
+See a fully filled-out example of MMU in action:
+
+```
+examples/filled/tasknote/
+├── docs/core/strategy.md      ← ICP, value prop, competitors
+├── docs/core/product.md       ← MVP scope, user journey, P0/P1
+├── docs/core/pricing.md       ← Free/Pro/Team, billing rules
+├── docs/core/architecture.md  ← Next.js + FastAPI + Postgres
+├── docs/adr/001_billing_provider_choice.md  ← Why Stripe?
+└── current_sprint.md          ← This week's 3 goals
+```
+
+## Requirements
+
+- Python `3.10+`
 - `pip`
-- Core CLI: no external dependencies — pure Python stdlib
-- LLM features: `pip install make-me-unicorn[llm]` (adds `anthropic` SDK)
+- Core CLI: zero external dependencies
+- AI features: `pip install make-me-unicorn[llm]`
 
-## ⚡ Quick Start
+## Project Structure
 
-1. `mmu init` — scaffold baseline docs and blueprints.
-2. `mmu scan` — auto-detect your tech stack and pre-check items.
-3. `mmu` — see your unicorn dashboard.
-4. `mmu show <blueprint>` — find what's missing.
-5. Build, then `mmu check <blueprint> <#>` as you go.
-6. `mmu gate --stage M0` — verify each gate before moving on.
+```
+make-me-unicorn/
+├── src/mmu_cli/           # CLI source (Python)
+├── docs/
+│   ├── core/              # Strategy, Product, Pricing, Architecture, UX
+│   ├── ops/               # Roadmap, Metrics, Compliance, Reliability
+│   ├── blueprints/        # 15 category checklists (534+ items)
+│   ├── checklists/        # M0–M5 launch gates
+│   └── adr/               # Decision log templates
+├── prompts/               # Session start/close/ADR templates
+├── examples/filled/       # Concrete example (TaskNote)
+└── tests/                 # Unit tests
+```
 
-## 🛡 Common Misses This Project Prevents
+## CI Guardrails
 
-- Missing account recovery while implementing login
-- Running payment without refund/cancellation policy
-- No webhook signature verification and idempotency
-- No `dev/staging/prod` separation before release
-- Missing OG thumbnail and social link preview validation
-- Policy pages exist but no data deletion workflow
+`mmu doctor` runs on every PR. `mmu gate` runs for stages listed in `docs/ops/gate_targets.txt`.
 
-## 🕸 Optional Graph Layer
-
-Start without ontology/graph complexity.
-
-When needed, add a graph module as derived state from `docs/*`.
-Keep markdown as the canonical source.
-
-## 📈 Evolution Path
-
-For staged maturation from MVP to later phases, see `docs/ops/evolution_path.md`.
-
-Execution planning and status snapshots:
-
-- `docs/ops/prd_8week_growth.md`
-- `docs/ops/status_snapshot_2026-02-23.md`
-
-## 🧩 Filled Example
-
-See a concrete, filled-out SaaS operation example:
-
-- `examples/filled/tasknote/README.md`
-
-## ✅ CI Guardrails
-
-`doctor` runs on every PR/push.
-`gate` runs only for stages listed in `docs/ops/gate_targets.txt`.
-No stages are enforced by default. Add lines such as `M0` and `M1` to enable strict gate blocking.
-Branch protection baseline: `docs/ops/repo_protection.md`.
-
-## 🎨 Brand Setup
-
-1. Replace the hero image at `assets/brand/unicorn-hero.png` (or update the README image path).
-2. Place your social preview image at `assets/brand/og-cover.png`.
-3. In GitHub repo settings, set Social preview to `assets/brand/og-cover.png`.
-4. Verify link previews on Slack/X/Kakao/Messenger.
-5. Apply repo topics/description checklist from `docs/ops/github_metadata.md`.
-
-## 🗺 Roadmap
-
-See `ROADMAP.md`.
-
-## 🤝 Contributing
+## Contributing
 
 See `CONTRIBUTING.md`.
 
-## 🔐 Security
-
-See `SECURITY.md`.
-
-## 📝 Changelog
-
-See `CHANGELOG.md`.
-
-## ⚖️ License
+## License
 
 MIT. See `LICENSE`.
