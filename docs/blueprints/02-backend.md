@@ -39,6 +39,7 @@
 - [ ] Protect all sensitive endpoints with auth checks.
 - [ ] Implement API key authentication for service-to-service calls.
 
+<!-- if:has_webhooks_outgoing -->
 ## Background Jobs and Queues
 
 - [ ] Choose job queue (BullMQ, Inngest, or Trigger.dev).
@@ -46,6 +47,7 @@
 - [ ] Add dead letter queue for failed jobs.
 - [ ] Log job execution with duration and outcome.
 - [ ] Implement idempotency keys for critical operations.
+<!-- endif -->
 
 ## Caching
 
@@ -54,19 +56,23 @@
 - [ ] Add cache headers for static API responses.
 - [ ] Cache expensive database queries.
 
+<!-- if:has_file_upload -->
 ## File Storage
 
 - [ ] Choose storage provider (S3, R2, or GCS).
 - [ ] Implement signed URL generation for uploads.
 - [ ] Add file type and size validation.
 - [ ] Configure CDN for public file delivery.
+<!-- endif -->
 
+<!-- if:has_webhooks_outgoing -->
 ## Webhooks (Outgoing)
 
 - [ ] Implement webhook event dispatching.
 - [ ] Add retry logic for failed webhook deliveries.
 - [ ] Sign outgoing webhooks with HMAC.
 - [ ] Log all webhook delivery attempts.
+<!-- endif -->
 
 ## Logging and Error Handling
 

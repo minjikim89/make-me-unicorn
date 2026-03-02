@@ -19,6 +19,7 @@
 - [ ] Track error occurrences surfaced to users.
 - [ ] Measure time-to-value for new users.
 
+<!-- if:has_billing -->
 ## Business Metrics
 
 - [ ] Track Monthly Recurring Revenue (MRR).
@@ -27,6 +28,7 @@
 - [ ] Track Customer Acquisition Cost (CAC).
 - [ ] Track trial-to-paid conversion rate.
 - [ ] Set up revenue dashboard with trends.
+<!-- endif -->
 
 ## Web Analytics
 
@@ -39,12 +41,14 @@
 - [ ] Monitor bounce rate for key landing pages.
 - [ ] Track outbound link clicks.
 
+<!-- if:has_ab_testing -->
 ## Experimentation
 
 - [ ] Implement A/B testing framework (PostHog, Statsig, or GrowthBook).
 - [ ] Define experiment hypothesis and success metrics before launch.
 - [ ] Implement feature flags for gradual rollout.
 - [ ] Track experiment results with statistical significance.
+<!-- endif -->
 
 ## Data Privacy
 

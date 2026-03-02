@@ -138,6 +138,8 @@ def unicorn_art(pct: float) -> tuple[str, list[str]]:
 
 _CHECK_DONE = re.compile(r"^\s*-\s*\[x\]\s+", re.IGNORECASE)
 _CHECK_TODO = re.compile(r"^\s*-\s*\[\s\]\s+")
+_CONDITION_IF = re.compile(r"^<!--\s*if:(\w+)\s*-->")
+_CONDITION_ENDIF = re.compile(r"^<!--\s*endif\s*-->")
 
 BLUEPRINT_NAMES = {
     "01-frontend.md": "Frontend",
@@ -218,7 +220,11 @@ def _parse_priority(text: str) -> tuple[int, str]:
     return 2, text  # default priority
 
 
-def render_blueprint_detail(path: Path, label: str) -> str:
+def render_blueprint_detail(
+    path: Path,
+    label: str,
+    flags: dict[str, bool] | None = None,
+) -> str:
     """Build a colorful detailed view of a single blueprint file."""
     try:
         text = path.read_text(encoding="utf-8")
@@ -233,17 +239,43 @@ def render_blueprint_detail(path: Path, label: str) -> str:
     # First pass: gather section stats
     # items: (is_done, priority, clean_text)
     sections: list[tuple[str, list[tuple[bool, int, str]]]] = []
+    skipped_sections: list[str] = []
     current_section = ""
     current_items: list[tuple[bool, int, str]] = []
+    condition_stack: list[bool] = []
 
     for line in text.splitlines():
+        stripped = line.strip()
+
+        m_if = _CONDITION_IF.match(stripped)
+        if m_if:
+            flag_name = m_if.group(1)
+            if flags is not None:
+                condition_stack.append(flags.get(flag_name, True))
+            else:
+                condition_stack.append(True)
+            continue
+        if _CONDITION_ENDIF.match(stripped):
+            if condition_stack:
+                condition_stack.pop()
+            continue
+
+        active = _is_active(condition_stack)
+
         hm = section_heading.match(line)
         if hm:
             if current_section and current_items:
                 sections.append((current_section, current_items))
+            elif current_section and not current_items and not active:
+                skipped_sections.append(current_section)
             current_section = hm.group(1).strip()
             current_items = []
             continue
+
+        if not active:
+            # Track section name for skipped display but skip item
+            continue
+
         dm = _item_done.match(line)
         if dm:
             pri, clean = _parse_priority(dm.group(1).strip())
@@ -256,6 +288,8 @@ def render_blueprint_detail(path: Path, label: str) -> str:
 
     if current_section and current_items:
         sections.append((current_section, current_items))
+    elif current_section and not current_items and not _is_active(condition_stack):
+        skipped_sections.append(current_section)
 
     # Overall stats
     all_done = sum(1 for _, items in sections for done, _, _ in items if done)
@@ -339,38 +373,91 @@ def render_blueprint_detail(path: Path, label: str) -> str:
     else:
         lines.append(f"  💡 {all_total - all_done} items to go")
 
+    # Skipped sections (not applicable per config)
+    if skipped_sections:
+        lines.append("")
+        lines.append(f"  {dim('Skipped (not applicable):')}")
+        for sec in skipped_sections:
+            lines.append(f"    {dim('⊘ ' + sec)}")
+
     bp_key = label.lower().replace(" & ", "-").replace(" ", "-")
     lines.append(f"  {dim('Tip:')} {cyan(f'mmu check {bp_key} <#>')} · {cyan(f'mmu uncheck {bp_key} <#>')}")
     lines.append("")
     return "\n".join(lines)
 
 
-def scan_blueprint(path: Path) -> tuple[int, int]:
-    """Return (done, total) checkbox counts for a blueprint file."""
+def _is_active(condition_stack: list[bool]) -> bool:
+    """Return True if all conditions in the stack are met (no false parent)."""
+    return all(condition_stack)
+
+
+def scan_blueprint(
+    path: Path,
+    flags: dict[str, bool] | None = None,
+) -> tuple[int, int, int]:
+    """Return (done, total, skipped) checkbox counts for a blueprint file.
+
+    When *flags* is provided, sections wrapped in ``<!-- if:flag_name -->``
+    markers are skipped if the flag is False.  Skipped items are excluded
+    from both *done* and *total* and counted separately in *skipped*.
+    """
     done = 0
     total = 0
+    skipped = 0
+    condition_stack: list[bool] = []
+
     try:
         text = path.read_text(encoding="utf-8")
     except OSError:
-        return 0, 0
+        return 0, 0, 0
+
     for line in text.splitlines():
+        stripped = line.strip()
+
+        # Handle condition markers
+        m_if = _CONDITION_IF.match(stripped)
+        if m_if:
+            flag_name = m_if.group(1)
+            if flags is not None:
+                condition_stack.append(flags.get(flag_name, True))
+            else:
+                condition_stack.append(True)
+            continue
+
+        if _CONDITION_ENDIF.match(stripped):
+            if condition_stack:
+                condition_stack.pop()
+            continue
+
+        active = _is_active(condition_stack)
+
         if _CHECK_DONE.match(line):
-            done += 1
-            total += 1
+            if active:
+                done += 1
+                total += 1
+            else:
+                skipped += 1
         elif _CHECK_TODO.match(line):
-            total += 1
-    return done, total
+            if active:
+                total += 1
+            else:
+                skipped += 1
+
+    return done, total, skipped
 
 
-def scan_all_blueprints(root: Path) -> list[tuple[str, int, int]]:
-    """Scan all blueprint files. Returns [(name, done, total), ...]."""
+def scan_all_blueprints(
+    root: Path,
+    flags: dict[str, bool] | None = None,
+) -> list[tuple[str, int, int, int]]:
+    """Scan all blueprint files. Returns [(name, done, total, skipped), ...]."""
     bp_dir = root / "docs" / "blueprints"
     results = []
     for filename, label in BLUEPRINT_NAMES.items():
         path = bp_dir / filename
         if path.is_file():
-            done, total = scan_blueprint(path)
-            results.append((label, done, total))
+            done, total, skipped = scan_blueprint(path, flags)
+            results.append((label, done, total, skipped))
     return results
 
 
@@ -430,14 +517,15 @@ def mini_bar(done: int, total: int, width: int = 16) -> str:
     return f"{bar} {done:>3}/{total:<3}"
 
 
-def render_status(root: Path) -> str:
+def render_status(root: Path, flags: dict[str, bool] | None = None) -> str:
     """Build the full visual status dashboard string."""
     lines: list[str] = []
 
     # --- Blueprint scan ---
-    blueprints = scan_all_blueprints(root)
-    bp_done = sum(d for _, d, _ in blueprints)
-    bp_total = sum(t for _, _, t in blueprints)
+    blueprints = scan_all_blueprints(root, flags)
+    bp_done = sum(d for _, d, _, _ in blueprints)
+    bp_total = sum(t for _, _, t, _ in blueprints)
+    bp_skipped = sum(s for _, _, _, s in blueprints)
 
     # --- Gate scan ---
     gates = scan_gates(root)
@@ -475,11 +563,15 @@ def render_status(root: Path) -> str:
 
     # --- Blueprint progress ---
     lines.append(dim("  ─" * 28))
-    lines.append(bold("  🗺️  BLUEPRINTS") + dim(f"  ({bp_done}/{bp_total})"))
+    bp_header = bold("  🗺️  BLUEPRINTS") + dim(f"  ({bp_done}/{bp_total})")
+    if bp_skipped > 0:
+        bp_header += dim(f"  [{bp_skipped} skipped]")
+    lines.append(bp_header)
     lines.append("")
-    for label, d, t in blueprints:
+    for label, d, t, s in blueprints:
         pct_text = f"{d/t*100:.0f}%" if t > 0 else "--"
-        lines.append(f"    {label:<18} {mini_bar(d, t)}  {dim(pct_text)}")
+        skip_text = dim(f" -{s}") if s > 0 else ""
+        lines.append(f"    {label:<18} {mini_bar(d, t)}  {dim(pct_text)}{skip_text}")
     lines.append("")
 
     lines.append(dim("  ─" * 28))

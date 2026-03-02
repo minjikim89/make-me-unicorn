@@ -13,8 +13,11 @@ from typing import Any
 
 try:
     import tomllib
-except ModuleNotFoundError:  # pragma: no cover
-    tomllib = None  # type: ignore[assignment]
+except ModuleNotFoundError:
+    try:
+        import tomli as tomllib  # type: ignore[no-redef]
+    except ModuleNotFoundError:
+        tomllib = None  # type: ignore[assignment]
 
 MODES = {
     "problem": ["docs/core/strategy.md", "docs/research/competitors.md", "docs/research/user_feedback.md"],
@@ -338,18 +341,146 @@ def should_skip_rel(rel_path: str, skip_paths: set[str]) -> bool:
     return False
 
 
+def _parse_simple_toml(text: str) -> dict[str, Any]:
+    """Minimal TOML parser for flat section/key=value configs.
+
+    Only handles ``[section]`` headers and ``key = value`` lines where
+    values are booleans, quoted strings, or numbers.  This covers the
+    .mmu/config.toml format without requiring tomllib (Python 3.11+).
+    """
+    data: dict[str, Any] = {}
+    section: dict[str, Any] | None = None
+    for raw in text.splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#"):
+            continue
+        if line.startswith("[") and line.endswith("]"):
+            name = line[1:-1].strip()
+            section = {}
+            data[name] = section
+            continue
+        if "=" in line and section is not None:
+            key, _, val = line.partition("=")
+            key = key.strip()
+            val = val.split("#", 1)[0].strip()  # strip inline comments
+            if val.lower() == "true":
+                section[key] = True
+            elif val.lower() == "false":
+                section[key] = False
+            elif val.startswith('"') and val.endswith('"'):
+                section[key] = val[1:-1]
+            else:
+                try:
+                    section[key] = int(val)
+                except ValueError:
+                    section[key] = val
+    return data
+
+
 def load_config(root: Path) -> dict[str, Any]:
     cfg_path = root / ".mmu/config.toml"
-    if not cfg_path.is_file() or tomllib is None:
+    if not cfg_path.is_file():
         return {}
     content = read_text(cfg_path)
     if content is None:
         return {}
+    if tomllib is not None:
+        try:
+            data = tomllib.loads(content)
+        except Exception:
+            return {}
+        return data if isinstance(data, dict) else {}
+    # Fallback for Python < 3.11 without tomli
     try:
-        data = tomllib.loads(content)
+        return _parse_simple_toml(content)
     except Exception:
         return {}
-    return data if isinstance(data, dict) else {}
+
+
+# ---------------------------------------------------------------------------
+# Feature flags — used by blueprint scanner to skip non-applicable items
+# ---------------------------------------------------------------------------
+
+# All flags default to True so that projects without config get the full
+# checklist (backward compatible).  Only explicitly set False flags cause
+# items to be skipped.
+
+FEATURE_FLAG_DEFAULTS: dict[str, bool] = {
+    # [features]
+    "has_billing": True,
+    "has_email_transactional": True,
+    "has_email_marketing": True,
+    "has_i18n": True,
+    "has_file_upload": True,
+    "has_mfa": True,
+    "has_push_notifications": True,
+    "has_in_app_notifications": True,
+    "has_ab_testing": True,
+    "has_webhooks_outgoing": True,
+    # [architecture]
+    "uses_containers": True,
+    "uses_iac": True,
+    "uses_ssr": True,
+    "uses_serverless": True,
+    # [market]
+    "targets_eu": True,
+    "targets_california": True,
+    "targets_korea": True,
+}
+
+
+def load_feature_flags(root: Path) -> dict[str, bool]:
+    """Load feature flags from .mmu/config.toml, merged with defaults.
+
+    Config format::
+
+        [features]
+        billing = false
+        i18n = false
+
+        [architecture]
+        containerized = false
+
+        [market]
+        targets_eu = false
+
+    Short config keys are mapped to canonical flag names (e.g.
+    ``billing`` -> ``has_billing``, ``containerized`` -> ``uses_containers``).
+    """
+    cfg = load_config(root)
+    flags = dict(FEATURE_FLAG_DEFAULTS)
+
+    # Mapping from short config key -> canonical flag name
+    key_map: dict[str, str] = {
+        "billing": "has_billing",
+        "email_transactional": "has_email_transactional",
+        "email_marketing": "has_email_marketing",
+        "i18n": "has_i18n",
+        "file_upload": "has_file_upload",
+        "mfa": "has_mfa",
+        "push_notifications": "has_push_notifications",
+        "in_app_notifications": "has_in_app_notifications",
+        "ab_testing": "has_ab_testing",
+        "webhooks_outgoing": "has_webhooks_outgoing",
+        "containerized": "uses_containers",
+        "iac": "uses_iac",
+        "ssr": "uses_ssr",
+        "serverless": "uses_serverless",
+        "targets_eu": "targets_eu",
+        "targets_california": "targets_california",
+        "targets_korea": "targets_korea",
+    }
+
+    for section in ("features", "architecture", "market"):
+        section_data = cfg.get(section)
+        if not isinstance(section_data, dict):
+            continue
+        for key, value in section_data.items():
+            canonical = key_map.get(key)
+            if canonical and isinstance(value, bool):
+                flags[canonical] = value
+
+    return flags
 
 
 def doctor_skip_paths(root: Path) -> set[str]:
@@ -778,6 +909,74 @@ def _find_mmu_root() -> Path | None:
     return None
 
 
+def _generate_stack_config(root: Path) -> str:
+    """Generate a .mmu/config.toml with feature flags.
+
+    Auto-detects what it can from the project, defaults the rest to true
+    so that users can opt-out of sections that don't apply.
+    """
+    # Basic auto-detection
+    has_docker = (root / "Dockerfile").exists() or (root / "docker-compose.yml").exists()
+    has_package_json = (root / "package.json").exists()
+
+    # Try to detect billing/email from package.json or requirements
+    billing_hint = False
+    email_hint = False
+    i18n_hint = False
+    if has_package_json:
+        try:
+            pkg = (root / "package.json").read_text(encoding="utf-8").lower()
+            billing_hint = any(k in pkg for k in ("stripe", "lemonsqueezy", "paddle", "@paypal"))
+            email_hint = any(k in pkg for k in ("resend", "postmark", "sendgrid", "nodemailer", "@react-email"))
+            i18n_hint = any(k in pkg for k in ("next-intl", "i18next", "react-i18next", "next-i18n"))
+        except OSError:
+            pass
+
+    req_path = root / "requirements.txt"
+    if req_path.exists():
+        try:
+            reqs = req_path.read_text(encoding="utf-8").lower()
+            billing_hint = billing_hint or any(k in reqs for k in ("stripe", "paddle"))
+            email_hint = email_hint or any(k in reqs for k in ("resend", "sendgrid", "postmark"))
+        except OSError:
+            pass
+
+    lines = [
+        "# MMU Feature Config — controls which checklist sections apply to your project.",
+        "# Set to false to skip sections that don't apply. This makes your score accurate.",
+        "# Regenerate with: mmu init --force",
+        "",
+        "[features]",
+        f"billing = true{_hint(billing_hint, 'detected')}",
+        "email_transactional = true",
+        f"email_marketing = true{_hint(email_hint, 'email detected')}",
+        "i18n = true" if i18n_hint else "i18n = false  # set true if your app supports multiple languages",
+        "file_upload = true",
+        "mfa = false  # set true if your app has multi-factor auth",
+        "push_notifications = false  # set true if your app sends push notifications",
+        "in_app_notifications = false  # set true if your app has a notification bell/inbox",
+        "ab_testing = false  # set true if you plan to run A/B tests",
+        "webhooks_outgoing = false  # set true if your app dispatches webhooks to external services",
+        "",
+        "[architecture]",
+        f"containerized = {'true' if has_docker else 'false'}  # Dockerfile detected" if has_docker else "containerized = false  # set true if using Docker",
+        "iac = false  # set true if using Terraform/Pulumi/SST",
+        "ssr = true",
+        "serverless = false  # set true if using Lambda/Cloudflare Workers",
+        "",
+        "[market]",
+        "targets_eu = false  # set true if you serve EU users (enables GDPR section)",
+        "targets_california = false  # set true if you serve CA users (enables CCPA section)",
+        "targets_korea = false  # set true if you target Korean market (enables Naver registration)",
+        "",
+    ]
+    return "\n".join(lines) + "\n"
+
+
+def _hint(detected: bool, label: str) -> str:
+    return f"  # {label}" if detected else ""
+
+
 def command_init(root: Path, force: bool) -> Result:
     created: list[str] = []
     skipped: list[str] = []
@@ -823,13 +1022,26 @@ def command_init(root: Path, force: bool) -> Result:
     else:
         messages.append("  [warn] Blueprint source not found — run from MMU repo or install from PyPI")
 
+    # Generate feature config if it doesn't exist (or force)
+    config_path = root / ".mmu" / "config.toml"
+    if not config_path.exists() or force:
+        config_content = _generate_stack_config(root)
+        config_path.parent.mkdir(parents=True, exist_ok=True)
+        config_path.write_text(config_content, encoding="utf-8")
+        rel = ".mmu/config.toml"
+        if config_path.exists() and not force:
+            pass  # already counted
+        else:
+            created.append(rel)
+            messages.append(f"  [create] {rel}")
+
     if created or overwritten:
         messages.append("Init result: workspace scaffold ready")
         messages.append("")
         messages.append("Next steps:")
         messages.append("  1. mmu status          — see your launch dashboard")
         messages.append("  2. mmu doctor          — check what's missing")
-        messages.append("  3. Edit docs/checklists/from_scratch.md — check off completed items")
+        messages.append("  3. Edit .mmu/config.toml — customize your stack profile")
         messages.append("  4. mmu gate --stage M0 — verify M0 Problem Fit")
         return Result(
             exit_code=0,
@@ -1065,7 +1277,8 @@ def command_show(blueprint_name: str, root: Path) -> Result:
             ],
         )
 
-    detail = render_blueprint_detail(bp_path, label)
+    flags = load_feature_flags(root)
+    detail = render_blueprint_detail(bp_path, label, flags)
     return Result(exit_code=0, blueprint=filename, messages=[detail])
 
 
@@ -1199,15 +1412,18 @@ def command_scan(root: Path) -> Result:
         lines.append(f"  {dim('No new items to auto-check (already up to date or no blueprints found).')}")
 
     # Show updated totals
-    blueprints = scan_all_blueprints(root)
+    flags = load_feature_flags(root)
+    blueprints = scan_all_blueprints(root, flags)
     if blueprints:
-        bp_done = sum(d for _, d, _ in blueprints)
-        bp_total = sum(t for _, _, t in blueprints)
+        bp_done = sum(d for _, d, _, _ in blueprints)
+        bp_total = sum(t for _, _, t, _ in blueprints)
+        bp_skipped = sum(s for _, _, _, s in blueprints)
         lines.append("")
         lines.append(dim("  ─" * 28))
-        lines.append(f"  {bold('Updated totals:')}  {progress_bar(bp_done, bp_total)}")
+        skip_note = dim(f"  [{bp_skipped} skipped]") if bp_skipped > 0 else ""
+        lines.append(f"  {bold('Updated totals:')}  {progress_bar(bp_done, bp_total)}{skip_note}")
         lines.append("")
-        for label, d, t in blueprints:
+        for label, d, t, _s in blueprints:
             lines.append(f"    {label:<18} {mini_bar(d, t)}")
         lines.append("")
 
@@ -1232,19 +1448,21 @@ def command_scan(root: Path) -> Result:
 def command_status(root: Path) -> Result:
     from mmu_cli.display import render_status, scan_all_blueprints, scan_gates
 
-    dashboard = render_status(root)
+    flags = load_feature_flags(root)
+    dashboard = render_status(root, flags)
 
-    blueprints = scan_all_blueprints(root)
+    blueprints = scan_all_blueprints(root, flags)
     gates = scan_gates(root)
-    bp_done = sum(d for _, d, _ in blueprints)
-    bp_total = sum(t for _, _, t in blueprints)
+    bp_done = sum(d for _, d, _, _ in blueprints)
+    bp_total = sum(t for _, _, t, _ in blueprints)
+    bp_skipped = sum(s for _, _, _, s in blueprints)
     gate_done = sum(d for _, d, _ in gates)
     gate_total = sum(t for _, _, t in gates)
 
     return Result(
         exit_code=0,
         dashboard=dashboard,
-        blueprint_progress={"done": bp_done, "total": bp_total},
+        blueprint_progress={"done": bp_done, "total": bp_total, "skipped": bp_skipped},
         gate_progress={"done": gate_done, "total": gate_total},
         messages=[dashboard],
     )

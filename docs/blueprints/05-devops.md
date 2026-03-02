@@ -19,6 +19,7 @@
 - [ ] Configure health check endpoints.
 - [ ] Set up custom domain with DNS.
 
+<!-- if:uses_containers -->
 ## Containerization
 
 - [ ] Create `Dockerfile` with multi-stage builds.
@@ -26,6 +27,7 @@
 - [ ] Pin base image versions for reproducibility.
 - [ ] Run container as non-root user.
 - [ ] Configure container resource limits.
+<!-- endif -->
 
 ## Database Operations
 
@@ -44,6 +46,7 @@
 - [ ] Add CAA DNS records for certificate authority restriction.
 - [ ] Verify DNS propagation after changes (e.g., `dig` or whatsmydns.net).
 
+<!-- if:has_email_transactional -->
 ## Email DNS (Transactional/Marketing Email)
 
 - [ ] Configure SPF record to authorize sending servers.
@@ -51,6 +54,7 @@
 - [ ] Publish DMARC policy record.
 - [ ] Test email deliverability (mail-tester.com or similar).
 - [ ] Verify sender domain in email provider (Resend, SendGrid, SES, etc.).
+<!-- endif -->
 
 ## Secrets Management
 
@@ -60,12 +64,14 @@
 - [ ] Never log secrets in application output.
 - [ ] Use different secrets per environment.
 
+<!-- if:uses_iac -->
 ## Infrastructure as Code
 
 - [ ] Define infrastructure with IaC (Terraform, Pulumi, or SST).
 - [ ] Store IaC state remotely with locking.
 - [ ] Review infrastructure changes before applying.
 - [ ] Tag resources for cost tracking.
+<!-- endif -->
 
 ## Rollback Strategy
 

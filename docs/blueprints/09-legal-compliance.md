@@ -27,6 +27,7 @@
 - [ ] Store consent preferences and respect them.
 - [ ] Do not load tracking scripts before consent is given.
 
+<!-- if:targets_eu -->
 ## GDPR Compliance
 
 - [ ] Implement data access request workflow (Right of Access).
@@ -35,13 +36,16 @@
 - [ ] Document lawful basis for each data processing activity.
 - [ ] Maintain a record of processing activities (ROPA).
 - [ ] Implement data breach notification procedure (72-hour rule).
+<!-- endif -->
 
+<!-- if:targets_california -->
 ## CCPA Compliance
 
 - [ ] Add "Do Not Sell My Personal Information" link if applicable.
 - [ ] Allow California residents to opt out of data sale.
 - [ ] Respond to consumer requests within 45 days.
 - [ ] Do not discriminate against users who exercise CCPA rights.
+<!-- endif -->
 
 ## Data Handling
 

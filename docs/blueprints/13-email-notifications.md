@@ -1,3 +1,4 @@
+<!-- if:has_email_transactional -->
 # Email and Notifications Blueprint
 
 > Deep-dive checklist for transactional email, marketing email, and in-app notifications.
@@ -27,7 +28,9 @@
 - [ ] Implement responsive email design (mobile-friendly).
 - [ ] Add plain-text fallback for all emails.
 - [ ] Preview and test emails across clients (Gmail, Outlook, Apple Mail).
+<!-- endif -->
 
+<!-- if:has_email_marketing -->
 ## Marketing Email
 
 - [ ] Implement newsletter subscription opt-in.
@@ -35,7 +38,9 @@
 - [ ] Track email open and click rates.
 - [ ] Implement email preference center.
 - [ ] Comply with CAN-SPAM and GDPR for email marketing.
+<!-- endif -->
 
+<!-- if:has_in_app_notifications -->
 ## In-App Notifications
 
 - [ ] Design notification data model (type, read/unread, timestamp).
@@ -43,13 +48,16 @@
 - [ ] Implement mark-as-read and mark-all-as-read.
 - [ ] Add notification preferences (per-type opt-in/opt-out).
 - [ ] Implement real-time notifications (WebSocket or SSE).
+<!-- endif -->
 
+<!-- if:has_push_notifications -->
 ## Push Notifications
 
 - [ ] Implement web push notification opt-in.
 - [ ] Configure push notification service (Firebase FCM or OneSignal).
 - [ ] Respect user notification preferences.
 - [ ] Implement notification grouping to avoid spam.
+<!-- endif -->
 
 ## Recommended Stack
 

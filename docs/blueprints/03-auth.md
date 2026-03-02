@@ -46,12 +46,14 @@
 - [ ] Notify user after successful password change.
 - [ ] Do not reveal whether email exists in reset flow.
 
+<!-- if:has_mfa -->
 ## Multi-Factor Authentication
 
 - [ ] Implement TOTP-based MFA (Google Authenticator, Authy).
 - [ ] Add MFA recovery codes generation and storage.
 - [ ] Allow MFA enforcement per role (admin required).
 - [ ] Implement MFA challenge during sensitive operations.
+<!-- endif -->
 
 ## Authorization and RBAC
 

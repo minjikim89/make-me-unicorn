@@ -1,3 +1,4 @@
+<!-- if:has_billing -->
 # Billing Blueprint
 
 > Deep-dive checklist for payments, subscriptions, and revenue operations.
@@ -70,3 +71,4 @@
 | stripe-node | SDK | Free | Official Stripe Node.js library |
 | Webhooks.fyi | Testing | Free | Webhook inspection and debugging |
 | Tier | Entitlements | Free | Feature flag-based pricing entitlements |
+<!-- endif -->

@@ -25,6 +25,7 @@
 - [ ] Register site in Bing Webmaster Tools.
 - [ ] Register site in Naver Search Advisor (if targeting Korean market).
 
+<!-- if:has_i18n -->
 ## Internationalization (i18n) SEO
 
 - [ ] Add `hreflang` tags for each language version.
@@ -32,6 +33,7 @@
 - [ ] Generate per-language sitemaps or a single sitemap with hreflang entries.
 - [ ] Ensure translated pages have unique `<title>` and `<meta description>`.
 - [ ] Avoid auto-redirect by IP/locale — let users and crawlers choose language.
+<!-- endif -->
 
 ## Open Graph and Social
 
@@ -83,6 +85,7 @@
 - [ ] Implement conversion tracking for key goals.
 - [ ] Monitor keyword rankings weekly.
 
+<!-- if:has_email_marketing -->
 ## Email Marketing
 
 - [ ] Build email capture mechanism (newsletter, lead magnet).
@@ -90,6 +93,7 @@
 - [ ] Create welcome email sequence.
 - [ ] Implement email preference center.
 - [ ] Comply with CAN-SPAM / GDPR for email.
+<!-- endif -->
 
 ## Recommended Stack
 
