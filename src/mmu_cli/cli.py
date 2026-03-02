@@ -257,7 +257,7 @@ def parse_args() -> argparse.Namespace:
     p_status = sub.add_parser("status", help="Visual dashboard of launch progress")
     p_status.add_argument("--json", action="store_true", help="Output structured JSON")
     p_status.add_argument("--root", default=".", help="Project root path")
-    p_status.add_argument("--why", action="store_true", help="Show score breakdown (applicable/auto/manual/skipped)")
+    p_status.add_argument("--why", action="store_true", help="Show score breakdown (applicable/checked/skipped per blueprint)")
 
     p_next = sub.add_parser("next", help="Recommend highest-impact items to tackle next")
     p_next.add_argument("--json", action="store_true", help="Output structured JSON")
@@ -1308,13 +1308,34 @@ def command_check(blueprint_name: str, item_num: int, root: Path, *, force_state
     if text is None:
         return Result(exit_code=1, messages=[f"Cannot read {bp_path}"])
 
-    # Find all checklist items and their line indices
+    flags = load_feature_flags(root)
+
+    # Find all checklist items and their line indices, respecting condition markers
     lines = text.splitlines()
     check_done = re.compile(r"^(\s*-\s*)\[x\](\s+.+)$", re.IGNORECASE)
     check_todo = re.compile(r"^(\s*-\s*)\[\s\](\s+.+)$")
+    condition_if = re.compile(r"^<!--\s*if:(\w+)\s*-->")
+    condition_endif = re.compile(r"^<!--\s*endif\s*-->")
     items: list[tuple[int, bool, str]] = []  # (line_idx, is_done, item_text)
+    condition_stack: list[bool] = []
 
     for i, line in enumerate(lines):
+        stripped = line.strip()
+
+        m_if = condition_if.match(stripped)
+        if m_if:
+            flag_name = m_if.group(1)
+            condition_stack.append(flags.get(flag_name, True))
+            continue
+        if condition_endif.match(stripped):
+            if condition_stack:
+                condition_stack.pop()
+            continue
+
+        # Skip items in disabled condition blocks
+        if condition_stack and not all(condition_stack):
+            continue
+
         dm = check_done.match(line)
         if dm:
             items.append((i, True, dm.group(2).strip()))
@@ -1437,8 +1458,11 @@ def command_scan(root: Path) -> Result:
     if total_new > 0:
         lines.append(f"  {magenta('✨')} Scan complete! {bold(str(total_new))} items auto-checked")
         lines.append(f"  {dim('Review with:')} {cyan('mmu show <blueprint>')} {dim('— edit with:')} {cyan('mmu check/uncheck <blueprint> <#>')}")
+    elif blueprints:
+        lines.append(f"  {dim('All detectable items already checked. Review remaining with:')}")
+        lines.append(f"  {cyan('mmu next')} {dim('or')} {cyan('mmu show <blueprint>')}")
     else:
-        lines.append(f"  💡 Run {cyan('mmu init')} first if blueprints don't exist yet")
+        lines.append(f"  💡 Run {cyan('mmu init')} first to create blueprint files")
     lines.append("")
 
     dashboard = "\n".join(lines)

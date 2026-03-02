@@ -658,6 +658,10 @@ def render_score_breakdown(root: Path, flags: dict[str, bool] | None = None) -> 
         lines.append(f"  {bold('Disabled features:')} {dim('(items in these sections are excluded)')}")
         for flag in sorted(disabled_flags):
             lines.append(f"    {dim('⊘')} {flag}")
+        if bp_skipped == 0:
+            lines.append("")
+            lines.append(f"  {yellow('⚠')} {dim('Flags are set but no items were skipped.')}")
+            lines.append(f"    {dim('Blueprints may need updating:')} {cyan('mmu init --force')}")
         lines.append("")
     else:
         lines.append(dim("  ─" * 28))
@@ -730,9 +734,11 @@ def _collect_unchecked_items(
             if not _is_active(condition_stack):
                 continue
 
-            if _CHECK_TODO.match(line):
-                item_text = line.strip().lstrip("- ").lstrip("[ ] ").strip()
-                pri, clean = _parse_priority(item_text)
+            m_todo = _CHECK_TODO.match(line)
+            if m_todo:
+                # Extract text after "- [ ] " using regex group, not lstrip
+                raw = re.sub(r"^\s*-\s*\[\s\]\s+", "", line)
+                pri, clean = _parse_priority(raw.strip())
                 items.append((label, pri, clean, bp_idx))
 
     return items
@@ -744,12 +750,24 @@ def render_next_actions(
     count: int = 3,
 ) -> str:
     """Recommend highest-impact unchecked items to tackle next."""
+    if count < 1:
+        count = 3
     items = _collect_unchecked_items(root, flags)
 
     # Sort by priority (P0 first), then blueprint order
     items.sort(key=lambda x: (x[1], x[3]))
 
-    top = items[:count]
+    # Diversify: max 2 items per blueprint to avoid clustering
+    top: list[tuple[str, int, str, int]] = []
+    bp_counts: dict[str, int] = {}
+    for item in items:
+        label = item[0]
+        if bp_counts.get(label, 0) >= 2:
+            continue
+        top.append(item)
+        bp_counts[label] = bp_counts.get(label, 0) + 1
+        if len(top) >= count:
+            break
 
     lines: list[str] = []
     lines.append("")

@@ -404,6 +404,129 @@ class NextActionsTest(unittest.TestCase):
         output = render_next_actions(self.root, None, count=3)
         self.assertIn("done", output.lower())
 
+    def test_priority_parsing_preserves_brackets(self):
+        """[P0]/[P1] tags should be parsed correctly, not mangled by lstrip."""
+        from mmu_cli.display import render_next_actions
+
+        self.write("docs/blueprints/01-frontend.md", """
+## Frontend
+- [ ] [P0] Critical security fix
+- [ ] [P1] Important performance item
+- [ ] Regular item
+""")
+        output = render_next_actions(self.root, None, count=3)
+        # P0 should render with red/bold, not show "P0]" or "P1]"
+        self.assertNotIn("P0]", output)
+        self.assertNotIn("P1]", output)
+        self.assertIn("Critical security fix", output)
+        self.assertIn("Important performance item", output)
+
+    def test_negative_count_defaults_to_3(self):
+        """next -n 0 or negative should default to 3, not show done."""
+        from mmu_cli.display import render_next_actions
+
+        self.write("docs/blueprints/01-frontend.md", """
+## Frontend
+- [ ] Item A
+- [ ] Item B
+""")
+        output = render_next_actions(self.root, None, count=0)
+        self.assertIn("Item A", output)
+        self.assertNotIn("done", output.lower())
+
+    def test_diversity_cap(self):
+        """Recommendations should not all come from one blueprint."""
+        from mmu_cli.display import render_next_actions
+
+        self.write("docs/blueprints/01-frontend.md", """
+## Frontend
+- [ ] Frontend item 1
+- [ ] Frontend item 2
+- [ ] Frontend item 3
+- [ ] Frontend item 4
+""")
+        self.write("docs/blueprints/02-backend.md", """
+## Backend
+- [ ] Backend item 1
+- [ ] Backend item 2
+""")
+        output = render_next_actions(self.root, None, count=4)
+        # Should include backend items (not just 4 frontend)
+        self.assertIn("Backend item", output)
+        # Frontend should be capped at 2
+        self.assertNotIn("Frontend item 3", output)
+
+
+class CheckConditionAwareTest(unittest.TestCase):
+    """Test that mmu check uses condition-aware item numbering."""
+
+    def setUp(self) -> None:
+        self.tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self.tmp.name)
+
+    def tearDown(self) -> None:
+        self.tmp.cleanup()
+
+    def write(self, rel: str, content: str) -> None:
+        path = self.root / rel
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(content, encoding="utf-8")
+
+    def test_check_skips_hidden_items(self):
+        """check #1 should target first visible item, not hidden one."""
+        from mmu_cli.cli import command_check
+
+        self.write("docs/blueprints/01-frontend.md", """
+<!-- if:has_billing -->
+- [ ] Hidden billing item
+<!-- endif -->
+- [ ] Visible item A
+- [ ] Visible item B
+""")
+        self.write(".mmu/config.toml", """
+[features]
+billing = false
+""")
+        result = command_check("frontend", 1, self.root, force_state="check")
+        self.assertEqual(result.exit_code, 0)
+
+        text = (self.root / "docs" / "blueprints" / "01-frontend.md").read_text()
+        # Hidden item should NOT be checked
+        self.assertIn("[ ] Hidden billing item", text)
+        # Visible item A (#1) should be checked
+        self.assertIn("[x] Visible item A", text)
+
+
+class BreakdownWarningTest(unittest.TestCase):
+    """Test --why warning when flags are set but no markers exist."""
+
+    def setUp(self) -> None:
+        self.tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self.tmp.name)
+
+    def tearDown(self) -> None:
+        self.tmp.cleanup()
+
+    def write(self, rel: str, content: str) -> None:
+        path = self.root / rel
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(content, encoding="utf-8")
+
+    def test_warns_when_flags_disabled_but_no_skips(self):
+        """Should warn if flags are disabled but no items were skipped."""
+        from mmu_cli.display import render_score_breakdown
+
+        # Blueprint WITHOUT condition markers
+        self.write("docs/blueprints/01-frontend.md", """
+## Frontend
+- [ ] Item A
+- [ ] Item B
+""")
+        flags = {"has_billing": False, "has_mfa": False}
+        output = render_score_breakdown(self.root, flags)
+        self.assertIn("no items were skipped", output)
+        self.assertIn("mmu init --force", output)
+
 
 if __name__ == "__main__":
     unittest.main()
