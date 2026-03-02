@@ -50,6 +50,8 @@ MMU catches these **before they cost you users, money, or trust**.
 mmu init                    # 1. Get 534+ checklist items across 15 categories
 mmu scan                    # 2. Auto-detect your stack — pre-check what you already have
 mmu                         # 3. See what's done, what's missing
+mmu status --why            # 4. Understand your score — what counts, what's skipped
+mmu next                    # 5. Get prioritized next actions
 ```
 
 ```text
@@ -69,6 +71,28 @@ mmu                         # 3. See what's done, what's missing
 ```
 
 Your unicorn evolves as you build: Egg → Hatching → Foal → Young → Unicorn → Legendary.
+
+## Personalize Your Checklist
+
+Not every project needs billing. Not every product needs i18n. MMU adapts:
+
+```bash
+mmu init                      # select your stack (Next.js, Django, Rails, ...)
+```
+
+This generates `.mmu/config.toml` — feature flags that skip irrelevant items:
+
+```toml
+[features]
+billing = false               # no Stripe? billing items won't count against you
+i18n = false
+native_mobile = false
+
+[architecture]
+framework = "nextjs"
+```
+
+Your score reflects **only what applies to your project**. `mmu status --why` shows the breakdown transparently — like Lighthouse, but for your SaaS launch readiness.
 
 ## What MMU Covers (So You Don't Have To Remember)
 
@@ -137,6 +161,8 @@ Then:
 ```bash
 mmu scan                      # auto-detect your tech stack
 mmu                           # see your dashboard
+mmu status --why              # see exactly how your score is calculated
+mmu next                      # get your top 3 prioritized next actions
 mmu show frontend             # drill into any category
 mmu check frontend 3          # mark items as done
 mmu gate --stage M0           # verify you're ready for the next phase

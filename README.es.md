@@ -50,6 +50,8 @@ MMU atrapa estos problemas **antes de que te cuesten usuarios, dinero o confianz
 mmu init                    # 1. Obtén más de 534 elementos de checklist en 15 categorías
 mmu scan                    # 2. Detecta tu stack automáticamente y marca lo que ya tienes
 mmu                         # 3. Ve qué está hecho y qué falta
+mmu status --why            # 4. Entiende tu puntuación — qué cuenta y qué se omite
+mmu next                    # 5. Obtén las próximas acciones priorizadas
 ```
 
 ```text
@@ -69,6 +71,28 @@ mmu                         # 3. Ve qué está hecho y qué falta
 ```
 
 Tu unicornio evoluciona mientras construyes: Egg → Hatching → Foal → Young → Unicorn → Legendary.
+
+## Personaliza Tu Checklist
+
+No todo proyecto necesita facturación. No todo producto necesita i18n. MMU se adapta:
+
+```bash
+mmu init                      # selecciona tu stack (Next.js, Django, Rails, ...)
+```
+
+Esto genera `.mmu/config.toml` — feature flags que omiten los ítems que no aplican:
+
+```toml
+[features]
+billing = false               # ¿No usas Stripe? Los ítems de facturación no cuentan en tu puntuación
+i18n = false
+native_mobile = false
+
+[architecture]
+framework = "nextjs"
+```
+
+Tu puntuación refleja **solo lo que aplica a tu proyecto**. `mmu status --why` muestra el desglose de forma transparente — como Lighthouse, pero para evaluar tu preparación de lanzamiento SaaS.
 
 ## Qué Cubre MMU (Para Que No Tengas Que Recordarlo)
 
@@ -137,6 +161,8 @@ Luego:
 ```bash
 mmu scan                      # detecta automáticamente tu stack técnico
 mmu                           # mira tu panel
+mmu status --why              # mira cómo se calcula tu puntuación
+mmu next                      # obtén tus 3 próximas acciones priorizadas
 mmu show frontend             # entra en detalle de cualquier categoría
 mmu check frontend 3          # marca elementos como completados
 mmu gate --stage M0           # verifica si estás listo para la siguiente fase

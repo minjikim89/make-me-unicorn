@@ -50,6 +50,8 @@ MMU는 이런 문제들이 **유저, 매출, 신뢰를 잃기 전에** 잡아냅
 mmu init                    # 1. 15개 카테고리, 534개 이상의 체크리스트 항목 생성
 mmu scan                    # 2. 기술 스택 자동 감지 — 이미 구현된 항목 자동 체크
 mmu                         # 3. 완료된 것과 빠진 것을 한눈에 확인
+mmu status --why            # 4. 점수 산출 근거 확인 — 반영된 항목, 제외된 항목
+mmu next                    # 5. 우선순위 기반 다음 액션 추천
 ```
 
 ```text
@@ -69,6 +71,28 @@ mmu                         # 3. 완료된 것과 빠진 것을 한눈에 확인
 ```
 
 유니콘은 빌드 진행에 따라 성장합니다: Egg → Hatching → Foal → Young → Unicorn → Legendary.
+
+## 나에게 맞는 체크리스트로 커스터마이즈
+
+모든 프로젝트에 결제가 필요한 건 아닙니다. 모든 제품에 다국어가 필요한 것도 아닙니다. MMU는 적응합니다:
+
+```bash
+mmu init                      # 기술 스택 선택 (Next.js, Django, Rails, ...)
+```
+
+`.mmu/config.toml`이 생성됩니다 — 해당하지 않는 항목을 자동 제외하는 피처 플래그:
+
+```toml
+[features]
+billing = false               # Stripe 안 쓰나요? 결제 관련 항목이 점수에 반영되지 않습니다
+i18n = false
+native_mobile = false
+
+[architecture]
+framework = "nextjs"
+```
+
+점수는 **내 프로젝트에 해당하는 항목만** 반영됩니다. `mmu status --why`로 산출 근거를 투명하게 확인할 수 있습니다 — Lighthouse처럼, 하지만 SaaS 런칭 준비도 버전.
 
 ## MMU가 챙겨주는 것 (당신이 기억하지 않아도)
 
@@ -137,6 +161,8 @@ mmu init --interactive        # 5가지 질문에 답하면 → 전략, 제품, 
 ```bash
 mmu scan                      # 기술 스택 자동 감지
 mmu                           # 대시보드 확인
+mmu status --why              # 점수 산출 근거 상세 확인
+mmu next                      # 우선순위 기반 다음 액션 Top 3 확인
 mmu show frontend             # 특정 카테고리 상세 보기
 mmu check frontend 3          # 항목 완료 처리
 mmu gate --stage M0           # 다음 단계 진입 가능 여부 확인

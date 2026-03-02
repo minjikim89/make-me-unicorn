@@ -50,6 +50,8 @@ MMU はこれらを**ユーザー・売上・信頼を失う前に**キャッチ
 mmu init                    # 1. 15カテゴリ、534以上のチェックリスト項目を取得
 mmu scan                    # 2. 技術スタックを自動検出 — 既存の対応済み項目を事前チェック
 mmu                         # 3. 完了項目と未対応項目を一覧表示
+mmu status --why            # 4. スコアの内訳を表示 — 反映された項目、除外された項目
+mmu next                    # 5. 優先度ベースの次のアクションを提案
 ```
 
 ```text
@@ -69,6 +71,28 @@ mmu                         # 3. 完了項目と未対応項目を一覧表示
 ```
 
 開発が進むにつれ、ユニコーンが成長します：Egg → Hatching → Foal → Young → Unicorn → Legendary。
+
+## チェックリストをあなたのプロジェクトに合わせる
+
+すべてのプロジェクトに課金が必要なわけではありません。すべてのプロダクトに多言語対応が必要なわけでもありません。MMU は適応します：
+
+```bash
+mmu init                      # 技術スタックを選択（Next.js、Django、Rails、...）
+```
+
+`.mmu/config.toml` が生成されます — 関係ない項目をスキップするフィーチャーフラグ：
+
+```toml
+[features]
+billing = false               # Stripe 不要？課金関連の項目はスコアに影響しません
+i18n = false
+native_mobile = false
+
+[architecture]
+framework = "nextjs"
+```
+
+スコアは**あなたのプロジェクトに関係する項目のみ**を反映します。`mmu status --why` でその内訳を透明に確認できます — Lighthouse のように、ただし SaaS ローンチ準備度版。
 
 ## MMU がカバーする範囲（あなたが覚えなくていいように）
 
@@ -137,6 +161,8 @@ mmu init --interactive        # 5つの質問に答える → 戦略・プロダ
 ```bash
 mmu scan                      # 技術スタックを自動検出
 mmu                           # ダッシュボードを表示
+mmu status --why              # スコアの算出根拠を詳細表示
+mmu next                      # 優先度順の次のアクション Top 3 を表示
 mmu show frontend             # 任意のカテゴリを詳細表示
 mmu check frontend 3          # 項目を完了としてマーク
 mmu gate --stage M0           # 次のフェーズに進む準備ができているか検証

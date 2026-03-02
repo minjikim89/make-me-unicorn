@@ -50,6 +50,8 @@ MMU 在这些问题**让你损失用户、金钱或信任之前**就帮你拦住
 mmu init                    # 1. 获取 15 个类别、534+ 检查项
 mmu scan                    # 2. 自动检测你的技术栈，并自动勾选已完成项
 mmu                         # 3. 一眼看到哪些做了、哪些没做
+mmu status --why            # 4. 查看评分明细——哪些被计入、哪些被跳过
+mmu next                    # 5. 获取按优先级排序的下一步行动
 ```
 
 ```text
@@ -69,6 +71,28 @@ mmu                         # 3. 一眼看到哪些做了、哪些没做
 ```
 
 你的独角兽会随着项目进度不断进化：Egg → Hatching → Foal → Young → Unicorn → Legendary。
+
+## 为你的项目定制检查清单
+
+不是每个项目都需要支付功能。不是每个产品都需要多语言。MMU 会自动适配：
+
+```bash
+mmu init                      # 选择你的技术栈（Next.js、Django、Rails……）
+```
+
+这会生成 `.mmu/config.toml` — 用功能开关跳过不相关的检查项：
+
+```toml
+[features]
+billing = false               # 不用 Stripe？计费相关项不会拉低你的分数
+i18n = false
+native_mobile = false
+
+[architecture]
+framework = "nextjs"
+```
+
+你的分数**只反映与你项目相关的检查项**。用 `mmu status --why` 透明地查看评分明细 — 就像 Lighthouse，但用于衡量你的 SaaS 上线准备度。
 
 ## MMU 覆盖的内容（让你不用再靠记忆）
 
@@ -137,6 +161,8 @@ mmu init --interactive        # 回答 5 个问题 → 自动生成战略、产�
 ```bash
 mmu scan                      # 自动检测你的技术栈
 mmu                           # 查看你的仪表盘
+mmu status --why              # 查看评分的详细算法和依据
+mmu next                      # 获取优先级排序的 Top 3 下一步行动
 mmu show frontend             # 深入查看任意类别
 mmu check frontend 3          # 将条目标记为已完成
 mmu gate --stage M0           # 验证你是否准备好进入下一阶段
