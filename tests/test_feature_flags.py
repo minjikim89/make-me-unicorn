@@ -528,5 +528,142 @@ class BreakdownWarningTest(unittest.TestCase):
         self.assertIn("mmu init --force", output)
 
 
+class ShareCardTest(unittest.TestCase):
+    """Test mmu share card generation."""
+
+    def setUp(self) -> None:
+        self.tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self.tmp.name)
+
+    def tearDown(self) -> None:
+        self.tmp.cleanup()
+
+    def write(self, rel: str, content: str) -> None:
+        path = self.root / rel
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(content, encoding="utf-8")
+
+    def test_card_contains_border(self):
+        """Card should have top and bottom box-drawing borders."""
+        from mmu_cli.display import render_share_card
+
+        self.write("docs/checklists/from_scratch.md", """
+## M0 Problem Fit
+- [x] Validate problem
+- [x] Interview users
+## M1 Build Fit
+- [ ] Ship MVP
+""")
+        card = render_share_card(self.root, None)
+        self.assertTrue(card.startswith("┌"))
+        self.assertTrue(card.endswith("┘"))
+
+    def test_card_contains_score_and_stage(self):
+        """Card should display score percentage and stage name."""
+        from mmu_cli.display import render_share_card
+
+        self.write("docs/checklists/from_scratch.md", """
+## M0 Problem Fit
+- [x] Item A
+- [x] Item B
+## M1 Build Fit
+- [x] Item C
+- [ ] Item D
+""")
+        card = render_share_card(self.root, None)
+        self.assertIn("Score:", card)
+        self.assertIn("Stage:", card)
+        self.assertIn("%", card)
+
+    def test_card_contains_gates(self):
+        """Card should list gate stages with PASS/OPEN status."""
+        from mmu_cli.display import render_share_card
+
+        self.write("docs/checklists/from_scratch.md", """
+## M0 Problem Fit
+- [x] Done
+## M1 Build Fit
+- [ ] Open
+""")
+        card = render_share_card(self.root, None)
+        self.assertIn("PASS", card)
+        self.assertIn("OPEN", card)
+        self.assertIn("M0", card)
+        self.assertIn("M1", card)
+
+    def test_card_contains_hashtag(self):
+        """Card should contain branding elements."""
+        from mmu_cli.display import render_share_card
+        card = render_share_card(self.root, None)
+        self.assertIn("#MakeMeUnicorn", card)
+        self.assertIn("pip install make-me-unicorn", card)
+
+    def test_card_no_ansi_codes(self):
+        """Share card must be plain text — no ANSI escape sequences."""
+        from mmu_cli.display import render_share_card
+
+        self.write("docs/checklists/from_scratch.md", """
+## M0 Problem Fit
+- [x] Done
+""")
+        card = render_share_card(self.root, None)
+        self.assertNotIn("\033[", card)
+
+    def test_card_with_stack_config(self):
+        """Stack line should appear when config has architecture info."""
+        from mmu_cli.display import render_share_card
+
+        cfg = {"architecture": {"framework": "Next.js"}, "features": {"billing": True}}
+        card = render_share_card(self.root, None, cfg)
+        self.assertIn("Stack:", card)
+        self.assertIn("Next.js", card)
+
+    def test_card_without_stack_config(self):
+        """No Stack line when config is empty."""
+        from mmu_cli.display import render_share_card
+
+        card = render_share_card(self.root, None, None)
+        self.assertNotIn("Stack:", card)
+
+
+class ShareClipboardTest(unittest.TestCase):
+    """Test mmu share --clipboard integration."""
+
+    def setUp(self) -> None:
+        self.tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self.tmp.name)
+
+    def tearDown(self) -> None:
+        self.tmp.cleanup()
+
+    def test_command_share_returns_card(self):
+        """command_share should return card text in messages."""
+        from mmu_cli.cli import command_share
+        result = command_share(self.root, clipboard=False)
+        self.assertEqual(result.exit_code, 0)
+        self.assertTrue(len(result["messages"]) >= 1)
+        self.assertIn("#MakeMeUnicorn", result["messages"][0])
+
+    def test_command_share_clipboard_appends_message(self):
+        """--clipboard should add a clipboard status message."""
+        from unittest.mock import patch, MagicMock
+        from mmu_cli.cli import command_share
+
+        with patch("mmu_cli.cli.try_copy_clipboard", return_value=(True, "bundle copied to clipboard")):
+            result = command_share(self.root, clipboard=True)
+        self.assertEqual(result.exit_code, 0)
+        self.assertTrue(any("clipboard" in m for m in result["messages"]))
+
+    def test_command_share_clipboard_failure(self):
+        """Clipboard failure should still succeed with error message."""
+        from unittest.mock import patch
+        from mmu_cli.cli import command_share
+
+        with patch("mmu_cli.cli.try_copy_clipboard", return_value=(False, "clipboard copy is only supported on macOS for now")):
+            result = command_share(self.root, clipboard=True)
+        self.assertEqual(result.exit_code, 0)
+        self.assertTrue(any("macOS" in m for m in result["messages"]))
+
+
 if __name__ == "__main__":
     unittest.main()

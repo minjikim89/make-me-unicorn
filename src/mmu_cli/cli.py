@@ -297,6 +297,11 @@ def parse_args() -> argparse.Namespace:
     p_snapshot.add_argument("--output", default="SNAPSHOT.md", help="Output report path")
     p_snapshot.add_argument("--no-md", action="store_true", help="Do not persist markdown report")
 
+    p_share = sub.add_parser("share", help="Generate shareable score card")
+    p_share.add_argument("--json", action="store_true", help="Output structured JSON")
+    p_share.add_argument("--root", default=".", help="Project root path")
+    p_share.add_argument("--clipboard", action="store_true", help="Copy to clipboard (macOS)")
+
     return parser.parse_args()
 
 
@@ -1217,6 +1222,19 @@ def command_gate(stage: str, root: Path) -> Result:
     return Result(exit_code=0, stage=stage, heading=heading, pending=[], messages=messages)
 
 
+def command_share(root: Path, clipboard: bool = False) -> Result:
+    from mmu_cli.display import render_share_card
+
+    flags = load_feature_flags(root)
+    cfg = load_config(root)
+    card_text = render_share_card(root, flags, cfg)
+    messages = [card_text]
+    if clipboard:
+        ok, msg = try_copy_clipboard(card_text)
+        messages.append(msg)
+    return Result(exit_code=0, messages=messages)
+
+
 def command_snapshot(root: Path, target: str, output: str, no_md: bool) -> Result:
     candidates = [
         root / "snapshot",
@@ -1576,6 +1594,9 @@ def main() -> int:
         return render_result(result, args.json)
     if args.command == "scan":
         result = command_scan(root)
+        return render_result(result, args.json)
+    if args.command == "share":
+        result = command_share(root, clipboard=getattr(args, "clipboard", False))
         return render_result(result, args.json)
     if args.command == "snapshot":
         result = command_snapshot(root, args.target, args.output, args.no_md)

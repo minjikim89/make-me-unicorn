@@ -6,6 +6,7 @@ import os
 import re
 import sys
 from pathlib import Path
+from typing import Any
 
 # ---------------------------------------------------------------------------
 # Color support
@@ -810,6 +811,118 @@ def render_next_actions(
 # ---------------------------------------------------------------------------
 # Colorize existing command outputs
 # ---------------------------------------------------------------------------
+
+# ---------------------------------------------------------------------------
+# Shareable plain-text score card
+# ---------------------------------------------------------------------------
+
+GATE_LABELS = {
+    "M0": "Problem Fit",
+    "M1": "Build Fit",
+    "M2": "Revenue Fit",
+    "M3": "Trust Fit",
+    "M4": "Growth Fit",
+    "M5": "Scale Fit",
+}
+
+
+def _extract_stack(cfg: dict[str, Any]) -> list[str]:
+    """Extract human-readable stack tokens from config.toml data."""
+    arch = cfg.get("architecture", {})
+    features = cfg.get("features", {})
+
+    tokens: list[str] = []
+
+    framework = arch.get("framework")
+    if isinstance(framework, str) and framework:
+        tokens.append(framework)
+
+    if features.get("billing"):
+        tokens.append("Stripe")
+    if arch.get("containerized"):
+        tokens.append("Docker")
+    if arch.get("ssr"):
+        tokens.append("SSR")
+    if arch.get("serverless"):
+        tokens.append("Serverless")
+
+    return tokens
+
+
+def _plain_bar(done: int, total: int, width: int = 16) -> str:
+    """Plain text bar (no ANSI colors) for share card."""
+    if total == 0:
+        return "░" * width
+    pct = done / total
+    filled = int(width * pct)
+    empty = width - filled
+    return "█" * filled + "░" * empty
+
+
+def render_share_card(root: Path, flags: dict[str, bool] | None = None, cfg: dict[str, Any] | None = None) -> str:
+    """Generate a plain-text share card for social posting / clipboard."""
+    blueprints = scan_all_blueprints(root, flags)
+    gates = scan_gates(root)
+
+    bp_done = sum(d for _, d, _, _ in blueprints)
+    bp_total = sum(t for _, _, t, _ in blueprints)
+    gate_done = sum(d for _, d, _ in gates)
+    gate_total = sum(t for _, _, t in gates)
+
+    all_done = bp_done + gate_done
+    all_total = bp_total + gate_total
+    all_pct = all_done / all_total if all_total else 0.0
+    pct_int = int(all_pct * 100)
+
+    stage_name, _ = unicorn_art(all_pct)
+
+    W = 47  # total width including borders
+
+    # Gate lines
+    gate_lines: list[str] = []
+    for label, d, t in gates:
+        # Parse "M0 Problem Fit" -> key "M0"
+        parts = label.split(None, 1)
+        key = parts[0] if parts else ""
+        short = GATE_LABELS.get(key, parts[1] if len(parts) > 1 else label)
+        display_label = f"{key} {short}"
+        bar = _plain_bar(d, t)
+        status = "PASS" if (d == t and t > 0) else "OPEN"
+        inner = f"  {display_label:<18}{bar}  {status}"
+        gate_lines.append(f"│{inner:<{W - 2}}│")
+
+    # Stack info
+    stack_tokens: list[str] = []
+    if cfg:
+        stack_tokens = _extract_stack(cfg)
+    stack_line = " · ".join(stack_tokens) if stack_tokens else ""
+
+    # Build card
+    lines: list[str] = []
+    lines.append("┌" + "─" * (W - 2) + "┐")
+    lines.append(f"│  Make Me Unicorn — Launch Readiness{' ' * (W - 2 - 36)}│")
+    lines.append("│" + " " * (W - 2) + "│")
+    score_stage = f"  Score: {pct_int}%  Stage: {stage_name.upper()}"
+    lines.append(f"│{score_stage:<{W - 2}}│")
+    lines.append("│" + " " * (W - 2) + "│")
+
+    for gl in gate_lines:
+        lines.append(gl)
+
+    lines.append("│" + " " * (W - 2) + "│")
+
+    if stack_line:
+        sl = f"  Stack: {stack_line}"
+        lines.append(f"│{sl:<{W - 2}}│")
+
+    pip_line = "  pip install make-me-unicorn"
+    lines.append(f"│{pip_line:<{W - 2}}│")
+    hashtag = "  #MakeMeUnicorn"
+    lines.append(f"│{hashtag:<{W - 2}}│")
+    lines.append("└" + "─" * (W - 2) + "┘")
+
+    return "\n".join(lines)
+
 
 def colorize_message(msg: str) -> str:
     """Add colors to existing [ok]/[fail]/[warn]/[skip] prefixed messages."""
