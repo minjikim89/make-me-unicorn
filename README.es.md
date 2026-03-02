@@ -16,6 +16,8 @@ La checklist de lanzamiento y sistema operativo de código abierto para creadore
 
 <img src="./assets/brand/unicorn-hero.png" alt="Make Me Unicorn mascot" width="960" />
 
+<img src="./assets/demo.gif" alt="MMU CLI demo — init, scan, status, next" width="720" />
+
 </div>
 
 ## El Problema
@@ -152,6 +154,18 @@ Tu puntuación refleja **solo lo que aplica a tu proyecto**. `mmu status --why` 
 | **Un desarrollador frontend** | Saber exactamente qué construir: flujos de autenticación, estados de error, puntos de quiebre responsive y etiquetas OG. |
 | **Un product manager / planificador** | Obtener un PRD estructurado, estrategia de precios y checklist de lanzamiento, todo en Markdown. |
 | **Un desarrollador fullstack** | Rastrear frontend, backend, facturación y cumplimiento en un solo lugar. Que no se escape nada. |
+
+## Pruébalo en 60 Segundos
+
+```bash
+pip install make-me-unicorn
+cd your-project
+mmu init && mmu scan && mmu status --why
+```
+
+Eso es todo. Verás tu puntuación de preparación para el lanzamiento, lo que está hecho, lo que falta y por qué.
+
+Luego ejecuta `mmu next` para saber qué hacer primero.
 
 ## Inicio Rápido
 

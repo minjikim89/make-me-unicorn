@@ -16,6 +16,8 @@ The open-source launch checklist and operating system for solo builders.
 
 <img src="./assets/brand/unicorn-hero.png" alt="Make Me Unicorn mascot" width="960" />
 
+<img src="./assets/demo.gif" alt="MMU CLI demo — init, scan, status, next" width="720" />
+
 </div>
 
 ## The Problem
@@ -152,6 +154,18 @@ Your score reflects **only what applies to your project**. `mmu status --why` sh
 | **A frontend developer** | Know exactly what to build: auth flows, error states, responsive breakpoints, OG tags. |
 | **A product manager / planner** | Get a structured PRD, pricing strategy, and launch checklist — all in markdown. |
 | **A fullstack builder** | Track frontend, backend, billing, and compliance in one place. Nothing slips through. |
+
+## Try It in 60 Seconds
+
+```bash
+pip install make-me-unicorn
+cd your-project
+mmu init && mmu scan && mmu status --why
+```
+
+That's it. You'll see your launch readiness score, what's checked, what's missing, and why.
+
+Then run `mmu next` to see what to do first.
 
 ## Quick Start
 

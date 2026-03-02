@@ -16,6 +16,8 @@
 
 <img src="./assets/brand/unicorn-hero.png" alt="Make Me Unicorn mascot" width="960" />
 
+<img src="./assets/demo.gif" alt="MMU CLI 데모 — init, scan, status, next" width="720" />
+
 </div>
 
 ## 문제
@@ -152,6 +154,18 @@ framework = "nextjs"
 | **프론트엔드 개발자** | 정확히 뭘 만들어야 하는지 알 수 있습니다: 인증 플로우, 에러 상태, 반응형 브레이크포인트, OG 태그. |
 | **PM / 기획자** | 구조화된 PRD, 가격 전략, 런칭 체크리스트를 마크다운으로 한 번에 받으세요. |
 | **풀스택 빌더** | 프론트엔드, 백엔드, 결제, 컴플라이언스를 한곳에서 추적하세요. 빠지는 것 없이. |
+
+## 60초 체험
+
+```bash
+pip install make-me-unicorn
+cd your-project
+mmu init && mmu scan && mmu status --why
+```
+
+끝입니다. 런칭 준비도 점수, 완료된 항목, 빠진 항목, 그리고 그 이유가 바로 보입니다.
+
+그다음 `mmu next`를 실행하면 지금 뭘 먼저 해야 하는지 알 수 있습니다.
 
 ## 빠른 시작
 

@@ -16,6 +16,8 @@
 
 <img src="./assets/brand/unicorn-hero.png" alt="Make Me Unicorn mascot" width="960" />
 
+<img src="./assets/demo.gif" alt="MMU CLI 演示 — init, scan, status, next" width="720" />
+
 </div>
 
 ## 问题所在
@@ -152,6 +154,18 @@ framework = "nextjs"
 | **前端开发者** | 清楚知道要做什么：认证流程、错误状态、响应式断点、OG 标签。 |
 | **产品经理 / 策划** | 拿到结构化的 PRD、定价策略和上线清单——全是 Markdown。 |
 | **全栈独立开发者** | 前端、后端、计费、合规，一个地方统一追踪。不遗漏任何细节。 |
+
+## 60 秒体验
+
+```bash
+pip install make-me-unicorn
+cd your-project
+mmu init && mmu scan && mmu status --why
+```
+
+就这样。你会立刻看到上线准备度评分、已完成项、缺失项，以及原因。
+
+然后运行 `mmu next`，了解现在应该先做什么。
 
 ## 快速开始
 

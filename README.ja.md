@@ -16,6 +16,8 @@
 
 <img src="./assets/brand/unicorn-hero.png" alt="Make Me Unicorn mascot" width="960" />
 
+<img src="./assets/demo.gif" alt="MMU CLI デモ — init, scan, status, next" width="720" />
+
 </div>
 
 ## 課題
@@ -152,6 +154,18 @@ framework = "nextjs"
 | **フロントエンドエンジニア** | 何を実装すべきかが明確になります：認証フロー、エラーステート、レスポンシブ対応、OGタグ。 |
 | **PM / プロダクト企画** | 構造化された PRD、料金設計、ローンチチェックリストが手に入ります。すべて Markdown で。 |
 | **フルスタックエンジニア** | フロントエンド、バックエンド、課金、コンプライアンスを一箇所で管理。見落としがなくなります。 |
+
+## 60秒で試す
+
+```bash
+pip install make-me-unicorn
+cd your-project
+mmu init && mmu scan && mmu status --why
+```
+
+これだけです。ローンチ準備度スコア、完了項目、未対応項目、そしてその理由がすぐに表示されます。
+
+次に `mmu next` を実行すると、今何を優先すべきかがわかります。
 
 ## クイックスタート
 
