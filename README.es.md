@@ -2,7 +2,7 @@
 
 # Make Me Unicorn
 
-**Deja de construir a ciegas. Lanza tu SaaS con confianza.**
+**Cubre también lo que no sabes que te falta. Lanza tu SaaS con confianza.**
 
 La checklist de lanzamiento y sistema operativo de código abierto para creadores independientes.
 
@@ -93,19 +93,34 @@ No todo proyecto necesita facturación. No todo producto necesita i18n. MMU se a
 mmu init                      # selecciona tu stack (Next.js, Django, Rails, ...)
 ```
 
-Esto genera `.mmu/config.toml` — feature flags que omiten los ítems que no aplican:
+Al ejecutar `mmu init`, se genera `.mmu/config.toml`.  
+Con estos flags puedes excluir del cálculo de puntuación los ítems que no aplican a tu proyecto.
 
 ```toml
 [features]
-billing = false               # ¿No usas Stripe? Los ítems de facturación no cuentan en tu puntuación
+billing = false               # Si no tienes facturación, se excluye la sección billing
+email_transactional = true
+email_marketing = false
 i18n = false
-native_mobile = false
+file_upload = false
+mfa = false
+ab_testing = false
+webhooks_outgoing = false
 
 [architecture]
-framework = "nextjs"
+containerized = false
+iac = false
+ssr = true
+serverless = false
+
+[market]
+targets_eu = false
+targets_california = false
+targets_korea = true
 ```
 
-Tu puntuación refleja **solo lo que aplica a tu proyecto**. `mmu status --why` muestra el desglose de forma transparente — como Lighthouse, pero para evaluar tu preparación de lanzamiento SaaS.
+Tu puntuación refleja **solo lo que aplica a tu proyecto**.  
+`mmu status --why` muestra de forma transparente qué se cuenta y qué se excluye.
 
 ## Qué Cubre MMU (Para Que No Tengas Que Recordarlo)
 

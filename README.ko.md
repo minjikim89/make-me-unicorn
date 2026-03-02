@@ -2,9 +2,9 @@
 
 # Make Me Unicorn
 
-**눈 감고 만들지 마세요. 확신을 갖고 런칭하세요.**
+**모르는 영역까지 챙기고, 확신 있게 출시하세요.**
 
-솔로 빌더를 위한 오픈소스 런칭 체크리스트 & 운영 시스템.
+솔로 빌더를 위한 오픈소스 출시 체크리스트이자 운영 시스템.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-black.svg)](./LICENSE)
 [![Status: v0.4](https://img.shields.io/badge/status-v0.4-blue.svg)](./ROADMAP.md)
@@ -22,11 +22,11 @@
 
 ## 문제
 
-SaaS 제품을 만들고 있습니다. AI로 코딩 속도는 역대급으로 빨라졌죠. 그런데:
+SaaS를 만들고 있습니다. AI 덕분에 코딩 속도는 빨라졌습니다. 그런데:
 
 > "잠깐, 비밀번호 재설정 플로우 넣었나?"
 >
-> "결제 webhook... 멱등성 처리했나?"
+> "결제 Webhook... 멱등성 처리했나?"
 >
 > "개인정보처리방침은? 환불 정책은? OG 메타 태그는?"
 >
@@ -38,13 +38,13 @@ SaaS 제품을 만들고 있습니다. AI로 코딩 속도는 역대급으로 �
 
 | 놓치는 것 | 치르는 대가 |
 |-----------|------------|
-| 로그인 만들면서 비밀번호 재설정을 빠뜨림 | 런칭 첫날부터 유저가 계정에 못 들어감 |
-| webhook 서명 검증을 건너뜀 | 공격자가 결제 이벤트를 재전송함 |
-| OG 태그 없이 런칭 | 공유한 링크가 전부 깨져 보임 |
+| 로그인 만들면서 비밀번호 재설정을 빠뜨림 | 출시 첫날부터 사용자가 계정에 못 들어감 |
+| Webhook 서명 검증을 건너뜀 | 공격자가 결제 이벤트를 재전송함 |
+| OG 태그 없이 출시 | 공유한 링크가 전부 깨져 보임 |
 | AI 세션 간 컨텍스트가 유실됨 | 매번 프로젝트를 처음부터 다시 설명함 |
 | 환불 정책이 없음 | 첫 분쟁 = Stripe 계정 동결 |
 
-MMU는 이런 문제들이 **유저, 매출, 신뢰를 잃기 전에** 잡아냅니다.
+MMU는 이런 문제를 **사용자, 매출, 신뢰를 잃기 전에** 잡아냅니다.
 
 ## 작동 방식
 
@@ -85,7 +85,7 @@ mmu next                    # 5. 우선순위 기반 다음 액션 추천
 
 유니콘은 빌드 진행에 따라 성장합니다: Egg → Hatching → Foal → Young → Unicorn → Legendary.
 
-## 나에게 맞는 체크리스트로 커스터마이즈
+## 내 프로젝트에 맞게 적용하기
 
 모든 프로젝트에 결제가 필요한 건 아닙니다. 모든 제품에 다국어가 필요한 것도 아닙니다. MMU는 적응합니다:
 
@@ -93,21 +93,36 @@ mmu next                    # 5. 우선순위 기반 다음 액션 추천
 mmu init                      # 기술 스택 선택 (Next.js, Django, Rails, ...)
 ```
 
-`.mmu/config.toml`이 생성됩니다 — 해당하지 않는 항목을 자동 제외하는 피처 플래그:
+`mmu init`을 실행하면 `.mmu/config.toml`이 생성됩니다.  
+이 파일의 플래그로 내 프로젝트에 해당하지 않는 항목을 점수 계산에서 제외할 수 있습니다.
 
 ```toml
 [features]
-billing = false               # Stripe 안 쓰나요? 결제 관련 항목이 점수에 반영되지 않습니다
+billing = false               # 결제 기능이 없으면 billing 섹션 제외
+email_transactional = true
+email_marketing = false
 i18n = false
-native_mobile = false
+file_upload = false
+mfa = false
+ab_testing = false
+webhooks_outgoing = false
 
 [architecture]
-framework = "nextjs"
+containerized = false
+iac = false
+ssr = true
+serverless = false
+
+[market]
+targets_eu = false
+targets_california = false
+targets_korea = true
 ```
 
-점수는 **내 프로젝트에 해당하는 항목만** 반영됩니다. `mmu status --why`로 산출 근거를 투명하게 확인할 수 있습니다 — Lighthouse처럼, 하지만 SaaS 런칭 준비도 버전.
+점수는 **내 프로젝트에 해당하는 항목만** 반영됩니다.  
+`mmu status --why`로 산출 근거(반영 항목/제외 항목)를 투명하게 확인할 수 있습니다.
 
-## MMU가 챙겨주는 것 (당신이 기억하지 않아도)
+## MMU가 대신 챙겨주는 것
 
 <table>
 <tr>
@@ -117,13 +132,13 @@ framework = "nextjs"
 - Frontend (반응형, a11y, 폼)
 - Backend (API, DB, 큐)
 - Auth (로그인, 재설정, OAuth, 세션)
-- Billing (Stripe, webhook, 환불)
+- Billing (Stripe, Webhook, 환불)
 - Testing (유닛, E2E, 에이전트 안전성)
 
 </td>
 <td width="33%">
 
-**런칭 준비하기**
+**출시 준비하기**
 - SEO (OG 태그, sitemap, 메타)
 - Legal (개인정보처리방침, 이용약관, GDPR)
 - Security (CORS, rate limit, 시크릿 관리)
@@ -133,7 +148,7 @@ framework = "nextjs"
 </td>
 <td width="34%">
 
-**런칭 후 운영하기**
+**출시 후 운영하기**
 - Monitoring (에러, 업타임, 알림)
 - Analytics (퍼널, 리텐션, 이벤트)
 - Email (트랜잭션, 템플릿)
@@ -144,7 +159,7 @@ framework = "nextjs"
 </tr>
 </table>
 
-**534개 이상의 항목. 15개 카테고리. 추측 제로.**
+**534개 이상의 항목, 15개 카테고리. 놓침 없이 준비할 수 있습니다.**
 
 ## 이런 분들을 위해 만들었습니다
 
@@ -152,7 +167,7 @@ framework = "nextjs"
 |-----------|-------------------|
 | **AI로 코딩하는 창업자** | 매 세션마다 프로젝트를 처음부터 설명하는 걸 그만두세요. 도구 간 컨텍스트를 유지하세요. |
 | **프론트엔드 개발자** | 정확히 뭘 만들어야 하는지 알 수 있습니다: 인증 플로우, 에러 상태, 반응형 브레이크포인트, OG 태그. |
-| **PM / 기획자** | 구조화된 PRD, 가격 전략, 런칭 체크리스트를 마크다운으로 한 번에 받으세요. |
+| **PM / 기획자** | 구조화된 PRD, 가격 전략, 출시 체크리스트를 마크다운으로 한 번에 정리할 수 있습니다. |
 | **풀스택 빌더** | 프론트엔드, 백엔드, 결제, 컴플라이언스를 한곳에서 추적하세요. 빠지는 것 없이. |
 
 ## 60초 체험
@@ -163,7 +178,7 @@ cd your-project
 mmu init && mmu scan && mmu status --why
 ```
 
-끝입니다. 런칭 준비도 점수, 완료된 항목, 빠진 항목, 그리고 그 이유가 바로 보입니다.
+여기까지면 준비 끝입니다. 출시 준비도 점수, 완료된 항목, 빠진 항목, 그리고 그 이유를 바로 확인할 수 있습니다.
 
 그다음 `mmu next`를 실행하면 지금 뭘 먼저 해야 하는지 알 수 있습니다.
 
@@ -194,7 +209,7 @@ mmu gate --stage M0           # 다음 단계 진입 가능 여부 확인
 mmu doctor                    # 가드레일 헬스 체크 실행
 ```
 
-## 6개의 Launch Gates
+## 출시 게이트 6단계
 
 단계별 출구 조건이라고 생각하세요. 건너뛰지 마세요.
 
@@ -207,7 +222,7 @@ M4 Growth Fit     →  공유 링크가 제대로 보이는가? 검색에서 찾
 M5 Scale Fit      →  새벽 3시에 장애 나면 어떻게 되는가?
 ```
 
-`mmu gate --stage M0`으로 검증하세요. 미체크 항목이 하나라도 있으면 = NOT PASS.
+`mmu gate --stage M0`으로 검증하세요. 체크하지 않은 항목이 하나라도 있으면 `NOT PASS`입니다.
 
 ## 12개의 운영 모드
 
@@ -265,7 +280,7 @@ MMU를 실제로 채워 넣은 예제를 확인하세요:
 ```
 examples/filled/tasknote/
 ├── docs/core/strategy.md      ← ICP, 가치 제안, 경쟁사
-├── docs/core/product.md       ← MVP 범위, 유저 저니, P0/P1
+├── docs/core/product.md       ← MVP 범위, 사용자 여정, P0/P1
 ├── docs/core/pricing.md       ← Free/Pro/Team, 결제 규칙
 ├── docs/core/architecture.md  ← Next.js + FastAPI + Postgres
 ├── docs/adr/001_billing_provider_choice.md  ← 왜 Stripe를 결제 제공자로 선택했는가?

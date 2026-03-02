@@ -2,7 +2,7 @@
 
 # Make Me Unicorn
 
-**手探りで作るのは、もうやめよう。自信を持って SaaS をリリースしよう。**
+**見えていない抜け漏れまで埋めて、自信を持って SaaS をリリースしよう。**
 
 個人開発者のための、オープンソースのローンチチェックリスト＆運用システム。
 
@@ -93,19 +93,34 @@ mmu next                    # 5. 優先度ベースの次のアクションを�
 mmu init                      # 技術スタックを選択（Next.js、Django、Rails、...）
 ```
 
-`.mmu/config.toml` が生成されます — 関係ない項目をスキップするフィーチャーフラグ：
+`mmu init` を実行すると `.mmu/config.toml` が生成されます。  
+このフラグで、あなたのプロジェクトに関係ない項目をスコア計算から除外できます。
 
 ```toml
 [features]
-billing = false               # Stripe 不要？課金関連の項目はスコアに影響しません
+billing = false               # 課金機能がなければ billing セクションを除外
+email_transactional = true
+email_marketing = false
 i18n = false
-native_mobile = false
+file_upload = false
+mfa = false
+ab_testing = false
+webhooks_outgoing = false
 
 [architecture]
-framework = "nextjs"
+containerized = false
+iac = false
+ssr = true
+serverless = false
+
+[market]
+targets_eu = false
+targets_california = false
+targets_korea = true
 ```
 
-スコアは**あなたのプロジェクトに関係する項目のみ**を反映します。`mmu status --why` でその内訳を透明に確認できます — Lighthouse のように、ただし SaaS ローンチ準備度版。
+スコアは**あなたのプロジェクトに関係する項目のみ**を反映します。  
+`mmu status --why` で、反映項目と除外項目の内訳を透明に確認できます。
 
 ## MMU がカバーする範囲（あなたが覚えなくていいように）
 

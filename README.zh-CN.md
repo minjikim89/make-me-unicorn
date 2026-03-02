@@ -2,7 +2,7 @@
 
 # Make Me Unicorn
 
-**别再闭眼开发了。带着信心上线你的 SaaS。**
+**把看不见的盲点也补上，带着信心上线你的 SaaS。**
 
 面向独立开发者的开源上线检查清单与运营系统。
 
@@ -93,19 +93,34 @@ mmu next                    # 5. 获取按优先级排序的下一步行动
 mmu init                      # 选择你的技术栈（Next.js、Django、Rails……）
 ```
 
-这会生成 `.mmu/config.toml` — 用功能开关跳过不相关的检查项：
+执行 `mmu init` 后会生成 `.mmu/config.toml`。  
+通过这些开关，你可以把不适用于当前项目的检查项排除在评分之外。
 
 ```toml
 [features]
-billing = false               # 不用 Stripe？计费相关项不会拉低你的分数
+billing = false               # 如果没有计费功能，可排除 billing 章节
+email_transactional = true
+email_marketing = false
 i18n = false
-native_mobile = false
+file_upload = false
+mfa = false
+ab_testing = false
+webhooks_outgoing = false
 
 [architecture]
-framework = "nextjs"
+containerized = false
+iac = false
+ssr = true
+serverless = false
+
+[market]
+targets_eu = false
+targets_california = false
+targets_korea = true
 ```
 
-你的分数**只反映与你项目相关的检查项**。用 `mmu status --why` 透明地查看评分明细 — 就像 Lighthouse，但用于衡量你的 SaaS 上线准备度。
+你的分数**只反映与你项目相关的检查项**。  
+用 `mmu status --why` 可以透明查看哪些被计入、哪些被排除。
 
 ## MMU 覆盖的内容（让你不用再靠记忆）
 
