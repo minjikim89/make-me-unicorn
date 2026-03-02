@@ -209,6 +209,34 @@ mmu gate --stage M0           # 次のフェーズに進む準備ができてい
 mmu doctor                    # ガードレールのヘルスチェックを実行
 ```
 
+## スコアを共有する
+
+ローンチ準備状況を共有しましょう。README に貼り付けたり、ツイートしたり、Discord に投稿できます。
+
+```bash
+mmu share                     # 共有用スコアカードを出力
+mmu share --clipboard         # クリップボードにコピー（macOS）
+```
+
+```
+┌─────────────────────────────────────────────┐
+│  Make Me Unicorn — Launch Readiness         │
+│                                             │
+│  Score: 68%  Stage: YOUNG UNICORN           │
+│                                             │
+│  M0 Problem Fit    ████████████████  PASS   │
+│  M1 Build Fit      ████████████████  PASS   │
+│  M2 Revenue Fit    ██████████░░░░░░  OPEN   │
+│  M3 Trust Fit      ████████████████  PASS   │
+│  M4 Growth Fit     ████████░░░░░░░░  OPEN   │
+│  M5 Scale Fit      ████░░░░░░░░░░░░  OPEN   │
+│                                             │
+│  Stack: Next.js · Stripe · SSR              │
+│  pip install make-me-unicorn                │
+│  #MakeMeUnicorn                             │
+└─────────────────────────────────────────────┘
+```
+
 ## 6つのローンチゲート
 
 フェーズの出口条件として考えてください。飛ばさないこと。

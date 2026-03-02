@@ -209,6 +209,34 @@ mmu gate --stage M0           # verifica si estás listo para la siguiente fase
 mmu doctor                    # ejecuta chequeos de salud de guardrails
 ```
 
+## Comparte Tu Puntuación
+
+Muestra tu nivel de preparación para el lanzamiento. Pégalo en tu README, tuiteálo o compártelo en Discord.
+
+```bash
+mmu share                     # imprime la tarjeta de puntuación compartible
+mmu share --clipboard         # copia al portapapeles (macOS)
+```
+
+```
+┌─────────────────────────────────────────────┐
+│  Make Me Unicorn — Launch Readiness         │
+│                                             │
+│  Score: 68%  Stage: YOUNG UNICORN           │
+│                                             │
+│  M0 Problem Fit    ████████████████  PASS   │
+│  M1 Build Fit      ████████████████  PASS   │
+│  M2 Revenue Fit    ██████████░░░░░░  OPEN   │
+│  M3 Trust Fit      ████████████████  PASS   │
+│  M4 Growth Fit     ████████░░░░░░░░  OPEN   │
+│  M5 Scale Fit      ████░░░░░░░░░░░░  OPEN   │
+│                                             │
+│  Stack: Next.js · Stripe · SSR              │
+│  pip install make-me-unicorn                │
+│  #MakeMeUnicorn                             │
+└─────────────────────────────────────────────┘
+```
+
 ## 6 Puertas de Lanzamiento
 
 Piensa en estas como salidas de fase. No te las saltes.

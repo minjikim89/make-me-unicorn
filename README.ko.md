@@ -209,6 +209,34 @@ mmu gate --stage M0           # 다음 단계 진입 가능 여부 확인
 mmu doctor                    # 가드레일 헬스 체크 실행
 ```
 
+## 점수 공유하기
+
+출시 준비 상태를 공유하세요. README에 붙여넣거나, 트윗하거나, Discord에 올려보세요.
+
+```bash
+mmu share                     # 공유용 스코어 카드 출력
+mmu share --clipboard         # 클립보드에 복사 (macOS)
+```
+
+```
+┌─────────────────────────────────────────────┐
+│  Make Me Unicorn — Launch Readiness         │
+│                                             │
+│  Score: 68%  Stage: YOUNG UNICORN           │
+│                                             │
+│  M0 Problem Fit    ████████████████  PASS   │
+│  M1 Build Fit      ████████████████  PASS   │
+│  M2 Revenue Fit    ██████████░░░░░░  OPEN   │
+│  M3 Trust Fit      ████████████████  PASS   │
+│  M4 Growth Fit     ████████░░░░░░░░  OPEN   │
+│  M5 Scale Fit      ████░░░░░░░░░░░░  OPEN   │
+│                                             │
+│  Stack: Next.js · Stripe · SSR              │
+│  pip install make-me-unicorn                │
+│  #MakeMeUnicorn                             │
+└─────────────────────────────────────────────┘
+```
+
 ## 출시 게이트 6단계
 
 단계별 출구 조건이라고 생각하세요. 건너뛰지 마세요.

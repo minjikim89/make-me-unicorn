@@ -209,6 +209,34 @@ mmu gate --stage M0           # 验证你是否准备好进入下一阶段
 mmu doctor                    # 运行护栏健康检查
 ```
 
+## 分享你的分数
+
+展示你的上线准备度。粘贴到 README、发推特或分享到 Discord。
+
+```bash
+mmu share                     # 输出可分享的评分卡
+mmu share --clipboard         # 复制到剪贴板（macOS）
+```
+
+```
+┌─────────────────────────────────────────────┐
+│  Make Me Unicorn — Launch Readiness         │
+│                                             │
+│  Score: 68%  Stage: YOUNG UNICORN           │
+│                                             │
+│  M0 Problem Fit    ████████████████  PASS   │
+│  M1 Build Fit      ████████████████  PASS   │
+│  M2 Revenue Fit    ██████████░░░░░░  OPEN   │
+│  M3 Trust Fit      ████████████████  PASS   │
+│  M4 Growth Fit     ████████░░░░░░░░  OPEN   │
+│  M5 Scale Fit      ████░░░░░░░░░░░░  OPEN   │
+│                                             │
+│  Stack: Next.js · Stripe · SSR              │
+│  pip install make-me-unicorn                │
+│  #MakeMeUnicorn                             │
+└─────────────────────────────────────────────┘
+```
+
 ## 6 个上线关卡
 
 把它们当成阶段性验收。别跳关。

@@ -194,6 +194,34 @@ mmu gate --stage M0           # verify you're ready for the next phase
 mmu doctor                    # run guardrail health checks
 ```
 
+## Share Your Score
+
+Show off your launch readiness. Paste it in your README, tweet it, or drop it in Discord.
+
+```bash
+mmu share                     # print shareable score card
+mmu share --clipboard         # copy to clipboard (macOS)
+```
+
+```
+┌─────────────────────────────────────────────┐
+│  Make Me Unicorn — Launch Readiness         │
+│                                             │
+│  Score: 68%  Stage: YOUNG UNICORN           │
+│                                             │
+│  M0 Problem Fit    ████████████████  PASS   │
+│  M1 Build Fit      ████████████████  PASS   │
+│  M2 Revenue Fit    ██████████░░░░░░  OPEN   │
+│  M3 Trust Fit      ████████████████  PASS   │
+│  M4 Growth Fit     ████████░░░░░░░░  OPEN   │
+│  M5 Scale Fit      ████░░░░░░░░░░░░  OPEN   │
+│                                             │
+│  Stack: Next.js · Stripe · SSR              │
+│  pip install make-me-unicorn                │
+│  #MakeMeUnicorn                             │
+└─────────────────────────────────────────────┘
+```
+
 ## 6 Launch Gates
 
 Think of these as phase exits. Don't skip ahead.
