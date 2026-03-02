@@ -795,7 +795,7 @@ def render_next_actions(
         lines.append(f"     {bp_tag}  {dim('→')} {cyan('mmu show ' + bp_key)}")
         lines.append("")
 
-    remaining = len(items) - count
+    remaining = len(items) - len(top)
     if remaining > 0:
         lines.append(f"  {dim(f'... and {remaining} more unchecked items')}")
         lines.append("")

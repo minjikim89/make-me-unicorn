@@ -214,7 +214,7 @@ class AutoCheckConditionTest(unittest.TestCase):
         self.write("package.json", '{"dependencies": {"posthog-js": "^1.0.0"}}')
 
         flags = {"has_billing": False}
-        result = run_scan(self.root, flags)
+        run_scan(self.root, flags)
 
         # Read the blueprint back
         text = (self.root / "docs" / "blueprints" / "14-analytics.md").read_text()
@@ -238,7 +238,7 @@ class AutoCheckConditionTest(unittest.TestCase):
         self.write("package.json", '{"dependencies": {"posthog-js": "^1.0.0"}}')
 
         flags = {"has_billing": True}
-        result = run_scan(self.root, flags)
+        run_scan(self.root, flags)
 
         text = (self.root / "docs" / "blueprints" / "14-analytics.md").read_text()
         # Both items should be eligible for auto-check
@@ -258,7 +258,7 @@ class AutoCheckConditionTest(unittest.TestCase):
 """)
         self.write("package.json", '{"dependencies": {"posthog-js": "^1.0.0"}}')
 
-        result = run_scan(self.root, None)
+        run_scan(self.root, None)
 
         text = (self.root / "docs" / "blueprints" / "14-analytics.md").read_text()
         # Without flags, all items should be checkable
