@@ -55,19 +55,30 @@ mmu next                    # 5. 获取按优先级排序的下一步行动
 ```
 
 ```text
-  🦄  MAKE ME UNICORN — STATUS DASHBOARD
+  MAKE ME UNICORN - STATUS DASHBOARD
 
           .--*--.
-         / °v°  \          Stage: HATCHING    ██████░░░░░░░░░░░░░░  22%
+         / *v*  \
         |       |
-         \ ___ /           📋 LAUNCH GATES
-          '---'              M0 Problem Fit   ████████████████  ✓ PASS
-                             M1 Build Fit     ████████████████  ✓ PASS
-  🗺️ BLUEPRINTS (124/551)   M2 Revenue Fit   ████████████████  ✓ PASS
-    Frontend    ██████░░ 41%   M3 Trust Fit     ████████████████  ✓ PASS
-    Backend     ████████ 53%   M4 Growth Fit    ████████████░░░░  ✗ OPEN
-    Auth        ██████░░ 38%   M5 Scale Fit     ███░░░░░░░░░░░░░  ✗ OPEN
-    ...13 more
+         \ ___ /
+          '---'
+
+  Stage: HATCHING    ######..............  22%  (124/551)
+
+  LAUNCH GATES  (16/26)
+    M0 Problem Fit         ################   4/4   PASS
+    M1 Build Fit           ################   5/5   PASS
+    M2 Revenue Fit         ############....   3/4   OPEN
+    M3 Trust Fit           ################   4/4   PASS
+    M4 Growth Fit          ########........   2/4   OPEN
+    M5 Scale Fit           ####............   1/5   OPEN
+
+  BLUEPRINTS  (124/551)
+    Frontend           ##########......  18/35  51%
+    Backend            ############....  24/46  52%
+    Auth               ##########......  16/42  38%
+    Billing            ########........  11/36  30%
+    ...11 more
 ```
 
 你的独角兽会随着项目进度不断进化：Egg → Hatching → Foal → Young → Unicorn → Legendary。
