@@ -423,8 +423,16 @@ SCAN_RULES: list[tuple[str, str, str]] = [
 # ---------------------------------------------------------------------------
 
 
-def run_scan(root: Path) -> dict:
-    """Scan codebase and return detection results + auto-check counts."""
+_CONDITION_IF = re.compile(r"^<!--\s*if:(\w+)\s*-->")
+_CONDITION_ENDIF = re.compile(r"^<!--\s*endif\s*-->")
+
+
+def run_scan(root: Path, flags: dict[str, bool] | None = None) -> dict:
+    """Scan codebase and return detection results + auto-check counts.
+
+    When *flags* is provided, items inside disabled ``<!-- if:flag -->``
+    blocks are **not** auto-checked, preventing false-pass score inflation.
+    """
     signals = _build_detectors(root)
     active = {k for k, v in signals.items() if v}
 
@@ -547,8 +555,29 @@ def run_scan(root: Path) -> dict:
 
         lines = text.splitlines()
         newly_checked = 0
+        condition_stack: list[bool] = []
 
         for i, line in enumerate(lines):
+            stripped = line.strip()
+
+            # Track condition markers
+            m_if = _CONDITION_IF.match(stripped)
+            if m_if:
+                flag_name = m_if.group(1)
+                if flags is not None:
+                    condition_stack.append(flags.get(flag_name, True))
+                else:
+                    condition_stack.append(True)
+                continue
+            if _CONDITION_ENDIF.match(stripped):
+                if condition_stack:
+                    condition_stack.pop()
+                continue
+
+            # Skip items in disabled condition blocks
+            if condition_stack and not all(condition_stack):
+                continue
+
             # Skip already-checked items
             if _check_done_re.match(line):
                 continue

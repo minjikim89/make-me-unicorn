@@ -605,6 +605,191 @@ def render_status(root: Path, flags: dict[str, bool] | None = None) -> str:
 
 
 # ---------------------------------------------------------------------------
+# Score breakdown (--why)
+# ---------------------------------------------------------------------------
+
+
+def render_score_breakdown(root: Path, flags: dict[str, bool] | None = None) -> str:
+    """Show transparent score decomposition: applicable, checked, skipped."""
+    blueprints = scan_all_blueprints(root, flags)
+    gates = scan_gates(root)
+
+    bp_done = sum(d for _, d, _, _ in blueprints)
+    bp_total = sum(t for _, _, t, _ in blueprints)
+    bp_skipped = sum(s for _, _, _, s in blueprints)
+    gate_done = sum(d for _, d, _ in gates)
+    gate_total = sum(t for _, _, t in gates)
+
+    all_done = bp_done + gate_done
+    all_total = bp_total + gate_total
+    all_pct = all_done / all_total * 100 if all_total else 0.0
+
+    # Count disabled flags
+    disabled_flags = []
+    if flags:
+        disabled_flags = [k for k, v in flags.items() if not v]
+
+    lines: list[str] = []
+    lines.append("")
+    lines.append(bold("  📊  SCORE BREAKDOWN (--why)"))
+    lines.append(dim("  ─" * 28))
+    lines.append("")
+
+    # Overall formula
+    lines.append(f"  {bold('Score')} = checked / applicable × 100")
+    lines.append(f"  {bold('Score')} = {all_done} / {all_total} × 100 = {bold(f'{all_pct:.1f}%')}")
+    lines.append("")
+
+    # Composition table
+    lines.append(dim("  ─" * 28))
+    lines.append(f"  {bold('Composition:')}")
+    lines.append(f"    {'Applicable items:':<24} {bold(str(all_total))}")
+    lines.append(f"    {'  Blueprint items:':<24} {bp_total}")
+    lines.append(f"    {'  Gate items:':<24} {gate_total}")
+    lines.append(f"    {'Checked items:':<24} {green(str(all_done))}")
+    lines.append(f"    {'  Blueprint checked:':<24} {bp_done}")
+    lines.append(f"    {'  Gate checked:':<24} {gate_done}")
+    lines.append(f"    {'Skipped (not applicable):':<24} {dim(str(bp_skipped))}")
+    lines.append("")
+
+    # Disabled flags
+    if disabled_flags:
+        lines.append(dim("  ─" * 28))
+        lines.append(f"  {bold('Disabled features:')} {dim('(items in these sections are excluded)')}")
+        for flag in sorted(disabled_flags):
+            lines.append(f"    {dim('⊘')} {flag}")
+        lines.append("")
+    else:
+        lines.append(dim("  ─" * 28))
+        lines.append(f"  {dim('All feature flags enabled (no sections excluded)')}")
+        lines.append(f"  {dim('Configure:')} {cyan('.mmu/config.toml')} {dim('to customize')}")
+        lines.append("")
+
+    # Per-blueprint breakdown
+    lines.append(dim("  ─" * 28))
+    lines.append(f"  {bold('Per Blueprint:')}")
+    lines.append(f"    {'Name':<18} {'Done':>5} {'Total':>6} {'Skip':>6}  {'Score':>6}")
+    lines.append(f"    {'─'*18} {'─'*5} {'─'*6} {'─'*6}  {'─'*6}")
+    for label, d, t, s in blueprints:
+        pct = f"{d/t*100:.0f}%" if t > 0 else "--"
+        skip_str = str(s) if s > 0 else dim("0")
+        lines.append(f"    {label:<18} {d:>5} {t:>6} {skip_str:>6}  {pct:>6}")
+    lines.append("")
+
+    # Trust note
+    lines.append(dim("  ─" * 28))
+    lines.append(f"  {dim('Score = manually checked + auto-detected items')}")
+    lines.append(f"  {dim('Auto-detect:')} {cyan('mmu scan')} {dim('| Manual:')} {cyan('mmu check <bp> <#>')}")
+    lines.append("")
+
+    return "\n".join(lines)
+
+
+# ---------------------------------------------------------------------------
+# Next actions recommender
+# ---------------------------------------------------------------------------
+
+
+def _collect_unchecked_items(
+    root: Path,
+    flags: dict[str, bool] | None = None,
+) -> list[tuple[str, int, str, int]]:
+    """Collect all unchecked items across blueprints.
+
+    Returns [(blueprint_label, priority, item_text, blueprint_order), ...].
+    """
+    bp_dir = root / "docs" / "blueprints"
+    items: list[tuple[str, int, str, int]] = []
+
+    for bp_idx, (filename, label) in enumerate(BLUEPRINT_NAMES.items()):
+        path = bp_dir / filename
+        if not path.is_file():
+            continue
+        try:
+            text = path.read_text(encoding="utf-8")
+        except OSError:
+            continue
+
+        condition_stack: list[bool] = []
+        for line in text.splitlines():
+            stripped = line.strip()
+
+            m_if = _CONDITION_IF.match(stripped)
+            if m_if:
+                flag_name = m_if.group(1)
+                if flags is not None:
+                    condition_stack.append(flags.get(flag_name, True))
+                else:
+                    condition_stack.append(True)
+                continue
+            if _CONDITION_ENDIF.match(stripped):
+                if condition_stack:
+                    condition_stack.pop()
+                continue
+
+            if not _is_active(condition_stack):
+                continue
+
+            if _CHECK_TODO.match(line):
+                item_text = line.strip().lstrip("- ").lstrip("[ ] ").strip()
+                pri, clean = _parse_priority(item_text)
+                items.append((label, pri, clean, bp_idx))
+
+    return items
+
+
+def render_next_actions(
+    root: Path,
+    flags: dict[str, bool] | None = None,
+    count: int = 3,
+) -> str:
+    """Recommend highest-impact unchecked items to tackle next."""
+    items = _collect_unchecked_items(root, flags)
+
+    # Sort by priority (P0 first), then blueprint order
+    items.sort(key=lambda x: (x[1], x[3]))
+
+    top = items[:count]
+
+    lines: list[str] = []
+    lines.append("")
+    lines.append(bold("  🎯  NEXT ACTIONS"))
+    lines.append(dim("  ─" * 28))
+    lines.append("")
+
+    if not top:
+        lines.append(f"  {green('✨')} No unchecked items — you're done!")
+        lines.append("")
+        return "\n".join(lines)
+
+    for i, (label, pri, text, _) in enumerate(top, 1):
+        pri_icon, pri_label = PRIORITY_LABELS.get(pri, ("", ""))
+        pri_str = f"{pri_icon} " if pri_icon else "  "
+        bp_tag = dim(f"[{label}]")
+        bp_key = label.lower().replace(" & ", "-").replace(" ", "-")
+
+        if pri == 0:
+            lines.append(f"  {bold(str(i))}. {pri_str}{red(bold(text))}")
+        elif pri == 1:
+            lines.append(f"  {bold(str(i))}. {pri_str}{yellow(bold(text))}")
+        else:
+            lines.append(f"  {bold(str(i))}. {pri_str}{text}")
+        lines.append(f"     {bp_tag}  {dim('→')} {cyan('mmu show ' + bp_key)}")
+        lines.append("")
+
+    remaining = len(items) - count
+    if remaining > 0:
+        lines.append(f"  {dim(f'... and {remaining} more unchecked items')}")
+        lines.append("")
+
+    lines.append(dim("  ─" * 28))
+    lines.append(f"  💡 {dim('Focus on these first for maximum impact')}")
+    lines.append("")
+
+    return "\n".join(lines)
+
+
+# ---------------------------------------------------------------------------
 # Colorize existing command outputs
 # ---------------------------------------------------------------------------
 

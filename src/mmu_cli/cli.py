@@ -257,6 +257,12 @@ def parse_args() -> argparse.Namespace:
     p_status = sub.add_parser("status", help="Visual dashboard of launch progress")
     p_status.add_argument("--json", action="store_true", help="Output structured JSON")
     p_status.add_argument("--root", default=".", help="Project root path")
+    p_status.add_argument("--why", action="store_true", help="Show score breakdown (applicable/auto/manual/skipped)")
+
+    p_next = sub.add_parser("next", help="Recommend highest-impact items to tackle next")
+    p_next.add_argument("--json", action="store_true", help="Output structured JSON")
+    p_next.add_argument("--root", default=".", help="Project root path")
+    p_next.add_argument("-n", type=int, default=3, help="Number of recommendations (default: 3)")
 
     p_show = sub.add_parser("show", help="Show detailed blueprint checklist")
     p_show.add_argument("blueprint", help="Blueprint name (e.g. frontend, auth, billing, seo)")
@@ -1377,7 +1383,8 @@ def command_scan(root: Path) -> Result:
     )
     from mmu_cli.scan import run_scan
 
-    result = run_scan(root)
+    flags = load_feature_flags(root)
+    result = run_scan(root, flags)
     tech = result["tech_stack"]
     checked = result["checked_count"]
     total_new = result["total_newly_checked"]
@@ -1411,8 +1418,7 @@ def command_scan(root: Path) -> Result:
     else:
         lines.append(f"  {dim('No new items to auto-check (already up to date or no blueprints found).')}")
 
-    # Show updated totals
-    flags = load_feature_flags(root)
+    # Show updated totals (reuse flags loaded above)
     blueprints = scan_all_blueprints(root, flags)
     if blueprints:
         bp_done = sum(d for _, d, _, _ in blueprints)
@@ -1445,11 +1451,15 @@ def command_scan(root: Path) -> Result:
     )
 
 
-def command_status(root: Path) -> Result:
-    from mmu_cli.display import render_status, scan_all_blueprints, scan_gates
+def command_status(root: Path, why: bool = False) -> Result:
+    from mmu_cli.display import render_status, render_score_breakdown, scan_all_blueprints, scan_gates
 
     flags = load_feature_flags(root)
     dashboard = render_status(root, flags)
+
+    if why:
+        breakdown = render_score_breakdown(root, flags)
+        dashboard = dashboard + "\n" + breakdown
 
     blueprints = scan_all_blueprints(root, flags)
     gates = scan_gates(root)
@@ -1465,6 +1475,18 @@ def command_status(root: Path) -> Result:
         blueprint_progress={"done": bp_done, "total": bp_total, "skipped": bp_skipped},
         gate_progress={"done": gate_done, "total": gate_total},
         messages=[dashboard],
+    )
+
+
+def command_next(root: Path, count: int = 3) -> Result:
+    from mmu_cli.display import render_next_actions
+
+    flags = load_feature_flags(root)
+    output = render_next_actions(root, flags, count)
+
+    return Result(
+        exit_code=0,
+        messages=[output],
     )
 
 
@@ -1514,7 +1536,10 @@ def main() -> int:
         result = command_gate(args.stage, root)
         return render_result(result, args.json)
     if args.command == "status":
-        result = command_status(root)
+        result = command_status(root, why=getattr(args, "why", False))
+        return render_result(result, args.json)
+    if args.command == "next":
+        result = command_next(root, count=getattr(args, "n", 3))
         return render_result(result, args.json)
     if args.command == "show":
         result = command_show(args.blueprint, root)

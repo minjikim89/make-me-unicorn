@@ -182,6 +182,89 @@ class ConfigGenerationTest(unittest.TestCase):
         self.assertIn("containerized = false", content)
 
 
+class AutoCheckConditionTest(unittest.TestCase):
+    """Test that run_scan respects condition markers (false-pass prevention)."""
+
+    def setUp(self) -> None:
+        self.tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self.tmp.name)
+
+    def tearDown(self) -> None:
+        self.tmp.cleanup()
+
+    def write(self, rel: str, content: str) -> None:
+        path = self.root / rel
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(content, encoding="utf-8")
+
+    def test_scan_skips_disabled_block_items(self):
+        """Auto-check should NOT mark items inside disabled condition blocks."""
+        from mmu_cli.scan import run_scan
+
+        # Create a blueprint with a conditional billing section
+        self.write("docs/blueprints/14-analytics.md", """
+## Analytics Strategy
+- [ ] Choose analytics platform (PostHog, Mixpanel, or Amplitude).
+<!-- if:has_billing -->
+## Business Metrics
+- [ ] Track Monthly Recurring Revenue (MRR).
+<!-- endif -->
+""")
+        # Create package.json with posthog to trigger scan rule
+        self.write("package.json", '{"dependencies": {"posthog-js": "^1.0.0"}}')
+
+        flags = {"has_billing": False}
+        result = run_scan(self.root, flags)
+
+        # Read the blueprint back
+        text = (self.root / "docs" / "blueprints" / "14-analytics.md").read_text()
+        # The "analytics platform" item should be auto-checked (active section)
+        self.assertIn("[x]", text.split("Analytics Strategy")[1].split("if:has_billing")[0])
+        # The "MRR" item should NOT be auto-checked (disabled section)
+        self.assertIn("[ ] Track Monthly Recurring Revenue", text)
+
+    def test_scan_checks_enabled_block_items(self):
+        """Auto-check SHOULD mark items inside enabled condition blocks."""
+        from mmu_cli.scan import run_scan
+
+        self.write("docs/blueprints/14-analytics.md", """
+<!-- if:has_billing -->
+## Business Metrics
+- [ ] Track Monthly Recurring Revenue (MRR).
+<!-- endif -->
+## Analytics Strategy
+- [ ] Choose analytics platform (PostHog, Mixpanel, or Amplitude).
+""")
+        self.write("package.json", '{"dependencies": {"posthog-js": "^1.0.0"}}')
+
+        flags = {"has_billing": True}
+        result = run_scan(self.root, flags)
+
+        text = (self.root / "docs" / "blueprints" / "14-analytics.md").read_text()
+        # Both items should be eligible for auto-check
+        self.assertIn("[x]", text)
+
+    def test_scan_without_flags_checks_all(self):
+        """Without flags, all items should be eligible for auto-check."""
+        from mmu_cli.scan import run_scan
+
+        self.write("docs/blueprints/14-analytics.md", """
+<!-- if:has_billing -->
+## Business Metrics
+- [ ] Track Monthly Recurring Revenue (MRR).
+<!-- endif -->
+## Analytics Strategy
+- [ ] Choose analytics platform (PostHog, Mixpanel, or Amplitude).
+""")
+        self.write("package.json", '{"dependencies": {"posthog-js": "^1.0.0"}}')
+
+        result = run_scan(self.root, None)
+
+        text = (self.root / "docs" / "blueprints" / "14-analytics.md").read_text()
+        # Without flags, all items should be checkable
+        self.assertIn("[x]", text)
+
+
 class RealBlueprintScanTest(unittest.TestCase):
     """Test against actual blueprint files in the repo."""
 
@@ -214,6 +297,112 @@ class RealBlueprintScanTest(unittest.TestCase):
 
         self.assertGreater(skipped_off, 50, "Should skip at least 50 items with all flags off")
         self.assertLess(total_off, total_on, "Filtered total should be less than full total")
+
+
+class ScoreBreakdownTest(unittest.TestCase):
+    """Test mmu status --why score decomposition."""
+
+    def setUp(self) -> None:
+        self.tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self.tmp.name)
+
+    def tearDown(self) -> None:
+        self.tmp.cleanup()
+
+    def write(self, rel: str, content: str) -> None:
+        path = self.root / rel
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(content, encoding="utf-8")
+
+    def test_breakdown_shows_composition(self):
+        """Score breakdown should show applicable, checked, skipped counts."""
+        from mmu_cli.display import render_score_breakdown
+
+        self.write("docs/blueprints/01-frontend.md", """
+## Frontend
+- [x] Item A
+- [ ] Item B
+<!-- if:has_billing -->
+- [ ] Billing item
+<!-- endif -->
+""")
+        flags = {"has_billing": False}
+        output = render_score_breakdown(self.root, flags)
+        self.assertIn("SCORE BREAKDOWN", output)
+        self.assertIn("Skipped", output)
+        self.assertIn("has_billing", output)
+
+    def test_breakdown_all_enabled(self):
+        """With all flags enabled, no disabled flags should appear."""
+        from mmu_cli.display import render_score_breakdown
+
+        self.write("docs/blueprints/01-frontend.md", """
+## Frontend
+- [x] Item A
+- [ ] Item B
+""")
+        output = render_score_breakdown(self.root, None)
+        self.assertIn("All feature flags enabled", output)
+
+
+class NextActionsTest(unittest.TestCase):
+    """Test mmu next command."""
+
+    def setUp(self) -> None:
+        self.tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self.tmp.name)
+
+    def tearDown(self) -> None:
+        self.tmp.cleanup()
+
+    def write(self, rel: str, content: str) -> None:
+        path = self.root / rel
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(content, encoding="utf-8")
+
+    def test_recommends_unchecked_items(self):
+        """Should recommend unchecked items sorted by priority."""
+        from mmu_cli.display import render_next_actions
+
+        self.write("docs/blueprints/01-frontend.md", """
+## Frontend
+- [ ] [P0] Critical item
+- [ ] [P1] Important item
+- [ ] Regular item
+- [x] Done item
+""")
+        output = render_next_actions(self.root, None, count=3)
+        self.assertIn("NEXT ACTIONS", output)
+        self.assertIn("Critical item", output)
+        self.assertIn("Important item", output)
+        # Should not include done items
+        self.assertNotIn("Done item", output)
+
+    def test_respects_flags(self):
+        """Should not recommend items in disabled sections."""
+        from mmu_cli.display import render_next_actions
+
+        self.write("docs/blueprints/01-frontend.md", """
+<!-- if:has_billing -->
+- [ ] Billing item
+<!-- endif -->
+- [ ] Always item
+""")
+        flags = {"has_billing": False}
+        output = render_next_actions(self.root, flags, count=3)
+        self.assertNotIn("Billing item", output)
+        self.assertIn("Always item", output)
+
+    def test_empty_when_all_done(self):
+        """Should show done message when all items are checked."""
+        from mmu_cli.display import render_next_actions
+
+        self.write("docs/blueprints/01-frontend.md", """
+## Frontend
+- [x] Done item
+""")
+        output = render_next_actions(self.root, None, count=3)
+        self.assertIn("done", output.lower())
 
 
 if __name__ == "__main__":
