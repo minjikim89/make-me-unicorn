@@ -6,6 +6,27 @@ The format is inspired by Keep a Changelog and follows semantic intent.
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-04-12
+
+### Added
+
+- `mmu badge` — generate README badges in Markdown, SVG, or HTML format. Each badge links back to the project, creating organic growth through other READMEs.
+- `mmu badge --format svg -o badge.svg` — save badge as local SVG file.
+- `mmu badge --clipboard` — copy badge snippet to clipboard.
+- **Stage-based badge colors** — badge color changes with unicorn stage (gray → orange → blue → purple → pink → gold).
+- **Industry Blueprints** — new `docs/blueprints/industry/` directory with domain-specific checklists:
+  - AI Product Blueprint (45+ items): model integration, cost control, prompt engineering, AI-specific UX, data privacy, ethical/legal.
+  - Marketplace Blueprint (55+ items): supply/demand sides, transactions, trust & safety, marketplace economics.
+- **Landing page** — Next.js Static Export website with interactive checklist demo, live score tracking, and unicorn stage evolution.
+- GitHub Pages deployment workflow (`deploy-website.yml`).
+- Product Hunt launch kit (`docs/launch/product-hunt.md`) with taglines, maker story, social templates, and success metrics.
+- 7 new unit tests for badge generation (65 total, up from 58).
+
+### Changed
+
+- `mmu share` now includes GitHub URL and CTA line below the score card for better social sharing conversion.
+- README restructured as distribution-first: demo → badge → share → problem → details (previously: problem → how it works → details).
+
 ## [0.4.0] - 2026-03-02
 
 ### Added

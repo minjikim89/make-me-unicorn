@@ -302,6 +302,13 @@ def parse_args() -> argparse.Namespace:
     p_share.add_argument("--root", default=".", help="Project root path")
     p_share.add_argument("--clipboard", action="store_true", help="Copy to clipboard (macOS)")
 
+    p_badge = sub.add_parser("badge", help="Generate README badge (SVG/Markdown/HTML)")
+    p_badge.add_argument("--json", action="store_true", help="Output structured JSON")
+    p_badge.add_argument("--root", default=".", help="Project root path")
+    p_badge.add_argument("--format", dest="badge_format", choices=["markdown", "svg", "html"], default="markdown", help="Badge format (default: markdown)")
+    p_badge.add_argument("--output", "-o", help="Write badge to file instead of stdout")
+    p_badge.add_argument("--clipboard", action="store_true", help="Copy to clipboard (macOS)")
+
     return parser.parse_args()
 
 
@@ -1235,6 +1242,62 @@ def command_share(root: Path, clipboard: bool = False) -> Result:
     return Result(exit_code=0, messages=messages)
 
 
+def command_badge(
+    root: Path,
+    fmt: str = "markdown",
+    output: str | None = None,
+    clipboard: bool = False,
+) -> Result:
+    """Generate a badge for README / web embedding."""
+    from mmu_cli.display import (
+        render_badge_html,
+        render_badge_markdown,
+        render_badge_svg,
+        scan_all_blueprints,
+        scan_gates,
+        unicorn_art,
+    )
+
+    flags = load_feature_flags(root)
+    cfg = load_config(root)
+
+    blueprints = scan_all_blueprints(root, flags)
+    gates = scan_gates(root)
+    bp_done = sum(d for _, d, _, _ in blueprints)
+    bp_total = sum(t for _, _, t, _ in blueprints)
+    gate_done = sum(d for _, d, _ in gates)
+    gate_total = sum(t for _, _, t in gates)
+
+    all_done = bp_done + gate_done
+    all_total = bp_total + gate_total
+    pct = int(all_done / all_total * 100) if all_total else 0
+
+    stage_name, _ = unicorn_art(pct / 100)
+
+    project_name = cfg.get("project", {}).get("name", "")
+
+    if fmt == "svg":
+        content = render_badge_svg(pct, stage_name)
+    elif fmt == "html":
+        content = render_badge_html(pct, stage_name)
+    else:
+        content = render_badge_markdown(pct, stage_name, project_name)
+
+    messages: list[str] = []
+
+    if output:
+        write_text(Path(output), content)
+        messages.append(f"Badge written to {output}")
+    else:
+        messages.append(content)
+
+    if clipboard:
+        ok, msg = try_copy_clipboard(content)
+        messages.append(msg)
+
+    return Result(exit_code=0, badge_format=fmt, messages=messages)
+
+
 def command_snapshot(root: Path, target: str, output: str, no_md: bool) -> Result:
     candidates = [
         root / "snapshot",
@@ -1597,6 +1660,14 @@ def main() -> int:
         return render_result(result, args.json)
     if args.command == "share":
         result = command_share(root, clipboard=getattr(args, "clipboard", False))
+        return render_result(result, args.json)
+    if args.command == "badge":
+        result = command_badge(
+            root,
+            fmt=getattr(args, "badge_format", "markdown"),
+            output=getattr(args, "output", None),
+            clipboard=getattr(args, "clipboard", False),
+        )
         return render_result(result, args.json)
     if args.command == "snapshot":
         result = command_snapshot(root, args.target, args.output, args.no_md)

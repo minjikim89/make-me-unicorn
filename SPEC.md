@@ -1,4 +1,4 @@
-# MMU CLI Spec (v0.3)
+# MMU CLI Spec (v0.5)
 
 This document defines the current runtime behavior for `Make Me Unicorn`.
 
@@ -19,6 +19,8 @@ This document defines the current runtime behavior for `Make Me Unicorn`.
 | `mmu close` | End a session safely | close checklist and update reminders | `0` success |
 | `mmu doctor` | Validate operating baseline | pass/fail report for docs and codebase guardrails | `0` pass, `2` fail |
 | `mmu gate --stage <M#>` | Stage-gate readiness check | pass/fail for unresolved checklist items | `0` pass, `3` fail |
+| `mmu badge` | Generate README badge (markdown/svg/html) | badge snippet | `0` success |
+| `mmu share` | Generate shareable score card | plain-text card with CTA | `0` success |
 
 Installable command: `mmu` (via `pip install -e .`).
 Wrapper command: `scripts/mmu.sh`.

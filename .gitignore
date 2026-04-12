@@ -23,5 +23,10 @@ SNAPSHOT*.md
 reports/*.md
 docs/local/
 
+# Website build artifacts
+website/.next/
+website/out/
+website/node_modules/
+
 # Editor temp
 *.swp

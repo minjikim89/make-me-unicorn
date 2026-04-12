@@ -2,11 +2,16 @@
 
 from __future__ import annotations
 
+import html as html_mod
 import os
 import re
 import sys
 from pathlib import Path
 from typing import Any
+from urllib.parse import quote as url_quote
+from xml.sax.saxutils import escape as xml_escape
+
+REPO_URL = "https://github.com/minjikim89/make-me-unicorn"
 
 # ---------------------------------------------------------------------------
 # Color support
@@ -917,11 +922,98 @@ def render_share_card(root: Path, flags: dict[str, bool] | None = None, cfg: dic
 
     pip_line = "  pip install make-me-unicorn"
     lines.append(f"│{pip_line:<{W - 2}}│")
+    short_url = REPO_URL.replace("https://", "")
+    url_line = f"  {short_url}"
+    lines.append(f"│{url_line:<{W - 2}}│")
     hashtag = "  #MakeMeUnicorn"
     lines.append(f"│{hashtag:<{W - 2}}│")
     lines.append("└" + "─" * (W - 2) + "┘")
+    lines.append("")
+    lines.append("Check your SaaS launch readiness:")
+    lines.append(REPO_URL)
 
     return "\n".join(lines)
+
+
+# ---------------------------------------------------------------------------
+# Badge generation
+# ---------------------------------------------------------------------------
+
+STAGE_COLORS = {
+    "egg": "#9e9e9e",
+    "hatching": "#ff9800",
+    "foal": "#2196f3",
+    "young unicorn": "#9c27b0",
+    "unicorn": "#e91e63",
+    "legendary": "#ffd700",
+}
+
+
+def _badge_color(stage_name: str) -> str:
+    return STAGE_COLORS.get(stage_name.lower(), "#9e9e9e")
+
+
+def render_badge_svg(pct: int, stage_name: str) -> str:
+    """Generate a shields.io-style SVG badge with score and stage."""
+    color = _badge_color(stage_name)
+    label = xml_escape("launch readiness")
+    value = xml_escape(f"{pct}% {stage_name}")
+    # Approximate Verdana 11px char width; matches shields.io convention
+    label_width = len(label) * 6.5 + 10
+    value_width = len(value) * 6.5 + 10
+    total_width = label_width + value_width
+
+    return f"""<svg xmlns="http://www.w3.org/2000/svg" width="{total_width:.0f}" height="20" role="img" aria-label="{label}: {value}">
+  <title>{label}: {value}</title>
+  <linearGradient id="s" x2="0" y2="100%">
+    <stop offset="0" stop-color="#bbb" stop-opacity=".1"/>
+    <stop offset="1" stop-opacity=".1"/>
+  </linearGradient>
+  <clipPath id="r"><rect width="{total_width:.0f}" height="20" rx="3" fill="#fff"/></clipPath>
+  <g clip-path="url(#r)">
+    <rect width="{label_width:.0f}" height="20" fill="#555"/>
+    <rect x="{label_width:.0f}" width="{value_width:.0f}" height="20" fill="{color}"/>
+    <rect width="{total_width:.0f}" height="20" fill="url(#s)"/>
+  </g>
+  <g fill="#fff" text-anchor="middle" font-family="Verdana,Geneva,DejaVu Sans,sans-serif" text-rendering="geometricPrecision" font-size="11">
+    <text x="{label_width / 2:.0f}" y="14">{label}</text>
+    <text x="{label_width + value_width / 2:.0f}" y="14">{value}</text>
+  </g>
+</svg>"""
+
+
+def _shields_value(pct: int, stage_name: str) -> str:
+    """URL-encode the badge value for shields.io."""
+    return url_quote(f"{pct}% {stage_name}", safe="")
+
+
+def render_badge_markdown(pct: int, stage_name: str, project_name: str = "") -> str:
+    """Generate markdown badge snippet for README embedding."""
+    color = _badge_color(stage_name).replace("#", "")
+    label = "launch%20readiness"
+    value = _shields_value(pct, stage_name)
+    img_url = f"https://img.shields.io/badge/{label}-{value}-{color}?style=flat-square"
+    alt = f"Launch Readiness {pct}% — {stage_name}"
+    proj = f" for {project_name}" if project_name else ""
+
+    lines = [
+        f"[![{alt}]({img_url})]({REPO_URL})",
+        "",
+        f"Validated with [Make Me Unicorn]({REPO_URL}){proj}",
+    ]
+    return "\n".join(lines)
+
+
+def render_badge_html(pct: int, stage_name: str) -> str:
+    """Generate an HTML snippet for embedding in web pages."""
+    color = _badge_color(stage_name).replace("#", "")
+    value = _shields_value(pct, stage_name)
+    alt = html_mod.escape(f"Launch Readiness {pct}% — {stage_name}")
+    return (
+        f'<a href="{REPO_URL}" target="_blank" rel="noopener">'
+        f'<img src="https://img.shields.io/badge/launch%20readiness-{value}-{color}?style=flat-square" '
+        f'alt="{alt}" /></a>'
+    )
 
 
 def colorize_message(msg: str) -> str:

@@ -556,7 +556,9 @@ class ShareCardTest(unittest.TestCase):
 """)
         card = render_share_card(self.root, None)
         self.assertTrue(card.startswith("┌"))
-        self.assertTrue(card.endswith("┘"))
+        self.assertIn("┘", card)
+        from mmu_cli.display import REPO_URL
+        self.assertIn(REPO_URL.replace("https://", ""), card)
 
     def test_card_contains_score_and_stage(self):
         """Card should display score percentage and stage name."""
@@ -663,6 +665,78 @@ class ShareClipboardTest(unittest.TestCase):
             result = command_share(self.root, clipboard=True)
         self.assertEqual(result.exit_code, 0)
         self.assertTrue(any("macOS" in m for m in result["messages"]))
+
+
+class BadgeTest(unittest.TestCase):
+    """Test mmu badge command and badge rendering."""
+
+    def setUp(self) -> None:
+        self.tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self.tmp.name)
+
+    def tearDown(self) -> None:
+        self.tmp.cleanup()
+
+    def write(self, rel: str, content: str) -> None:
+        p = self.root / rel
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(content, encoding="utf-8")
+
+    def test_badge_markdown_contains_shields_url(self):
+        """Markdown badge should reference shields.io."""
+        from mmu_cli.display import render_badge_markdown
+        md = render_badge_markdown(75, "young unicorn", "MyApp")
+        self.assertIn("img.shields.io", md)
+        self.assertIn("make-me-unicorn", md)
+        self.assertIn("MyApp", md)
+
+    def test_badge_svg_valid_xml(self):
+        """SVG badge should be valid XML-ish."""
+        from mmu_cli.display import render_badge_svg
+        svg = render_badge_svg(42, "foal")
+        self.assertIn("<svg", svg)
+        self.assertIn("</svg>", svg)
+        self.assertIn("42%", svg)
+        self.assertIn("foal", svg)
+
+    def test_badge_html_contains_link(self):
+        """HTML badge should contain clickable link."""
+        from mmu_cli.display import render_badge_html
+        html = render_badge_html(90, "unicorn")
+        self.assertIn("<a href=", html)
+        self.assertIn("make-me-unicorn", html)
+        self.assertIn("<img", html)
+
+    def test_command_badge_markdown(self):
+        """command_badge should return markdown by default."""
+        from mmu_cli.cli import command_badge
+        result = command_badge(self.root, fmt="markdown")
+        self.assertEqual(result.exit_code, 0)
+        self.assertIn("img.shields.io", result["messages"][0])
+
+    def test_command_badge_svg(self):
+        """command_badge with svg format should return SVG."""
+        from mmu_cli.cli import command_badge
+        result = command_badge(self.root, fmt="svg")
+        self.assertEqual(result.exit_code, 0)
+        self.assertIn("<svg", result["messages"][0])
+
+    def test_command_badge_output_file(self):
+        """command_badge with --output should write file."""
+        from mmu_cli.cli import command_badge
+        out_path = str(self.root / "badge.md")
+        result = command_badge(self.root, fmt="markdown", output=out_path)
+        self.assertEqual(result.exit_code, 0)
+        self.assertTrue(Path(out_path).is_file())
+        content = Path(out_path).read_text()
+        self.assertIn("img.shields.io", content)
+
+    def test_badge_stage_colors(self):
+        """Each stage should map to a specific color."""
+        from mmu_cli.display import STAGE_COLORS
+        self.assertIn("egg", STAGE_COLORS)
+        self.assertIn("legendary", STAGE_COLORS)
+        self.assertEqual(len(STAGE_COLORS), 6)
 
 
 if __name__ == "__main__":
