@@ -26,6 +26,8 @@ jobs:
           cache: npm
           cache-dependency-path: website/package-lock.json
       - run: cd website && npm ci && npm run build
+        env:
+          NEXT_PUBLIC_BASE_PATH: /make-me-unicorn
       - uses: actions/upload-pages-artifact@v3
         with:
           path: website/out

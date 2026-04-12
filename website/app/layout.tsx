@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 
 const SITE_URL =
   process.env.NEXT_PUBLIC_SITE_URL ||
-  "https://github.com/minjikim89/make-me-unicorn";
+  "https://minjikim89.github.io/make-me-unicorn";
 
 export const metadata: Metadata = {
   title: "Make Me Unicorn — SaaS Launch Readiness Checklist",
