@@ -648,7 +648,7 @@ class ShareClipboardTest(unittest.TestCase):
 
     def test_command_share_clipboard_appends_message(self):
         """--clipboard should add a clipboard status message."""
-        from unittest.mock import patch, MagicMock
+        from unittest.mock import patch
         from mmu_cli.cli import command_share
 
         with patch("mmu_cli.cli.try_copy_clipboard", return_value=(True, "bundle copied to clipboard")):
