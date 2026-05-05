@@ -10,6 +10,8 @@ The format is inspired by Keep a Changelog and follows semantic intent.
 
 - **Claude Code plugin packaging** (`.claude-plugin/`) — install MMU as a plugin via `/plugin marketplace add minjikim89/make-me-unicorn`. Compatible with Claude Code, Claude Desktop, and OpenAI Codex CLI (Anthropic Agent Skills spec, Dec 2025).
 - **Agent Skill** (`skills/mmu-startup/`) — `SKILL.md` with auto-trigger phrases for "startup idea", "validate my idea", "launch checklist", and "Product Hunt prep". Uses progressive disclosure to load blueprints and the launch kit only when relevant.
+- **MCP server mode** (`mmu serve-mcp`) — exposes MMU as a Model Context Protocol server so any MCP-compatible agent (Claude Code, Claude Desktop, Cursor, Gemini CLI) can call blueprints and templates as native tools. Tools: `mmu_list_blueprints`, `mmu_get_blueprint`, `mmu_list_idea_templates`, `mmu_validate_idea` (stub). Install with `pip install make-me-unicorn[mcp]`.
+- New `[mcp]` optional-dependency group pinning `mcp>=1.27,<2`.
 
 ## [0.5.0] - 2026-04-12
 

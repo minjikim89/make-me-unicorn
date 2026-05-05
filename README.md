@@ -219,6 +219,36 @@ MMU is also packaged as a Claude Code plugin and Anthropic Agent Skill, so any C
 
 The skill auto-loads only the blueprint(s) relevant to the conversation (progressive disclosure), so it stays cheap on context.
 
+## MCP Server Mode
+
+MMU also runs as an MCP (Model Context Protocol) server, so any MCP-compatible agent (Claude Code, Claude Desktop, Cursor, Gemini CLI) can call MMU's blueprints and templates as native tools.
+
+```bash
+pip install make-me-unicorn[mcp]
+mmu serve-mcp                          # stdio transport (default)
+mmu serve-mcp --transport sse          # SSE transport
+```
+
+Claude Desktop config (`~/Library/Application Support/Claude/claude_desktop_config.json`):
+
+```json
+{
+  "mcpServers": {
+    "mmu": {
+      "command": "mmu",
+      "args": ["serve-mcp", "--root", "/path/to/cloned/make-me-unicorn"]
+    }
+  }
+}
+```
+
+Tools exposed:
+
+- `mmu_list_blueprints` — list 17 blueprints (15 core + 2 industry)
+- `mmu_get_blueprint(name)` — fetch full blueprint markdown
+- `mmu_list_idea_templates` — list start/close/ADR prompts + Product Hunt kit
+- `mmu_validate_idea(idea)` — stub; the real validator lives in `mmu validate`
+
 ## Full Command Reference
 
 ```bash

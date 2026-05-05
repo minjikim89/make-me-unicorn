@@ -36,12 +36,16 @@ Changelog = "https://github.com/minjikim89/make-me-unicorn/blob/main/CHANGELOG.m
 llm = [
   "anthropic>=0.40",
 ]
+mcp = [
+  "mcp>=1.27,<2",
+]
 dev = [
   "mypy>=1.8",
   "ruff>=0.6",
 ]
 all = [
   "anthropic>=0.40",
+  "mcp>=1.27,<2",
   "mypy>=1.8",
   "ruff>=0.6",
 ]
