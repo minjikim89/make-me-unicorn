@@ -33,7 +33,7 @@ def parse_hits(payload: dict[str, Any]) -> list[dict[str, Any]]:
 def search_hn(query: str, limit: int = 30) -> list[dict[str, Any]]:
     if limit <= 0:
         return []
-    import requests
+    import requests  # type: ignore[import-untyped]
 
     response = requests.get(
         ALGOLIA_URL,
