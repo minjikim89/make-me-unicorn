@@ -207,6 +207,18 @@ export ANTHROPIC_API_KEY=sk-ant-...
 
 Core CLI stays zero-dependency. AI features degrade gracefully.
 
+## Use as a Claude Skill
+
+MMU is also packaged as a Claude Code plugin and Anthropic Agent Skill, so any Claude-based agent (Claude Code, Claude Desktop, or any tool that supports the Agent Skills spec — including OpenAI Codex CLI) can auto-invoke MMU when the user mentions a startup idea, validation, launch checklist, or Product Hunt prep.
+
+```bash
+# In Claude Code:
+/plugin marketplace add minjikim89/make-me-unicorn
+/plugin install make-me-unicorn
+```
+
+The skill auto-loads only the blueprint(s) relevant to the conversation (progressive disclosure), so it stays cheap on context.
+
 ## Full Command Reference
 
 ```bash
