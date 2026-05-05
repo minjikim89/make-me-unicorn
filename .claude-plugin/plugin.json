@@ -1,0 +1,13 @@
+{
+  "name": "make-me-unicorn",
+  "version": "0.6.0",
+  "description": "Open-source launch checklist and operating system for solo SaaS builders. Provides startup blueprints, validation prompts, and launch templates to Claude.",
+  "author": {
+    "name": "Make Me Unicorn Contributors",
+    "url": "https://github.com/minjikim89/make-me-unicorn"
+  },
+  "homepage": "https://minjikim89.github.io/make-me-unicorn/",
+  "repository": "https://github.com/minjikim89/make-me-unicorn",
+  "license": "MIT",
+  "keywords": ["saas", "checklist", "launch", "founder", "startup", "blueprints"]
+}

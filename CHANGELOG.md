@@ -6,6 +6,11 @@ The format is inspired by Keep a Changelog and follows semantic intent.
 
 ## [Unreleased]
 
+### Added
+
+- **Claude Code plugin packaging** (`.claude-plugin/`) — install MMU as a plugin via `/plugin marketplace add minjikim89/make-me-unicorn`. Compatible with Claude Code, Claude Desktop, and OpenAI Codex CLI (Anthropic Agent Skills spec, Dec 2025).
+- **Agent Skill** (`skills/mmu-startup/`) — `SKILL.md` with auto-trigger phrases for "startup idea", "validate my idea", "launch checklist", and "Product Hunt prep". Uses progressive disclosure to load blueprints and the launch kit only when relevant.
+
 ## [0.5.0] - 2026-04-12
 
 ### Added
