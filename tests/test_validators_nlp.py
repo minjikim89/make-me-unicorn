@@ -7,7 +7,14 @@ sys.path.insert(0, str(REPO_ROOT / "src"))
 
 from mmu_cli.validators import nlp  # noqa: E402
 
+try:
+    import vaderSentiment  # noqa: F401
+    _HAS_VADER = True
+except ImportError:
+    _HAS_VADER = False
 
+
+@unittest.skipUnless(_HAS_VADER, "vaderSentiment not installed (install via [validate] extra)")
 class SentimentTests(unittest.TestCase):
     def test_positive_text_has_positive_compound(self):
         result = nlp.analyze_sentiment(["I love this idea, it's brilliant and helpful!"])
