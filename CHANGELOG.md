@@ -12,6 +12,10 @@ The format is inspired by Keep a Changelog and follows semantic intent.
 - **Agent Skill** (`skills/mmu-startup/`) — `SKILL.md` with auto-trigger phrases for "startup idea", "validate my idea", "launch checklist", and "Product Hunt prep". Uses progressive disclosure to load blueprints and the launch kit only when relevant.
 - **MCP server mode** (`mmu serve-mcp`) — exposes MMU as a Model Context Protocol server so any MCP-compatible agent (Claude Code, Claude Desktop, Cursor, Gemini CLI) can call blueprints and templates as native tools. Tools: `mmu_list_blueprints`, `mmu_get_blueprint`, `mmu_list_idea_templates`, `mmu_validate_idea` (stub). Install with `pip install make-me-unicorn[mcp]`.
 - New `[mcp]` optional-dependency group pinning `mcp>=1.27,<2`.
+- **`mmu validate <idea>`** — pull real HN + Reddit discussions about a startup idea, compute local VADER sentiment, surface candidate competitors via capitalized-token NER. Saves markdown report to `reports/validate/<slug>.md`. Default mode is free (no API key, no paid calls).
+- **`mmu validate --llm`** — opt-in Anthropic synthesis (verdict + pain points + competitors + risks + next experiments). Prompts for cost confirmation (~$0.05-0.20); use `--yes` / `-y` to skip.
+- New `[validate]` optional-dependency group: `vaderSentiment>=3.3`, `requests>=2.28`. spaCy intentionally not used (heavy install; capitalized-token heuristic ships with v0.6, full NER planned for later).
+- 10 new unit tests (75 total).
 
 ## [0.5.0] - 2026-04-12
 

@@ -313,6 +313,15 @@ def parse_args() -> argparse.Namespace:
     p_mcp.add_argument("--root", default=None, help="Path to make-me-unicorn repo (defaults to package install location)")
     p_mcp.add_argument("--transport", choices=["stdio", "sse", "streamable-http"], default="stdio", help="MCP transport (default: stdio)")
 
+    p_validate = sub.add_parser("validate", help="Validate a startup idea against real HN + Reddit discussions")
+    p_validate.add_argument("idea", help="The startup idea to validate (quote it)")
+    p_validate.add_argument("--root", default=".", help="Project root path")
+    p_validate.add_argument("--limit", type=int, default=30, help="Max threads per source (default: 30, 0 = no network)")
+    p_validate.add_argument("--llm", action="store_true", help="Add Anthropic-powered synthesis (paid API call)")
+    p_validate.add_argument("--yes", "-y", action="store_true", help="Skip --llm cost confirmation prompt")
+    p_validate.add_argument("--output", choices=["text", "markdown", "json"], default="text", help="Output format (default: text)")
+    p_validate.add_argument("--no-save", action="store_true", help="Do not save markdown report to reports/validate/")
+
     return parser.parse_args()
 
 
@@ -1611,6 +1620,80 @@ def render_result(result: Result, as_json: bool) -> int:
     return result.exit_code
 
 
+def command_validate(
+    idea: str,
+    root: Path,
+    *,
+    limit: int = 30,
+    use_llm: bool = False,
+    assume_yes: bool = False,
+    output_format: str = "text",
+    save: bool = True,
+) -> int:
+    from mmu_cli.validators import (
+        analyze_sentiment,
+        extract_competitors,
+        format_markdown,
+        format_text,
+        search_hn,
+        search_reddit,
+        slugify,
+    )
+
+    if use_llm and not assume_yes:
+        sys.stderr.write(
+            "\n  --llm uses the Anthropic API. Estimated cost ~$0.05-0.20 per run.\n"
+            "  Continue? [y/N] "
+        )
+        sys.stderr.flush()
+        try:
+            answer = input().strip().lower()
+        except EOFError:
+            answer = ""
+        if answer not in {"y", "yes"}:
+            print("Aborted.")
+            return 1
+
+    hn_hits = search_hn(idea, limit=limit) if limit > 0 else []
+    reddit_hits = search_reddit(idea, limit=limit) if limit > 0 else []
+    hits = hn_hits + reddit_hits
+
+    texts = [(h.get("title") or "") + " " + (h.get("text") or "") for h in hits]
+    sentiment = analyze_sentiment(texts) if texts else {"compound": 0.0, "count": 0, "pos": 0.0, "neg": 0.0, "neu": 0.0}
+    competitors = extract_competitors(texts) if texts else []
+
+    llm_report: str | None = None
+    if use_llm and hits:
+        from mmu_cli.validators.synthesize import synthesize_report
+        llm_report = synthesize_report(idea, hits, root)
+
+    if output_format == "json":
+        payload = {
+            "idea": idea,
+            "hits": hits,
+            "sentiment": sentiment,
+            "competitors": [{"name": n, "count": c} for n, c in competitors],
+            "llm_report": llm_report,
+        }
+        print(json.dumps(payload, ensure_ascii=False, indent=2))
+    elif output_format == "markdown":
+        print(format_markdown(idea, hits, sentiment, competitors, llm_report))
+    else:
+        print(format_text(idea, hits, sentiment, competitors, llm_report))
+
+    if save:
+        reports_dir = root / "reports" / "validate"
+        reports_dir.mkdir(parents=True, exist_ok=True)
+        report_path = reports_dir / f"{slugify(idea)}.md"
+        report_path.write_text(
+            format_markdown(idea, hits, sentiment, competitors, llm_report),
+            encoding="utf-8",
+        )
+        sys.stderr.write(f"\nSaved: {report_path}\n")
+
+    return 0
+
+
 def main() -> int:
     args = parse_args()
     root = root_path(getattr(args, "root", "."))
@@ -1684,6 +1767,16 @@ def main() -> int:
             print(str(exc), file=sys.stderr)
             return 2
         return 0
+    if args.command == "validate":
+        return command_validate(
+            args.idea,
+            root,
+            limit=args.limit,
+            use_llm=args.llm,
+            assume_yes=args.yes,
+            output_format=args.output,
+            save=not args.no_save,
+        )
 
     return 1
 
