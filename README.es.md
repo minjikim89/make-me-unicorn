@@ -282,6 +282,68 @@ export ANTHROPIC_API_KEY=sk-ant-...
 
 El CLI core no tiene dependencias externas. Las funciones de IA son opcionales y se degradan de forma segura.
 
+## Usar como Skill de Claude
+
+MMU también está empaquetado como plugin de Claude Code + Anthropic Agent Skill. En cualquier herramienta compatible con la especificación Agent Skills (Claude Code, Claude Desktop, OpenAI Codex CLI), MMU se invoca automáticamente cuando mencionás frases como "validar mi idea de SaaS" o "checklist de lanzamiento".
+
+```bash
+# Dentro de Claude Code:
+/plugin marketplace add minjikim89/make-me-unicorn
+/plugin install make-me-unicorn
+```
+
+El skill carga solamente los blueprints relevantes para la conversación (progressive disclosure), manteniendo bajo el costo de contexto.
+
+## Modo Servidor MCP
+
+MMU también funciona como servidor MCP (Model Context Protocol). Cualquier agente compatible con MCP (Claude Code, Claude Desktop, Cursor, Gemini CLI) puede llamar los blueprints y templates de MMU como herramientas nativas.
+
+```bash
+pip install make-me-unicorn[mcp]
+mmu serve-mcp                          # transporte stdio (por defecto)
+mmu serve-mcp --transport sse          # transporte SSE
+```
+
+Configuración de Claude Desktop (`~/Library/Application Support/Claude/claude_desktop_config.json`):
+
+```json
+{
+  "mcpServers": {
+    "mmu": {
+      "command": "mmu",
+      "args": ["serve-mcp", "--root", "/path/to/cloned/make-me-unicorn"]
+    }
+  }
+}
+```
+
+Herramientas expuestas:
+
+- `mmu_list_blueprints` — lista 17 blueprints (15 core + 2 de industria)
+- `mmu_get_blueprint(name)` — obtiene el markdown completo de un blueprint
+- `mmu_list_idea_templates` — lista los prompts start/close/ADR + el kit de Product Hunt
+- `mmu_validate_idea(idea)` — stub; el validador real vive en `mmu validate`
+
+## Validar una Idea
+
+Tomá señal real de HN + Reddit antes de construir:
+
+```bash
+pip install make-me-unicorn[validate]
+mmu validate "tutor de IA para niños" --limit 30
+```
+
+El modo por defecto es **gratis** — sin API key, sin llamadas de pago. Búsqueda pública en Reddit + HN Algolia, análisis de sentimiento VADER local, extracción de competidores por tokens en mayúscula. Guarda un reporte markdown en `reports/validate/<slug>.md`.
+
+Para un veredicto de validación de una página sintetizado a partir de los hilos:
+
+```bash
+mmu validate "tutor de IA para niños" --llm
+# Pide confirmación de costo (~$0.05–0.20). Usá -y para saltarlo.
+```
+
+`--llm` es opt-in explícito — el flujo por defecto nunca llama a la API de Anthropic.
+
 ## Flujo de Sesión
 
 Cada sesión sigue el mismo ritmo:
