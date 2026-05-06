@@ -249,6 +249,26 @@ Tools exposed:
 - `mmu_list_idea_templates` — list start/close/ADR prompts + Product Hunt kit
 - `mmu_validate_idea(idea)` — stub; the real validator lives in `mmu validate`
 
+## Validate an Idea
+
+Pull real signal from HN + Reddit before you build:
+
+```bash
+pip install make-me-unicorn[validate]
+mmu validate "AI tutor for kids" --limit 30
+```
+
+Default mode is **free** — no API keys, no paid calls. Public Reddit + HN Algolia search, local VADER sentiment, capitalized-token competitor surface. Saves a markdown report to `reports/validate/<slug>.md`.
+
+For a 1-page validation verdict synthesized from the threads:
+
+```bash
+mmu validate "AI tutor for kids" --llm
+# Prompts for cost confirmation (~$0.05-0.20). Use -y to skip.
+```
+
+`--llm` is opt-in — the default flow never calls the Anthropic API.
+
 ## Full Command Reference
 
 ```bash

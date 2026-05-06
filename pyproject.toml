@@ -39,6 +39,10 @@ llm = [
 mcp = [
   "mcp>=1.27,<2",
 ]
+validate = [
+  "vaderSentiment>=3.3",
+  "requests>=2.28",
+]
 dev = [
   "mypy>=1.8",
   "ruff>=0.6",
@@ -46,6 +50,8 @@ dev = [
 all = [
   "anthropic>=0.40",
   "mcp>=1.27,<2",
+  "vaderSentiment>=3.3",
+  "requests>=2.28",
   "mypy>=1.8",
   "ruff>=0.6",
 ]
