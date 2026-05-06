@@ -6,6 +6,8 @@ The format is inspired by Keep a Changelog and follows semantic intent.
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-05-06
+
 ### Added
 
 - **Claude Code plugin packaging** (`.claude-plugin/`) — install MMU as a plugin via `/plugin marketplace add minjikim89/make-me-unicorn`. Compatible with Claude Code, Claude Desktop, and OpenAI Codex CLI (Anthropic Agent Skills spec, Dec 2025).
@@ -16,6 +18,11 @@ The format is inspired by Keep a Changelog and follows semantic intent.
 - **`mmu validate --llm`** — opt-in Anthropic synthesis (verdict + pain points + competitors + risks + next experiments). Prompts for cost confirmation (~$0.05-0.20); use `--yes` / `-y` to skip.
 - New `[validate]` optional-dependency group: `vaderSentiment>=3.3`, `requests>=2.28`. spaCy intentionally not used (heavy install; capitalized-token heuristic ships with v0.6, full NER planned for later).
 - 10 new unit tests (75 total).
+- 7 new unit tests for MCP server (82 total in main).
+
+### Theme
+
+v0.6 "Agent-Native" — extends v0.5's distribution thesis from human virality (badge/share) to agent virality (Skills marketplace + MCP registry). MMU is now installable as a Claude Code plugin and callable as an MCP server, so any LLM-backed agent can surface blueprints and validate ideas natively.
 
 ## [0.5.0] - 2026-04-12
 
