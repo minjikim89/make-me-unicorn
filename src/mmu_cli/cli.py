@@ -309,6 +309,10 @@ def parse_args() -> argparse.Namespace:
     p_badge.add_argument("--output", "-o", help="Write badge to file instead of stdout")
     p_badge.add_argument("--clipboard", action="store_true", help="Copy to clipboard (macOS)")
 
+    p_mcp = sub.add_parser("serve-mcp", help="Run MMU as an MCP server (requires [mcp] extra)")
+    p_mcp.add_argument("--root", default=None, help="Path to make-me-unicorn repo (defaults to package install location)")
+    p_mcp.add_argument("--transport", choices=["stdio", "sse", "streamable-http"], default="stdio", help="MCP transport (default: stdio)")
+
     return parser.parse_args()
 
 
@@ -1672,6 +1676,14 @@ def main() -> int:
     if args.command == "snapshot":
         result = command_snapshot(root, args.target, args.output, args.no_md)
         return render_result(result, args.json)
+    if args.command == "serve-mcp":
+        from mmu_cli.mcp_server import serve
+        try:
+            serve(Path(args.root) if args.root else None, transport=args.transport)
+        except ImportError as exc:
+            print(str(exc), file=sys.stderr)
+            return 2
+        return 0
 
     return 1
 
