@@ -282,6 +282,68 @@ export ANTHROPIC_API_KEY=sk-ant-...
 
 コア CLI は外部依存ゼロ。AI 機能はオプションであり、なくても正常に動作します。
 
+## Claude Skill として使う
+
+MMU は Claude Code プラグイン + Anthropic Agent Skill としてもパッケージされています。Claude Code、Claude Desktop、OpenAI Codex CLI など Agent Skills 仕様に対応するすべてのツールで、「スタートアップのアイデアを検証して」「ローンチチェックリスト出して」といった発話に MMU が自動で応答します。
+
+```bash
+# Claude Code 内で:
+/plugin marketplace add minjikim89/make-me-unicorn
+/plugin install make-me-unicorn
+```
+
+スキルは progressive disclosure により会話に必要なブループリントだけを読み込むため、コンテキストコストを最小限に抑えます。
+
+## MCP サーバーモード
+
+MMU は MCP(Model Context Protocol) サーバーとしても動作します。Claude Code、Claude Desktop、Cursor、Gemini CLI など MCP 互換エージェントが MMU のブループリントとテンプレートをネイティブツールとして呼び出せます。
+
+```bash
+pip install make-me-unicorn[mcp]
+mmu serve-mcp                          # stdio トランスポート(デフォルト)
+mmu serve-mcp --transport sse          # SSE トランスポート
+```
+
+Claude Desktop 設定 (`~/Library/Application Support/Claude/claude_desktop_config.json`):
+
+```json
+{
+  "mcpServers": {
+    "mmu": {
+      "command": "mmu",
+      "args": ["serve-mcp", "--root", "/path/to/cloned/make-me-unicorn"]
+    }
+  }
+}
+```
+
+公開されるツール:
+
+- `mmu_list_blueprints` — 17 個のブループリント(コア 15 + 業種別 2)一覧
+- `mmu_get_blueprint(name)` — 特定ブループリントのマークダウン全文
+- `mmu_list_idea_templates` — start/close/ADR プロンプト + Product Hunt キット
+- `mmu_validate_idea(idea)` — スタブ。実体は `mmu validate` コマンド
+
+## アイデアを検証する
+
+ビルド前に HN + Reddit からリアルな声を取り込みます:
+
+```bash
+pip install make-me-unicorn[validate]
+mmu validate "子ども向け AI チューター" --limit 30
+```
+
+デフォルトモードは**無料** — API キー不要、有料呼び出しなし。公開 Reddit + HN Algolia 検索 + ローカル VADER 感情分析 + 大文字トークンによる競合抽出。`reports/validate/<slug>.md` にマークダウンレポートが自動保存されます。
+
+スレッドを統合した 1 ページ検証レポートが欲しい場合:
+
+```bash
+mmu validate "子ども向け AI チューター" --llm
+# コスト確認プロンプト(~$0.05〜0.20)。-y でスキップ可能。
+```
+
+`--llm` は明示的なオプトインで、デフォルトフローは Anthropic API を一切呼びません。
+
 ## セッションワークフロー
 
 毎回のセッションは同じリズムで進みます：

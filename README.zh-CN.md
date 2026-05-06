@@ -282,6 +282,68 @@ export ANTHROPIC_API_KEY=sk-ant-...
 
 核心 CLI 零依赖。AI 功能可选，可平滑降级。
 
+## 作为 Claude Skill 使用
+
+MMU 同时打包为 Claude Code 插件 + Anthropic Agent Skill。在 Claude Code、Claude Desktop、OpenAI Codex CLI 等支持 Agent Skills 规范的所有工具中，当用户说"验证我的 SaaS 想法"、"上线检查清单"时，MMU 会被自动触发。
+
+```bash
+# 在 Claude Code 中：
+/plugin marketplace add minjikim89/make-me-unicorn
+/plugin install make-me-unicorn
+```
+
+通过 progressive disclosure 模式，技能只在对话需要时加载相关蓝图，上下文成本极低。
+
+## MCP 服务器模式
+
+MMU 也可以作为 MCP（Model Context Protocol）服务器运行。Claude Code、Claude Desktop、Cursor、Gemini CLI 等 MCP 兼容代理都能将 MMU 的蓝图与模板作为原生工具调用。
+
+```bash
+pip install make-me-unicorn[mcp]
+mmu serve-mcp                          # stdio 传输（默认）
+mmu serve-mcp --transport sse          # SSE 传输
+```
+
+Claude Desktop 配置（`~/Library/Application Support/Claude/claude_desktop_config.json`）：
+
+```json
+{
+  "mcpServers": {
+    "mmu": {
+      "command": "mmu",
+      "args": ["serve-mcp", "--root", "/path/to/cloned/make-me-unicorn"]
+    }
+  }
+}
+```
+
+暴露的工具：
+
+- `mmu_list_blueprints` — 列出 17 个蓝图（15 个核心 + 2 个行业）
+- `mmu_get_blueprint(name)` — 获取单个蓝图的完整 markdown
+- `mmu_list_idea_templates` — 列出 start/close/ADR 提示词 + Product Hunt 工具包
+- `mmu_validate_idea(idea)` — 占位函数；真正的验证在 `mmu validate` 命令中
+
+## 验证你的想法
+
+在动手开发前，从 HN + Reddit 拉取真实信号：
+
+```bash
+pip install make-me-unicorn[validate]
+mmu validate "面向儿童的 AI 家教" --limit 30
+```
+
+默认模式**免费** — 无需 API key，不会发生付费调用。公共 Reddit + HN Algolia 搜索 + 本地 VADER 情感分析 + 基于大写词的竞品识别。结果会自动保存为 `reports/validate/<slug>.md`。
+
+如需基于线程综合的一页式验证结论：
+
+```bash
+mmu validate "面向儿童的 AI 家教" --llm
+# 弹出费用确认（约 $0.05–0.20）。使用 -y 可跳过。
+```
+
+`--llm` 必须显式启用，默认流程绝不调用 Anthropic API。
+
 ## 会话工作流
 
 每个会话遵循相同的节奏：
