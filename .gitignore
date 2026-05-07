@@ -27,6 +27,14 @@ docs/local/
 website/.next/
 website/out/
 website/node_modules/
+website/next-env.d.ts
+# Stray Next.js scaffold artifacts at repo root (not the canonical website/)
+/package.json
+/pages/
 
 # Editor temp
 *.swp
+
+# OS junk
+.DS_Store
+**/.DS_Store

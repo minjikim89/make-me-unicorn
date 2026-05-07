@@ -10,8 +10,13 @@ from pathlib import Path
 
 
 def _resolve_repo_root(root: Path | None) -> Path:
-    if root is not None and (root / "docs" / "blueprints").is_dir():
-        return root
+    if root is not None:
+        if (root / "docs" / "blueprints").is_dir():
+            return root
+        raise FileNotFoundError(
+            f"--root {root} does not contain docs/blueprints/. "
+            "Point it at a checkout of make-me-unicorn, or omit --root to use the package install location."
+        )
     pkg_root = Path(__file__).resolve().parents[2]
     if (pkg_root / "docs" / "blueprints").is_dir():
         return pkg_root
@@ -82,7 +87,13 @@ def validate_idea(idea: str) -> dict[str, str]:
     return {
         "status": "stub",
         "idea": idea,
-        "note": "Real validation is shipping in v0.6 via `mmu validate <idea>`. For now, run that CLI command directly.",
+        "note": (
+            "Full idea validation is intentionally not exposed over MCP yet — it requires "
+            "external HTTP scraping (HN + Reddit) and optional LLM synthesis, which take "
+            "several seconds and don't fit a stdio tool round-trip. "
+            "Run `mmu validate \"<idea>\"` in your terminal for the free local mode, "
+            "or `mmu validate \"<idea>\" --llm` for an Anthropic-synthesized verdict."
+        ),
     }
 
 

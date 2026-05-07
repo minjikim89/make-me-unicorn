@@ -1654,9 +1654,28 @@ def command_validate(
             print("Aborted.")
             return 1
 
-    hn_hits = search_hn(idea, limit=limit) if limit > 0 else []
-    reddit_hits = search_reddit(idea, limit=limit) if limit > 0 else []
+    hn_hits: list[dict[str, Any]] = []
+    reddit_hits: list[dict[str, Any]] = []
+    fetch_errors: list[str] = []
+    if limit > 0:
+        try:
+            hn_hits = search_hn(idea, limit=limit)
+        except Exception as exc:
+            fetch_errors.append(f"HN fetch failed: {type(exc).__name__}: {exc}")
+        try:
+            reddit_hits = search_reddit(idea, limit=limit)
+        except Exception as exc:
+            fetch_errors.append(f"Reddit fetch failed: {type(exc).__name__}: {exc}")
     hits = hn_hits + reddit_hits
+
+    for err in fetch_errors:
+        sys.stderr.write(f"  ⚠️  {err}\n")
+    if fetch_errors and not hits:
+        sys.stderr.write(
+            "\n  Both sources failed. Check your internet connection, or retry in a moment "
+            "(Reddit rate-limits anonymous traffic to ~60 req/min).\n"
+        )
+        return 2
 
     texts = [(h.get("title") or "") + " " + (h.get("text") or "") for h in hits]
     sentiment = analyze_sentiment(texts) if texts else {"compound": 0.0, "count": 0, "pos": 0.0, "neg": 0.0, "neu": 0.0}
