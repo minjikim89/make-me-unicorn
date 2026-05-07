@@ -106,6 +106,10 @@ def build_server(root: Path | None = None):
             "`pip install make-me-unicorn[mcp]`."
         ) from exc
 
+    # Fail fast at startup if root is unusable, instead of letting every
+    # tool call surface the same error after the client is already wired up.
+    _resolve_repo_root(root)
+
     mcp = FastMCP("make-me-unicorn")
 
     @mcp.tool()

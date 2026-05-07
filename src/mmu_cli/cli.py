@@ -1785,6 +1785,9 @@ def main() -> int:
         except ImportError as exc:
             print(str(exc), file=sys.stderr)
             return 2
+        except FileNotFoundError as exc:
+            print(str(exc), file=sys.stderr)
+            return 2
         return 0
     if args.command == "validate":
         return command_validate(

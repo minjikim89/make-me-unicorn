@@ -55,6 +55,15 @@ class MCPDataLayerTests(unittest.TestCase):
         resolved = mcp_server._resolve_repo_root(None)
         self.assertEqual(resolved, REPO_ROOT)
 
+    def test_build_server_fails_fast_on_invalid_root(self):
+        try:
+            import mcp.server.fastmcp  # noqa: F401
+        except ImportError:
+            self.skipTest("mcp SDK not installed (install via [mcp] extra)")
+        with self.assertRaises(FileNotFoundError) as ctx:
+            mcp_server.build_server(Path("/nonexistent/mmu/root"))
+        self.assertIn("/nonexistent/mmu/root", str(ctx.exception))
+
 
 if __name__ == "__main__":
     unittest.main()
