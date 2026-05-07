@@ -6,6 +6,17 @@ The format is inspired by Keep a Changelog and follows semantic intent.
 
 ## [Unreleased]
 
+## [0.6.3] - 2026-05-08
+
+### Fixed
+
+- **`mmu serve-mcp` no longer crashes when called without `--root`.** The serve-mcp subparser sets `--root` default to `None` (so the MCP server can fall back to the package install location), but the shared dispatch in `main()` ran `root_path(None)` unconditionally — which raised `TypeError: argument should be a str ... not 'NoneType'`. `root_path()` now handles `None` by returning `Path.cwd()`. This was a latent regression in v0.6.0/0.6.1/0.6.2 — the published CLI's serve-mcp entry point was unusable without an explicit `--root`.
+- 2 new unit tests (`test_root_path_handles_none`, `test_root_path_handles_string`) lock the contract.
+
+### How it was caught
+
+While building a demo GIF of `mmu serve-mcp` driven by an `mcp` Python SDK client, the server crashed at startup. The bug had slipped past three previous releases because every smoke test passed `--root` explicitly.
+
 ## [0.6.2] - 2026-05-07
 
 ### Fixed

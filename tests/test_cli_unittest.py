@@ -139,6 +139,15 @@ class CLITestCase(unittest.TestCase):
         self.assertEqual(code, 0)
         self.assertIn('"exit_code": 0', out.getvalue())
 
+    def test_root_path_handles_none(self) -> None:
+        # `serve-mcp` lets `--root` default to None; main() must not crash.
+        resolved = cli.root_path(None)
+        self.assertEqual(resolved, Path.cwd())
+
+    def test_root_path_handles_string(self) -> None:
+        resolved = cli.root_path(str(self.root))
+        self.assertEqual(resolved, self.root.resolve())
+
 
 if __name__ == "__main__":
     unittest.main()
