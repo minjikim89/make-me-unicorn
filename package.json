@@ -1,0 +1,1 @@
+{"name":"demo-saas","dependencies":{"next":"14.0","stripe":"^14","@supabase/supabase-js":"^2"}}

@@ -6,6 +6,22 @@ The format is inspired by Keep a Changelog and follows semantic intent.
 
 ## [Unreleased]
 
+## [0.6.1] - 2026-05-06
+
+### Security
+
+- **Prompt-injection defense in `mmu validate --llm`** — scraped Reddit/HN content is now wrapped in `<thread>` tags with sanitized close-tags, and the system prompt explicitly tells the model to treat thread content as data only. Reduces the surface for a hostile thread to override the validation prompt.
+
+### Fixed
+
+- **`mmu serve-mcp --root` now fails loudly on invalid paths.** Previously, an invalid `--root` silently fell back to the package install location, masking config mistakes. Explicit `--root` arguments must point at a checkout containing `docs/blueprints/`.
+- **`mmu_validate_idea` MCP tool stub message** rewritten to clearly explain why MCP doesn't expose the full validator (network + LLM in stdio context) and direct users to the `mmu validate` CLI.
+- **`mmu validate` no longer crashes on network errors.** HN or Reddit fetch failures are caught, reported on stderr, and the run continues with whatever data was retrieved. Both sources failing returns exit code 2 with a friendly message.
+
+### Added
+
+- 4 new unit tests (86 total) covering `_sanitize` and the explicit/None branches of `_resolve_repo_root`.
+
 ## [0.6.0] - 2026-05-06
 
 ### Added
