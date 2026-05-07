@@ -6,6 +6,13 @@ The format is inspired by Keep a Changelog and follows semantic intent.
 
 ## [Unreleased]
 
+## [0.6.2] - 2026-05-07
+
+### Fixed
+
+- **`mmu serve-mcp` now actually fails fast on invalid `--root`.** v0.6.1 fixed `_resolve_repo_root` itself, but it was only called lazily inside each MCP tool function — so the server happily started up with a bad root and only errored once a client called a tool. `build_server` now validates the root once at startup, and `cli.py` translates the `FileNotFoundError` into a clean exit code 2 with the error message on stderr (no traceback).
+- New unit test (`test_build_server_fails_fast_on_invalid_root`) skips gracefully when the `[mcp]` extra is absent.
+
 ## [0.6.1] - 2026-05-06
 
 ### Security
