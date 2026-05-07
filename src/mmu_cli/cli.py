@@ -329,7 +329,13 @@ def utc_now() -> str:
     return dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
-def root_path(path: str) -> Path:
+def root_path(path: str | None) -> Path:
+    # `serve-mcp` lets `--root` default to None so the MCP server can fall back
+    # to the package install location. Other commands always pass a string, but
+    # the shared dispatch in main() runs root_path() unconditionally before the
+    # per-command branch — so None must resolve cleanly to cwd here.
+    if path is None:
+        return Path.cwd()
     return Path(path).expanduser().resolve()
 
 
