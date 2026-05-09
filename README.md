@@ -7,7 +7,8 @@
 The open-source launch checklist and operating system for solo builders.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-black.svg)](./LICENSE)
-[![Status: v0.5](https://img.shields.io/badge/status-v0.5-blue.svg)](./ROADMAP.md)
+[![PyPI version](https://img.shields.io/pypi/v/make-me-unicorn?color=blue)](https://pypi.org/project/make-me-unicorn/)
+[![PyPI downloads](https://img.shields.io/pypi/dm/make-me-unicorn?color=blue)](https://pypi.org/project/make-me-unicorn/)
 [![CLI](https://img.shields.io/badge/cli-mmu-f59e0b.svg)](./SPEC.md)
 [![Guardrails CI](https://img.shields.io/badge/ci-doctor%20%2B%20gates-22c55e.svg)](./.github/workflows/mmu-guardrails.yml)
 [![Contributions Welcome](https://img.shields.io/badge/contributions-welcome-16a34a.svg)](./CONTRIBUTING.md)
