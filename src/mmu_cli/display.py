@@ -95,37 +95,37 @@ UNICORN_STAGES = [
         yellow("       \\ ___ /"),
         yellow("        '---' "),
     ]),
-    # 35-55%: baby unicorn
+    # 35-55%: foal — baby horse, no horn yet, four legs visible
     (0.55, "foal", [
-        cyan("          /"),
-        cyan("    ,") + bold("~~") + cyan("/"),
-        "    " + bold("(o.o)"),
-        "    " + bold("/|  |\\"),
-        "    " + dim("_/ \\_ "),
+        cyan("          ___"),
+        cyan("        ") + bold("(") + cyan("o.o") + bold(")") + cyan("~"),
+        "        " + bold("/||||\\"),
+        "         " + bold("|| ||"),
+        "          " + dim("~~~~"),
     ]),
-    # 55-75%: young unicorn
+    # 55-75%: young — small horn nub appears
     (0.75, "young", [
-        magenta("         //"),
-        magenta("   ,") + bold("~~~") + magenta("//"),
-        "   " + bold("(o_o)") + magenta("  *"),
-        "   " + bold("/|  |\\"),
-        "   " + bold("_/  \\_"),
+        magenta("         /") + bold("\\"),
+        magenta("        ") + bold("(") + magenta("o.o") + bold(")") + magenta("~~"),
+        "        " + bold("/||||\\"),
+        "         " + bold("|| ||"),
+        "          " + dim("~~~~"),
     ]),
-    # 75-95%: unicorn
+    # 75-95%: unicorn — horn + mane streaming, consistent body silhouette
     (0.95, "unicorn", [
-        magenta("        ///"),
-        magenta("  ,") + bold("~~~~") + magenta("///"),
-        "  " + bold("(^_^)") + magenta("  **"),
-        "  " + bold("/|  |\\") + magenta(" ~"),
-        "  " + bold("_/  \\_"),
+        "        ," + bold("/\\") + magenta(",~~"),
+        "        " + bold("(") + magenta("^.^") + bold(")") + magenta("~~~"),
+        "        " + bold("/||||\\"),
+        "         " + bold("|| ||"),
+        "          " + dim("~~~~"),
     ]),
-    # 95-100%: FULL UNICORN
+    # 95-100%: legendary — same silhouette, full sparkle aura + tail
     (1.01, "legendary", [
-        magenta(" *") + bold("      ///") + magenta("   *"),
-        magenta("  *,") + bold("~~~~") + magenta("///") + magenta("  *"),
-        magenta("  ") + bold("(^o^)") + magenta(" ** !!"),
-        "  " + bold("/|  |\\") + magenta(" ~*~"),
-        "  " + bold("_/  \\_") + magenta("  *"),
+        magenta("   *   ") + "," + bold("/\\") + magenta(",~~~  *"),
+        magenta("    ") + "  " + bold("(") + magenta("^o^") + bold(")") + magenta("~~~ !!"),
+        magenta("   *  ") + bold("/||||\\") + magenta(" ~*~"),
+        "         " + bold("|| ||"),
+        magenta("   *      ") + dim("~~~~") + magenta("    *"),
     ]),
 ]
 
