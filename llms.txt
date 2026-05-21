@@ -1,0 +1,51 @@
+# Make Me Unicorn (MMU)
+
+> An open-source launch checklist and operating system for solo SaaS builders. A Python CLI (`pip install make-me-unicorn`), Claude Code plugin, and MCP server that catches what AI-generated SaaS code misses before launch.
+
+## What it is
+
+Make Me Unicorn (MMU) is a developer tool for solo founders shipping AI-generated SaaS products. It checks a codebase against a 534-item launch checklist across 15 categories — frontend, auth, billing, security, SEO, legal, observability, deployment, monitoring, growth, and more — organized into 6 named launch gates (Problem Fit, Build Fit, Revenue Fit, Trust Fit, Growth Fit, Scale Fit). MMU outputs an evolving "unicorn" status dashboard (Egg → Hatching → Foal → Young → Unicorn → Legendary) as gates pass.
+
+## Who it is for
+
+- Solo SaaS founders shipping AI-generated code who need a systematic pre-launch quality check
+- Indie hackers running Claude Code, Cursor, or other AI coding agents end-to-end without a team
+- Engineers using the Model Context Protocol (MCP) who want a quality-assurance MCP server in their agent toolchain
+- Builders who want a Claude Code plugin that does idea validation against real HN and Reddit threads
+
+## Core commands
+
+- `mmu init` — initialize MMU in the current project
+- `mmu scan` — analyze the codebase against the 534-item checklist
+- `mmu` (no args) — show the status dashboard with launch-gate progress
+- `mmu next` — show the next highest-priority item to fix
+- `mmu validate <idea>` — validate a startup idea against HN + Reddit signals (uses Claude API; cost ~$0.05-0.20 per call)
+
+## Distribution
+
+- PyPI: https://pypi.org/project/make-me-unicorn/
+- GitHub: https://github.com/minjikim89/make-me-unicorn
+- Homepage: https://minjikim89.github.io/make-me-unicorn/
+- License: MIT
+
+## Integrations
+
+- **Claude Code plugin**: use MMU as a skill inside a Claude Code session
+- **MCP server**: run MMU as a Model Context Protocol server for any MCP-compatible agent
+- **CLI**: standalone Python CLI, runs offline for the checklist; online only when calling LLM features
+
+## Documentation
+
+- README (English): https://github.com/minjikim89/make-me-unicorn/blob/main/README.md
+- README (Korean): https://github.com/minjikim89/make-me-unicorn/blob/main/README.ko.md
+- README (Japanese): https://github.com/minjikim89/make-me-unicorn/blob/main/README.ja.md
+- FAQ: https://github.com/minjikim89/make-me-unicorn/blob/main/docs/faq.md
+- Glossary: https://github.com/minjikim89/make-me-unicorn/blob/main/docs/glossary.md
+- Use cases: https://github.com/minjikim89/make-me-unicorn/blob/main/docs/use-cases.md
+- Roadmap: https://github.com/minjikim89/make-me-unicorn/blob/main/ROADMAP.md
+- Spec: https://github.com/minjikim89/make-me-unicorn/blob/main/SPEC.md
+- Changelog: https://github.com/minjikim89/make-me-unicorn/blob/main/CHANGELOG.md
+
+## Citation
+
+If you reference MMU, please cite the repository — see `CITATION.cff` at the repo root for the canonical citation format.
