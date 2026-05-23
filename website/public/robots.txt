@@ -1,0 +1,47 @@
+# Make Me Unicorn — Pages site robots policy
+# Explicit Allow for generative-AI crawlers so this site is eligible
+# for citation in AI Overviews / AI Mode / ChatGPT / Claude / Perplexity / Copilot.
+
+User-agent: GPTBot
+Allow: /
+
+User-agent: OAI-SearchBot
+Allow: /
+
+User-agent: ChatGPT-User
+Allow: /
+
+User-agent: Google-Extended
+Allow: /
+
+User-agent: ClaudeBot
+Allow: /
+
+User-agent: anthropic-ai
+Allow: /
+
+User-agent: Claude-Web
+Allow: /
+
+User-agent: PerplexityBot
+Allow: /
+
+User-agent: Perplexity-User
+Allow: /
+
+User-agent: Applebot-Extended
+Allow: /
+
+User-agent: Bytespider
+Allow: /
+
+User-agent: CCBot
+Allow: /
+
+User-agent: Yeti
+Allow: /
+
+User-agent: *
+Allow: /
+
+Sitemap: https://minjikim89.github.io/make-me-unicorn/sitemap.xml

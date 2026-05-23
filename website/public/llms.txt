@@ -1,0 +1,47 @@
+# Make Me Unicorn (MMU)
+
+> An open-source launch checklist and operating system for solo SaaS builders. Python CLI, Claude Code plugin, MCP server. 534+ checklist items across 15 categories organized into 6 launch gates.
+
+## What it is
+
+Make Me Unicorn (MMU) is a developer tool for solo founders shipping AI-generated SaaS code. Scans a codebase against a 534-item launch checklist, organizes results into 6 named gates (Problem Fit, Build Fit, Revenue Fit, Trust Fit, Growth Fit, Scale Fit), and shows progress as an evolving unicorn (Egg → Hatching → Foal → Young → Unicorn → Legendary).
+
+## Who it's for
+
+Solo SaaS founders using Claude Code, Cursor, or other AI agents. Indie hackers. Engineers running MCP-compatible agents. Teams of one.
+
+## Core commands
+
+- `mmu init` — initialize MMU in the project
+- `mmu scan` — full 534-item check
+- `mmu` — status dashboard with launch gates
+- `mmu next` — highest-priority missing item
+- `mmu validate <idea>` — startup idea check against HN + Reddit (Claude API, ~$0.05–$0.20)
+- `mmu mcp` — start MCP server (with [mcp] extra installed)
+
+## Distribution
+
+- PyPI: https://pypi.org/project/make-me-unicorn/
+- GitHub: https://github.com/minjikim89/make-me-unicorn
+- Homepage: https://minjikim89.github.io/make-me-unicorn/
+- License: MIT
+
+## Integrations
+
+- Claude Code plugin (skill)
+- MCP (Model Context Protocol) server
+- GitHub Actions guardrails workflow
+
+## Documentation
+
+- README (EN/KO/JA/ZH/ES): https://github.com/minjikim89/make-me-unicorn
+- FAQ: https://github.com/minjikim89/make-me-unicorn/blob/main/docs/faq.md
+- Glossary: https://github.com/minjikim89/make-me-unicorn/blob/main/docs/glossary.md
+- Use cases: https://github.com/minjikim89/make-me-unicorn/blob/main/docs/use-cases.md
+- Roadmap: https://github.com/minjikim89/make-me-unicorn/blob/main/ROADMAP.md
+- Discussions Q&A: https://github.com/minjikim89/make-me-unicorn/discussions
+- Wiki: https://github.com/minjikim89/make-me-unicorn/wiki
+
+## Citation
+
+See `CITATION.cff` at the repository root: https://github.com/minjikim89/make-me-unicorn/blob/main/CITATION.cff
