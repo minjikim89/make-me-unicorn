@@ -4,6 +4,10 @@ on:
   push:
     tags:
       - "v*"
+    branches:
+      - main
+    paths:
+      - ".github/release-request"
   workflow_dispatch:
     inputs:
       tag:
@@ -24,33 +28,56 @@ jobs:
         id: meta
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            echo "tag=${{ inputs.tag }}" >> "$GITHUB_OUTPUT"
-            echo "target=--target ${{ github.sha }}" >> "$GITHUB_OUTPUT"
+            TAG="${{ inputs.tag }}"
+            TARGET="--target ${{ github.sha }}"
+          elif [ "${{ github.ref }}" = "refs/heads/main" ]; then
+            # Triggered by a change to .github/release-request (environments
+            # where direct tag pushes are blocked).
+            TAG="$(tr -d '[:space:]' < .github/release-request)"
+            TARGET="--target ${{ github.sha }}"
           else
-            echo "tag=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
-            echo "target=" >> "$GITHUB_OUTPUT"
+            TAG="${GITHUB_REF_NAME}"
+            TARGET=""
+          fi
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+          echo "target=${TARGET}" >> "$GITHUB_OUTPUT"
+
+      - name: Skip if release already exists
+        id: existing
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view "${{ steps.meta.outputs.tag }}" --repo "${{ github.repository }}" >/dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Set up Python
+        if: steps.existing.outputs.exists == 'false'
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
       - name: Run tests
+        if: steps.existing.outputs.exists == 'false'
         run: |
           python -m pip install --upgrade pip
           pip install -e .[dev]
           python -m unittest discover -s tests -p "test_*.py"
 
       - name: Build distributions
+        if: steps.existing.outputs.exists == 'false'
         run: |
           pip install build
           python -m build
 
       - name: Build release notes from CHANGELOG
+        if: steps.existing.outputs.exists == 'false'
         run: python scripts/extract_changelog.py "${{ steps.meta.outputs.tag }}" > release-notes.md
 
       - name: Create GitHub Release
+        if: steps.existing.outputs.exists == 'false'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
