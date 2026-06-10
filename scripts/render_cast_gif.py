@@ -178,6 +178,9 @@ def main() -> int:
     cast_path, gif_path = Path(sys.argv[1]), Path(sys.argv[2])
     lines = [json.loads(line) for line in cast_path.read_text(encoding="utf-8").splitlines() if line.strip()]
     header, events = lines[0], [e for e in lines[1:] if e[1] == "o"]
+    if not events:
+        print(f"No output events in {cast_path}; nothing to render.", file=sys.stderr)
+        return 1
 
     term = Terminal(cols=header.get("width", 90), rows=header.get("height", 38))
     fonts = GlyphFonts()

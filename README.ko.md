@@ -356,7 +356,7 @@ pip install make-me-unicorn[validate]
 mmu validate "어린이를 위한 AI 튜터" --limit 30
 ```
 
-기본 모드는 **무료** — API 키 불필요, 유료 호출 없음. 공개 Reddit + HN Algolia 검색 + 로컬 VADER sentiment + 대문자 토큰 기반 경쟁자 추출. `reports/validate/<slug>.md`에 마크다운 리포트가 자동 저장됩니다.
+기본 모드는 **무료** — API 키 불필요, 유료 호출 없음. 공개 Reddit + HN Algolia 검색 + 로컬 VADER sentiment + 대문자 토큰 기반 경쟁자 추출. `reports/validate/<slug>-<hash>.md`에 마크다운 리포트가 자동 저장됩니다.
 
 스레드를 종합한 1페이지 검증 리포트가 필요하면:
 

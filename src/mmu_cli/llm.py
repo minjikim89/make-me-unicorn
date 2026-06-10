@@ -47,13 +47,21 @@ def get_api_key(root: Path | None = None) -> str:
     if root:
         cfg_path = root / ".mmu" / "config.toml"
         if cfg_path.is_file():
-            import tomllib
-
             try:
-                data = tomllib.loads(cfg_path.read_text(encoding="utf-8"))
-            except (OSError, tomllib.TOMLDecodeError) as exc:
-                print(f"  ⚠️  Could not read {cfg_path}: {exc}", file=sys.stderr)
-                data = {}
+                import tomllib
+            except ModuleNotFoundError:  # Python 3.10: tomllib landed in 3.11
+                try:
+                    import tomli as tomllib  # type: ignore[no-redef]
+                except ModuleNotFoundError:
+                    tomllib = None  # type: ignore[assignment]
+            data: dict[str, Any] = {}
+            if tomllib is None:
+                print(f"  ⚠️  Cannot parse {cfg_path}: install tomli on Python 3.10", file=sys.stderr)
+            else:
+                try:
+                    data = tomllib.loads(cfg_path.read_text(encoding="utf-8"))
+                except (OSError, tomllib.TOMLDecodeError) as exc:
+                    print(f"  ⚠️  Could not read {cfg_path}: {exc}", file=sys.stderr)
             llm_cfg = data.get("llm", {})
             if isinstance(llm_cfg, dict) and llm_cfg.get("api_key"):
                 return str(llm_cfg["api_key"])

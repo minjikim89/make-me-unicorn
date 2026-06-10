@@ -1660,11 +1660,10 @@ def command_validate(
     from mmu_cli.validators import (
         analyze_sentiment,
         extract_competitors,
+        fetch_threads,
         format_markdown,
         format_text,
         report_filename,
-        search_hn,
-        search_reddit,
     )
 
     if use_llm and not assume_yes:
@@ -1681,24 +1680,7 @@ def command_validate(
             print("Aborted.")
             return 1
 
-    hn_hits: list[dict[str, Any]] = []
-    reddit_hits: list[dict[str, Any]] = []
-    fetch_errors: list[str] = []
-    if limit > 0:
-        from concurrent.futures import ThreadPoolExecutor
-
-        with ThreadPoolExecutor(max_workers=2) as pool:
-            hn_future = pool.submit(search_hn, idea, limit=limit)
-            reddit_future = pool.submit(search_reddit, idea, limit=limit)
-            try:
-                hn_hits = hn_future.result()
-            except Exception as exc:
-                fetch_errors.append(f"HN fetch failed: {type(exc).__name__}: {exc}")
-            try:
-                reddit_hits = reddit_future.result()
-            except Exception as exc:
-                fetch_errors.append(f"Reddit fetch failed: {type(exc).__name__}: {exc}")
-    hits = hn_hits + reddit_hits
+    hits, fetch_errors = fetch_threads(idea, limit=limit)
 
     for err in fetch_errors:
         sys.stderr.write(f"  ⚠️  {err}\n")

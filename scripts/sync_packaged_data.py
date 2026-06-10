@@ -45,13 +45,13 @@ def canonical_files() -> list[Path]:
 def sync() -> int:
     if DATA_ROOT.is_dir():
         shutil.rmtree(DATA_ROOT)
-    for src in canonical_files():
+    files = canonical_files()
+    for src in files:
         rel = src.relative_to(REPO_ROOT)
         dst = DATA_ROOT / rel
         dst.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(src, dst)
-    count = len(canonical_files())
-    print(f"Synced {count} files into {DATA_ROOT.relative_to(REPO_ROOT)}")
+    print(f"Synced {len(files)} files into {DATA_ROOT.relative_to(REPO_ROOT)}")
     return 0
 
 

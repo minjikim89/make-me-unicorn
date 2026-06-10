@@ -86,6 +86,18 @@ def list_idea_templates(root: Path | None = None) -> list[dict[str, str]]:
     return [_summarize(p, repo) for p in _list_idea_template_files(repo)]
 
 
+def _missing_validate_extra() -> bool:
+    """The validators package imports lazily; check the [validate] extra's real
+    dependencies up front so a missing extra becomes one friendly payload
+    instead of an ImportError leaking out of a tool call."""
+    try:
+        import requests  # type: ignore[import-untyped] # noqa: F401
+        import vaderSentiment  # noqa: F401
+    except ImportError:
+        return True
+    return False
+
+
 def validate_idea(idea: str, limit: int = 20) -> dict:
     """Run the free validation pipeline (HN + Reddit search, local VADER sentiment).
 
@@ -93,15 +105,7 @@ def validate_idea(idea: str, limit: int = 20) -> dict:
     LLM synthesis stays CLI-only (`mmu validate --llm`) because it is a paid,
     interactive opt-in.
     """
-    try:
-        from mmu_cli.validators import (
-            analyze_sentiment,
-            extract_competitors,
-            search_hn,
-            search_reddit,
-        )
-        from mmu_cli.validators.report import verdict
-    except ImportError:
+    if _missing_validate_extra():
         return {
             "status": "unavailable",
             "idea": idea,
@@ -112,30 +116,10 @@ def validate_idea(idea: str, limit: int = 20) -> dict:
             ),
         }
 
-    from concurrent.futures import ThreadPoolExecutor
+    from mmu_cli.validators import analyze_sentiment, extract_competitors, fetch_threads
+    from mmu_cli.validators.report import verdict
 
-    hits: list[dict] = []
-    errors: list[str] = []
-    with ThreadPoolExecutor(max_workers=2) as pool:
-        futures = {
-            "HN": pool.submit(search_hn, idea, limit=limit),
-            "Reddit": pool.submit(search_reddit, idea, limit=limit),
-        }
-        for source, future in futures.items():
-            try:
-                hits.extend(future.result())
-            except ImportError:
-                return {
-                    "status": "unavailable",
-                    "idea": idea,
-                    "note": (
-                        "Idea validation needs the [validate] extra. "
-                        "Install with `pip install make-me-unicorn[validate]`."
-                    ),
-                }
-            except Exception as exc:
-                errors.append(f"{source} fetch failed: {type(exc).__name__}: {exc}")
-
+    hits, errors = fetch_threads(idea, limit=limit)
     if errors and not hits:
         return {"status": "error", "idea": idea, "errors": errors}
 

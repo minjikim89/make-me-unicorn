@@ -12,7 +12,7 @@ Checks that find no relevant surface (e.g. no webhook handlers) report SKIP.
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
 # Conservative secret signatures: prefixes that only appear in real
@@ -35,8 +35,10 @@ _RATE_LIMIT_MARKERS = [
 ]
 
 _CORS_WILDCARD_MARKERS = [
-    'access-control-allow-origin", "*"',
+    'access-control-allow-origin", "*"',  # header tuple form: ("...", "*")
+    'access-control-allow-origin": "*"',  # dict form: {"...": "*"}
     "access-control-allow-origin': '*'",
+    "access-control-allow-origin'] = '*'",
     'access-control-allow-origin: *',
     'allow_origins=["*"]',
     "allow_origins=['*']",
@@ -71,21 +73,21 @@ class Finding:
     files: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict:
-        return {
-            "check": self.check,
-            "severity": self.severity,
-            "status": self.status,
-            "message": self.message,
-            "hint": self.hint,
-            "files": self.files,
-        }
+        return asdict(self)
+
+
+# Per-run content cache: several checks scan the same files; one read each.
+# Cleared at the start of run_vibecheck so long-lived processes stay fresh.
+_READ_CACHE: dict[Path, str] = {}
 
 
 def _read(path: Path) -> str:
-    try:
-        return path.read_bytes()[:2_000_000].decode("utf-8", errors="ignore")
-    except OSError:
-        return ""
+    if path not in _READ_CACHE:
+        try:
+            _READ_CACHE[path] = path.read_bytes()[:2_000_000].decode("utf-8", errors="ignore")
+        except OSError:
+            _READ_CACHE[path] = ""
+    return _READ_CACHE[path]
 
 
 def _rel(path: Path, root: Path) -> str:
@@ -98,9 +100,8 @@ def _rel(path: Path, root: Path) -> str:
 def check_secrets(root: Path, code_files: list[Path]) -> Finding:
     offenders: list[str] = []
     details: list[str] = []
-    scan_files = list(code_files)
     env_file = root / ".env"
-    for path in scan_files:
+    for path in code_files:
         text = _read(path)
         if not text:
             continue
@@ -187,12 +188,12 @@ def check_password_reset(root: Path, code_files: list[Path]) -> Finding:
 
 
 def check_rate_limiting(root: Path, code_files: list[Path]) -> Finding:
+    from mmu_cli.cli import detect_nextjs
+
     corpus_paths = code_files[:400]
-    server_detected = any(
-        (root / name).exists() for name in ("next.config.js", "next.config.mjs", "next.config.ts")
-    )
+    server_detected = detect_nextjs(root)
     pkg = _read(root / "package.json") + _read(root / "requirements.txt") + _read(root / "pyproject.toml")
-    if '"next"' in pkg or any(h in pkg.lower() for h in _SERVER_HINTS):
+    if any(h in pkg.lower() for h in _SERVER_HINTS):
         server_detected = True
     has_marker = False
     for path in corpus_paths:
@@ -291,6 +292,7 @@ def check_error_monitoring(root: Path, code_files: list[Path]) -> Finding:
 def run_vibecheck(root: Path) -> list[Finding]:
     from mmu_cli.cli import doctor_skip_paths, gather_code_files
 
+    _READ_CACHE.clear()
     skip_paths = doctor_skip_paths(root)
     code_files = gather_code_files(root, skip_paths)
 

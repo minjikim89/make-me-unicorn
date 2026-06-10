@@ -356,7 +356,7 @@ pip install make-me-unicorn[validate]
 mmu validate "tutor de IA para niños" --limit 30
 ```
 
-El modo por defecto es **gratis** — sin API key, sin llamadas de pago. Búsqueda pública en Reddit + HN Algolia, análisis de sentimiento VADER local, extracción de competidores por tokens en mayúscula. Guarda un reporte markdown en `reports/validate/<slug>.md`.
+El modo por defecto es **gratis** — sin API key, sin llamadas de pago. Búsqueda pública en Reddit + HN Algolia, análisis de sentimiento VADER local, extracción de competidores por tokens en mayúscula. Guarda un reporte markdown en `reports/validate/<slug>-<hash>.md`.
 
 Para un veredicto de validación de una página sintetizado a partir de los hilos:
 

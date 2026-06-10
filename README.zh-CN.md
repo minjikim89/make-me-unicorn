@@ -356,7 +356,7 @@ pip install make-me-unicorn[validate]
 mmu validate "面向儿童的 AI 家教" --limit 30
 ```
 
-默认模式**免费** — 无需 API key，不会发生付费调用。公共 Reddit + HN Algolia 搜索 + 本地 VADER 情感分析 + 基于大写词的竞品识别。结果会自动保存为 `reports/validate/<slug>.md`。
+默认模式**免费** — 无需 API key，不会发生付费调用。公共 Reddit + HN Algolia 搜索 + 本地 VADER 情感分析 + 基于大写词的竞品识别。结果会自动保存为 `reports/validate/<slug>-<hash>.md`。
 
 如需基于线程综合的一页式验证结论：
 

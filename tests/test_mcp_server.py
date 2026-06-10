@@ -53,6 +53,7 @@ class MCPDataLayerTests(unittest.TestCase):
             return [{"source": "reddit", "title": "Bad idea", "url": "https://r.example", "text": "hate it"}]
 
         with (
+            mock.patch("mmu_cli.mcp_server._missing_validate_extra", return_value=False),
             mock.patch("mmu_cli.validators.search_hn", fake_search_hn),
             mock.patch("mmu_cli.validators.search_reddit", fake_search_reddit),
             mock.patch(
@@ -77,6 +78,7 @@ class MCPDataLayerTests(unittest.TestCase):
             raise RuntimeError("network down")
 
         with (
+            mock.patch("mmu_cli.mcp_server._missing_validate_extra", return_value=False),
             mock.patch("mmu_cli.validators.search_hn", boom),
             mock.patch("mmu_cli.validators.search_reddit", boom),
         ):
@@ -84,6 +86,12 @@ class MCPDataLayerTests(unittest.TestCase):
 
         self.assertEqual(result["status"], "error")
         self.assertEqual(len(result["errors"]), 2)
+
+    def test_validate_idea_unavailable_without_extra(self):
+        with mock.patch("mmu_cli.mcp_server._missing_validate_extra", return_value=True):
+            result = mcp_server.validate_idea("AI tutor for kids")
+        self.assertEqual(result["status"], "unavailable")
+        self.assertIn("[validate]", result["note"])
 
     def test_resolve_repo_root_raises_when_explicit_root_invalid(self):
         with self.assertRaises(FileNotFoundError) as ctx:

@@ -23,9 +23,11 @@ def report_filename(idea: str) -> str:
 
     The hash suffix keeps repeat runs of the *same* idea writing to the same
     file, while ideas that collide after slug truncation ("AI tutor for kids
-    in California" vs "... in Texas") get distinct reports.
+    in California" vs "... in Texas") get distinct reports. Whitespace and
+    case are normalized first so trivial rephrasings reuse one report.
     """
-    digest = hashlib.sha256(idea.encode("utf-8")).hexdigest()[:8]
+    normalized = " ".join(idea.split()).lower()
+    digest = hashlib.sha256(normalized.encode("utf-8")).hexdigest()[:8]
     return f"{slugify(idea)}-{digest}.md"
 
 

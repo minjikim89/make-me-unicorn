@@ -356,7 +356,7 @@ pip install make-me-unicorn[validate]
 mmu validate "子ども向け AI チューター" --limit 30
 ```
 
-デフォルトモードは**無料** — API キー不要、有料呼び出しなし。公開 Reddit + HN Algolia 検索 + ローカル VADER 感情分析 + 大文字トークンによる競合抽出。`reports/validate/<slug>.md` にマークダウンレポートが自動保存されます。
+デフォルトモードは**無料** — API キー不要、有料呼び出しなし。公開 Reddit + HN Algolia 検索 + ローカル VADER 感情分析 + 大文字トークンによる競合抽出。`reports/validate/<slug>-<hash>.md` にマークダウンレポートが自動保存されます。
 
 スレッドを統合した 1 ページ検証レポートが欲しい場合:
 

@@ -298,7 +298,7 @@ pip install make-me-unicorn[validate]
 mmu validate "AI tutor for kids" --limit 30
 ```
 
-Default mode is **free** — no API keys, no paid calls. Public Reddit + HN Algolia search, local VADER sentiment, capitalized-token competitor surface. Saves a markdown report to `reports/validate/<slug>.md`.
+Default mode is **free** — no API keys, no paid calls. Public Reddit + HN Algolia search, local VADER sentiment, capitalized-token competitor surface. Saves a markdown report to `reports/validate/<slug>-<hash>.md`.
 
 For a 1-page validation verdict synthesized from the threads:
 

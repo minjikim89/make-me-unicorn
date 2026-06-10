@@ -18,9 +18,9 @@ __pycache__/
 build/
 dist/
 
-# Snapshot outputs (local diagnostics)
+# Snapshot outputs (local diagnostics) + validate reports
 SNAPSHOT*.md
-reports/*.md
+reports/**/*.md
 docs/local/
 
 # Website build artifacts
