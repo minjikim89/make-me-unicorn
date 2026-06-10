@@ -1,6 +1,6 @@
 {
   "name": "make-me-unicorn",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "description": "Open-source launch checklist and operating system for solo SaaS builders. Provides startup blueprints, validation prompts, and launch templates to Claude.",
   "author": {
     "name": "Make Me Unicorn Contributors",

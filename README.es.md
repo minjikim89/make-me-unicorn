@@ -50,7 +50,7 @@ MMU atrapa estos problemas **antes de que te cuesten usuarios, dinero o confianz
 ## Cómo Funciona
 
 ```
-mmu init                    # 1. Obtén más de 534 elementos de checklist en 15 categorías
+mmu init                    # 1. Obtén más de 670 elementos de checklist en 15 categorías
 mmu scan                    # 2. Detecta tu stack automáticamente y marca lo que ya tienes
 mmu                         # 3. Ve qué está hecho y qué falta
 mmu status --why            # 4. Entiende tu puntuación — qué cuenta y qué se omite
@@ -160,7 +160,29 @@ Tu puntuación refleja **solo lo que aplica a tu proyecto**.
 </tr>
 </table>
 
-**534+ elementos. 15 categorías. Cero improvisación.**
+**670+ elementos. 15 categorías. Cero improvisación.**
+
+## ¿En Qué Se Diferencia MMU?
+
+| | Alcance | Dónde vive | Nativo para agentes | Seguimiento de progreso |
+|---|---|---|---|---|
+| **MMU** | SaaS completo: código + facturación + legal + growth + operaciones | Markdown en tu repo | ✅ Plugin de Claude + servidor MCP | ✅ Puntuación, gates, dashboard que evoluciona |
+| Lighthouse | Solo rendimiento/a11y/SEO de frontend | Navegador/CI | ❌ | Puntuación por ejecución, sin memoria del proyecto |
+| Checklists de vendors (docs de Vercel, Stripe) | Solo el área de ese vendor | Su sitio de docs | ❌ | ❌ Solo lectura |
+| Repos de checklists estáticos / plantillas de Notion | A menudo no verificable | Copiar y pegar | ❌ | ❌ Manual, se queda obsoleto |
+| Revisores de código con IA (CodeRabbit, etc.) | Diffs de código | Flujo de PR | Parcialmente | Solo por PR, sin visión de lanzamiento |
+
+MMU no es un linter ni un sitio de documentación: es la **capa operativa entre tus sesiones de AI coding y un lanzamiento real**: tu CLI, tu CI y tus agentes de IA leen y actualizan la misma checklist.
+
+## Vibe Check Para Tu Código Generado Por IA
+
+El 45% del código generado por IA se publica con vulnerabilidades. Un comando escanea lo que los asistentes de IA más olvidan:
+
+```bash
+mmu vibecheck
+```
+
+Comprueba: secretos hardcodeados · `.env` sin gitignore · verificación de firma + idempotencia de webhooks · flujo de password reset · SQL con f-strings · rate limiting · CORS comodín · `DEBUG = True` · monitoreo de errores. Los hallazgos P0 salen con código distinto de cero, listo para CI.
 
 ## Para Quién Es
 
@@ -323,7 +345,7 @@ Herramientas expuestas:
 - `mmu_list_blueprints` — lista 17 blueprints (15 core + 2 de industria)
 - `mmu_get_blueprint(name)` — obtiene el markdown completo de un blueprint
 - `mmu_list_idea_templates` — lista los prompts start/close/ADR + el kit de Product Hunt
-- `mmu_validate_idea(idea)` — stub; el validador real vive en `mmu validate`
+- `mmu_validate_idea(idea)` — valida contra hilos reales de HN + Reddit: veredicto, sentimiento, competidores, hilos principales (modo gratuito, sin claves API; requiere el extra `[validate]`)
 
 ## Validar una Idea
 
@@ -393,7 +415,7 @@ make-me-unicorn/
 ├── docs/
 │   ├── core/              # Strategy, Product, Pricing, Architecture, UX
 │   ├── ops/               # Roadmap, Metrics, Compliance, Reliability
-│   ├── blueprints/        # 15 category checklists (534+ items)
+│   ├── blueprints/        # 15 category checklists (670+ items)
 │   ├── checklists/        # M0–M5 launch gates
 │   └── adr/               # Decision log templates
 ├── prompts/               # Session start/close/ADR templates

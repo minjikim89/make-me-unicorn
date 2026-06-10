@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "make-me-unicorn"
-version = "0.6.3"
+version = "0.7.0"
 description = "Stop building blind. The open-source launch checklist and operating system for solo SaaS builders."
 readme = "README.md"
 requires-python = ">=3.10"
@@ -64,6 +64,12 @@ package-dir = {"" = "src"}
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+# Bundled content (blueprints, prompts, launch kit, filled example) so the
+# CLI and MCP server work from a plain `pip install` without a repo clone.
+# Kept in sync by scripts/sync_packaged_data.py (CI runs it with --check).
+mmu_cli = ["data/**/*.md"]
 
 [tool.ruff]
 line-length = 120

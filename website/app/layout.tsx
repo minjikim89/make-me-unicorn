@@ -7,7 +7,7 @@ const SITE_URL =
 export const metadata: Metadata = {
   title: "Make Me Unicorn — SaaS Launch Readiness Checklist",
   description:
-    "534+ checklist items across 15 categories. Catch what AI-generated code misses before it costs you users, money, or trust.",
+    "670+ checklist items across 15 categories. Catch what AI-generated code misses before it costs you users, money, or trust.",
   openGraph: {
     title: "Make Me Unicorn",
     description: "The open-source launch checklist for solo SaaS builders.",
@@ -20,7 +20,7 @@ export const metadata: Metadata = {
   twitter: {
     card: "summary_large_image",
     title: "Make Me Unicorn",
-    description: "534+ SaaS launch checklist items. Stop building blind.",
+    description: "670+ SaaS launch checklist items. Stop building blind.",
   },
 };
 

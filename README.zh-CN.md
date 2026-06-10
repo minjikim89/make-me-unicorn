@@ -50,7 +50,7 @@ MMU 在这些问题**让你损失用户、金钱或信任之前**就帮你拦住
 ## 工作原理
 
 ```
-mmu init                    # 1. 获取 15 个类别、534+ 检查项
+mmu init                    # 1. 获取 15 个类别、670+ 检查项
 mmu scan                    # 2. 自动检测你的技术栈，并自动勾选已完成项
 mmu                         # 3. 一眼看到哪些做了、哪些没做
 mmu status --why            # 4. 查看评分明细——哪些被计入、哪些被跳过
@@ -160,7 +160,29 @@ targets_korea = true
 </tr>
 </table>
 
-**534+ 检查项。15 个类别。零猜测。**
+**670+ 检查项。15 个类别。零猜测。**
+
+## MMU 有什么不同？
+
+| | 范围 | 所在位置 | 智能体原生 | 进度跟踪 |
+|---|---|---|---|---|
+| **MMU** | 完整 SaaS：代码 + 计费 + 法务 + 增长 + 运维 | 你仓库里的 markdown | ✅ Claude 插件 + MCP 服务器 | ✅ 分数、关卡、不断进化的仪表盘 |
+| Lighthouse | 仅前端性能/无障碍/SEO | 浏览器/CI | ❌ | 仅单次运行分数，无项目记忆 |
+| 厂商发布清单（Vercel、Stripe 文档） | 仅该厂商的领域 | 厂商文档站 | ❌ | ❌ 只读 |
+| 静态清单仓库 / Notion 模板 | 多数无法验证 | 复制粘贴 | ❌ | ❌ 手动维护，容易过时 |
+| AI 代码审查工具（CodeRabbit 等） | 代码 diff | PR 工作流 | 部分支持 | 仅 PR 维度，无发布视角 |
+
+MMU 不是 linter，也不是文档站 —— 它是 **AI 编码会话与真正发布之间的运营层**：CLI、CI 和 AI 智能体读取并更新同一份清单。
+
+## 给 AI 生成的代码做个 Vibe Check
+
+45% 的 AI 生成代码带着漏洞上线。一条命令扫描 AI 助手最常遗漏的问题：
+
+```bash
+mmu vibecheck
+```
+
+检查项：硬编码密钥 · 未被 gitignore 的 `.env` · Webhook 签名验证 + 幂等性 · 密码重置流程 · f-string SQL · 限流 · 通配符 CORS · `DEBUG = True` · 错误监控。发现 P0 问题时以非零状态退出，可直接接入 CI。
 
 ## 适用人群
 
@@ -323,7 +345,7 @@ Claude Desktop 配置（`~/Library/Application Support/Claude/claude_desktop_con
 - `mmu_list_blueprints` — 列出 17 个蓝图（15 个核心 + 2 个行业）
 - `mmu_get_blueprint(name)` — 获取单个蓝图的完整 markdown
 - `mmu_list_idea_templates` — 列出 start/close/ADR 提示词 + Product Hunt 工具包
-- `mmu_validate_idea(idea)` — 占位函数；真正的验证在 `mmu validate` 命令中
+- `mmu_validate_idea(idea)` — 基于真实 HN + Reddit 帖子的验证：结论、情感分析、竞品、热门帖子（免费模式，无需 API 密钥；需要 `[validate]` extra）
 
 ## 验证你的想法
 
@@ -393,7 +415,7 @@ make-me-unicorn/
 ├── docs/
 │   ├── core/              # Strategy, Product, Pricing, Architecture, UX
 │   ├── ops/               # Roadmap, Metrics, Compliance, Reliability
-│   ├── blueprints/        # 15 category checklists (534+ items)
+│   ├── blueprints/        # 15 category checklists (670+ items)
 │   ├── checklists/        # M0–M5 launch gates
 │   └── adr/               # Decision log templates
 ├── prompts/               # Session start/close/ADR templates

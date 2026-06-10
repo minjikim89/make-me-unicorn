@@ -4,7 +4,7 @@ Common questions about Make Me Unicorn (MMU) — what it is, who it's for, how i
 
 ## What is Make Me Unicorn?
 
-Make Me Unicorn (MMU) is an open-source launch checklist and operating system for solo SaaS builders. It's a Python CLI (`pip install make-me-unicorn`) that scans a codebase against a 534-item checklist across 15 categories — frontend, auth, billing, security, SEO, legal, observability, deployment, growth, monitoring, and more — organized into 6 named launch gates (Problem Fit, Build Fit, Revenue Fit, Trust Fit, Growth Fit, Scale Fit). It also runs as a Claude Code plugin and as a Model Context Protocol (MCP) server.
+Make Me Unicorn (MMU) is an open-source launch checklist and operating system for solo SaaS builders. It's a Python CLI (`pip install make-me-unicorn`) that scans a codebase against a 670-item checklist across 15 categories — frontend, auth, billing, security, SEO, legal, observability, deployment, growth, monitoring, and more — organized into 6 named launch gates (Problem Fit, Build Fit, Revenue Fit, Trust Fit, Growth Fit, Scale Fit). It also runs as a Claude Code plugin and as a Model Context Protocol (MCP) server.
 
 ## Who is MMU for?
 
@@ -22,7 +22,7 @@ Yes. MMU ships as a Claude Code plugin (skill). Inside a Claude Code session, th
 
 Yes. MMU includes a built-in MCP server (`mmu mcp`). Any MCP-compatible agent (Claude, ChatGPT desktop, custom agents) can call MMU's checklist and validation tools. Install the optional MCP dependencies with `pip install make-me-unicorn[mcp]`.
 
-## What's in the 534 checklist items?
+## What's in the 670 checklist items?
 
 The checklist covers 15 categories: Frontend (responsive layout, form validation, loading states, error pages), Auth (password reset, session expiry, OAuth callbacks, rate limiting, email verification), Billing (webhook signature verification, idempotency keys, refund policy, subscription lifecycle, failed payment retries), Security (CORS, API rate limiting, secrets handling, SQL injection prevention, HTTPS), SEO & Growth (OG tags, sitemap, robots.txt, Search Console, social preview), Legal (privacy policy, ToS, cookie consent, data deletion, contact info), Observability, Deployment, Monitoring, Performance, Accessibility, Internationalization, Testing, CI/CD, and Documentation.
 

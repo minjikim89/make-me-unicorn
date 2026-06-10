@@ -40,7 +40,7 @@ A six-stage visual indicator of overall progress: Egg (0–10%), Hatching (11–
 
 ## Checklist Item
 
-A single, atomic verification step. MMU ships 534+ items across 15 categories. Each item has a category, a launch-gate assignment, a status (pending / in-progress / done / skipped), and a short description.
+A single, atomic verification step. MMU ships 670+ items across 15 categories. Each item has a category, a launch-gate assignment, a status (pending / in-progress / done / skipped), and a short description.
 
 ## Category
 

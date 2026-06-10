@@ -1,4 +1,4 @@
-# MMU CLI Spec (v0.5)
+# MMU CLI Spec (v0.7)
 
 This document defines the current runtime behavior for `Make Me Unicorn`.
 
@@ -18,6 +18,7 @@ This document defines the current runtime behavior for `Make Me Unicorn`.
 | `mmu snapshot --target <path>` | Run project diagnostic snapshot | terminal summary + optional markdown report | `0` success |
 | `mmu close` | End a session safely | close checklist and update reminders | `0` success |
 | `mmu doctor` | Validate operating baseline | pass/fail report for docs and codebase guardrails | `0` pass, `2` fail |
+| `mmu vibecheck` | Scan for AI-generated code blind spots | per-check findings with severity and hints | `0` pass/warn-only, `2` P0 fail |
 | `mmu gate --stage <M#>` | Stage-gate readiness check | pass/fail for unresolved checklist items | `0` pass, `3` fail |
 | `mmu badge` | Generate README badge (markdown/svg/html) | badge snippet | `0` success |
 | `mmu share` | Generate shareable score card | plain-text card with CTA | `0` success |
@@ -107,6 +108,24 @@ Config override:
 
 - `.mmu/config.toml`
 - `[doctor] skip_paths = ["path/to/skip", "another/path"]`
+
+## Vibecheck checks
+
+Heuristic, read-only scan of project source files (respects `[doctor] skip_paths`):
+
+| Check | Severity | Fires when |
+|---|---|---|
+| `secrets` | P0 | known credential signatures in code (Stripe/Anthropic/OpenAI/AWS/GitHub/Slack/private keys), or `.env` exists without a `.gitignore` entry |
+| `webhook-signature` | P0 | webhook handler files without signature-verification markers |
+| `webhook-idempotency` | P0 | webhook handler files without idempotency markers |
+| `password-reset` | P0 | auth-related files without password-reset markers |
+| `sql-fstring` | P0 | Python f-string SQL queries (`f"SELECT ..."`) |
+| `rate-limiting` | P1 | server framework detected without rate-limiting markers |
+| `cors-wildcard` | P1 | wildcard CORS origin configuration |
+| `debug-mode` | P1 | hardcoded `DEBUG = True` in Python files |
+| `error-monitoring` | P1 | no error-monitoring dependency or markers (Sentry etc.) |
+
+Checks with no relevant surface (e.g. no webhook handlers) report `skip`, not `fail`.
 
 ## Gate behavior
 

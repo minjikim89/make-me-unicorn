@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 REDDIT_SEARCH_URL = "https://www.reddit.com/search.json"
-USER_AGENT = "make-me-unicorn-validator/0.6 (+https://github.com/minjikim89/make-me-unicorn)"
+USER_AGENT = "make-me-unicorn-validator/0.7 (+https://github.com/minjikim89/make-me-unicorn)"
 
 
 def parse_listing(payload: dict[str, Any]) -> list[dict[str, Any]]:

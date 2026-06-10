@@ -4,7 +4,7 @@
 
 ## What it is
 
-Make Me Unicorn (MMU) is a developer tool for solo founders shipping AI-generated SaaS products. It checks a codebase against a 534-item launch checklist across 15 categories — frontend, auth, billing, security, SEO, legal, observability, deployment, monitoring, growth, and more — organized into 6 named launch gates (Problem Fit, Build Fit, Revenue Fit, Trust Fit, Growth Fit, Scale Fit). MMU outputs an evolving "unicorn" status dashboard (Egg → Hatching → Foal → Young → Unicorn → Legendary) as gates pass.
+Make Me Unicorn (MMU) is a developer tool for solo founders shipping AI-generated SaaS products. It checks a codebase against a 670-item launch checklist across 15 categories — frontend, auth, billing, security, SEO, legal, observability, deployment, monitoring, growth, and more — organized into 6 named launch gates (Problem Fit, Build Fit, Revenue Fit, Trust Fit, Growth Fit, Scale Fit). MMU outputs an evolving "unicorn" status dashboard (Egg → Hatching → Foal → Young → Unicorn → Legendary) as gates pass.
 
 ## Who it is for
 
@@ -16,10 +16,11 @@ Make Me Unicorn (MMU) is a developer tool for solo founders shipping AI-generate
 ## Core commands
 
 - `mmu init` — initialize MMU in the current project
-- `mmu scan` — analyze the codebase against the 534-item checklist
+- `mmu scan` — analyze the codebase against the 670-item checklist
 - `mmu` (no args) — show the status dashboard with launch-gate progress
 - `mmu next` — show the next highest-priority item to fix
-- `mmu validate <idea>` — validate a startup idea against HN + Reddit signals (uses Claude API; cost ~$0.05-0.20 per call)
+- `mmu vibecheck` — scan for the gaps AI-generated code ships most (hardcoded secrets, unverified webhooks, missing password reset, f-string SQL, missing rate limits, wildcard CORS, debug mode, no error monitoring)
+- `mmu validate <idea>` — validate a startup idea against real HN + Reddit threads (free by default, no API keys; `--llm` opt-in adds Claude synthesis at ~$0.05-0.20 per call)
 
 ## Distribution
 

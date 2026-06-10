@@ -1,10 +1,10 @@
 # Make Me Unicorn (MMU)
 
-> An open-source launch checklist and operating system for solo SaaS builders. Python CLI, Claude Code plugin, MCP server. 534+ checklist items across 15 categories organized into 6 launch gates.
+> An open-source launch checklist and operating system for solo SaaS builders. Python CLI, Claude Code plugin, MCP server. 670+ checklist items across 15 categories organized into 6 launch gates.
 
 ## What it is
 
-Make Me Unicorn (MMU) is a developer tool for solo founders shipping AI-generated SaaS code. Scans a codebase against a 534-item launch checklist, organizes results into 6 named gates (Problem Fit, Build Fit, Revenue Fit, Trust Fit, Growth Fit, Scale Fit), and shows progress as an evolving unicorn (Egg → Hatching → Foal → Young → Unicorn → Legendary).
+Make Me Unicorn (MMU) is a developer tool for solo founders shipping AI-generated SaaS code. Scans a codebase against a 670-item launch checklist, organizes results into 6 named gates (Problem Fit, Build Fit, Revenue Fit, Trust Fit, Growth Fit, Scale Fit), and shows progress as an evolving unicorn (Egg → Hatching → Foal → Young → Unicorn → Legendary).
 
 ## Who it's for
 
@@ -13,11 +13,12 @@ Solo SaaS founders using Claude Code, Cursor, or other AI agents. Indie hackers.
 ## Core commands
 
 - `mmu init` — initialize MMU in the project
-- `mmu scan` — full 534-item check
+- `mmu scan` — full 670-item check
 - `mmu` — status dashboard with launch gates
 - `mmu next` — highest-priority missing item
-- `mmu validate <idea>` — startup idea check against HN + Reddit (Claude API, ~$0.05–$0.20)
-- `mmu mcp` — start MCP server (with [mcp] extra installed)
+- `mmu vibecheck` — scan for AI-generated code blind spots (secrets, webhook safety, rate limits, ...)
+- `mmu validate <idea>` — startup idea check against real HN + Reddit threads (free by default; `--llm` adds Claude synthesis, ~$0.05–$0.20)
+- `mmu serve-mcp` — start MCP server (with [mcp] extra installed)
 
 ## Distribution
 

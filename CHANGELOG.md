@@ -6,6 +6,30 @@ The format is inspired by Keep a Changelog and follows semantic intent.
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-06-10
+
+### Added
+
+- **`mmu vibecheck`** — one-command scan for the gaps AI-generated code ships most: hardcoded secrets (Stripe/Anthropic/OpenAI/AWS/GitHub/Slack key signatures, unignored `.env`), webhook signature verification + idempotency, missing password-reset flow, f-string SQL, missing rate limiting, wildcard CORS, `DEBUG = True`, and absent error monitoring. P0 findings exit non-zero so it drops straight into CI. 14 new unit tests.
+- **Blueprints, prompts, launch kit, and the TaskNote example are now bundled in the wheel** (`mmu_cli/data/`, kept in sync by `scripts/sync_packaged_data.py`; CI verifies with `--check`). `pip install make-me-unicorn` now gives a complete experience without a repo clone — previously `mmu init` silently skipped copying blueprints and `mmu serve-mcp` failed outright.
+- **`mmu_validate_idea` MCP tool is now wired to the real validator** (was a stub). Agents get verdict, sentiment, candidate competitors, and top threads from live HN + Reddit search — free mode only; `--llm` synthesis stays CLI-only because it is a paid opt-in.
+- `server.json` metadata for the official MCP Registry.
+- Comparison table ("How is MMU different?") and hero/demo media in the English README; all five READMEs synced.
+
+### Changed
+
+- **Validate reports no longer overwrite each other.** Reports are saved as `<slug>-<hash8>.md`, so repeat runs of the same idea reuse one file while distinct ideas that collide after slug truncation get distinct reports.
+- HN + Reddit searches in `mmu validate` (and the MCP tool) run in parallel — roughly halves fetch latency.
+- VADER verdict threshold (±0.2) is now a documented constant (`VERDICT_THRESHOLD`) with boundary tests; `verdict()` is public API.
+- Competitor extraction stopwords expanded with ~80 common sentence-starters ("All", "Please", "Thanks", ...) that previously surfaced as fake competitor names.
+- Checklist item counts corrected across all docs: 534+ → 670+ (574 core + 97 industry, verified by count).
+
+### Fixed
+
+- `LLMClient.complete()` now maps Anthropic API failures (auth, rate limit, connection, API errors) to friendly stderr messages and exit code 1 instead of raw tracebacks.
+- Invalid `--root` paths fail fast with one clear error before any command logic runs.
+- Corrupt `.mmu/config.toml` files now print a warning naming the file and the parse error instead of being silently ignored.
+
 ## [0.6.3] - 2026-05-08
 
 ### Fixed

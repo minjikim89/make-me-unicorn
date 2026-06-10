@@ -1,6 +1,7 @@
 import sys
 import unittest
 from pathlib import Path
+from unittest import mock
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT / "src"))
@@ -40,11 +41,49 @@ class MCPDataLayerTests(unittest.TestCase):
         self.assertIn("close", names)
         self.assertIn("product-hunt", names)
 
-    def test_validate_idea_stub(self):
-        result = mcp_server.validate_idea("AI tutor for kids")
-        self.assertEqual(result["status"], "stub")
+    def test_validate_idea_runs_real_pipeline(self):
+        calls = {}
+
+        def fake_search_hn(query, limit=20):
+            calls["hn"] = (query, limit)
+            return [{"source": "hn", "title": "Great idea", "url": "https://hn.example", "text": "love it"}]
+
+        def fake_search_reddit(query, limit=20):
+            calls["reddit"] = (query, limit)
+            return [{"source": "reddit", "title": "Bad idea", "url": "https://r.example", "text": "hate it"}]
+
+        with (
+            mock.patch("mmu_cli.validators.search_hn", fake_search_hn),
+            mock.patch("mmu_cli.validators.search_reddit", fake_search_reddit),
+            mock.patch(
+                "mmu_cli.validators.analyze_sentiment",
+                return_value={"compound": 0.5, "count": 2, "pos": 0.5, "neg": 0.1, "neu": 0.4},
+            ),
+            mock.patch("mmu_cli.validators.extract_competitors", return_value=[("Notion", 3)]),
+        ):
+            result = mcp_server.validate_idea("AI tutor for kids", limit=7)
+
+        self.assertEqual(result["status"], "ok")
         self.assertEqual(result["idea"], "AI tutor for kids")
-        self.assertIn("mmu validate", result["note"])
+        self.assertEqual(result["threads_found"], 2)
+        self.assertEqual(result["verdict"], "POSITIVE LEAN")
+        self.assertEqual(result["competitors"], [{"name": "Notion", "mentions": 3}])
+        self.assertEqual(calls["hn"], ("AI tutor for kids", 7))
+        self.assertEqual(calls["reddit"], ("AI tutor for kids", 7))
+        self.assertEqual(len(result["top_threads"]), 2)
+
+    def test_validate_idea_reports_error_when_both_sources_fail(self):
+        def boom(query, limit=20):
+            raise RuntimeError("network down")
+
+        with (
+            mock.patch("mmu_cli.validators.search_hn", boom),
+            mock.patch("mmu_cli.validators.search_reddit", boom),
+        ):
+            result = mcp_server.validate_idea("AI tutor for kids")
+
+        self.assertEqual(result["status"], "error")
+        self.assertEqual(len(result["errors"]), 2)
 
     def test_resolve_repo_root_raises_when_explicit_root_invalid(self):
         with self.assertRaises(FileNotFoundError) as ctx:

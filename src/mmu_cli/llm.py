@@ -47,15 +47,16 @@ def get_api_key(root: Path | None = None) -> str:
     if root:
         cfg_path = root / ".mmu" / "config.toml"
         if cfg_path.is_file():
-            try:
-                import tomllib
+            import tomllib
 
+            try:
                 data = tomllib.loads(cfg_path.read_text(encoding="utf-8"))
-                llm_cfg = data.get("llm", {})
-                if isinstance(llm_cfg, dict) and llm_cfg.get("api_key"):
-                    return str(llm_cfg["api_key"])
-            except Exception:
-                pass
+            except (OSError, tomllib.TOMLDecodeError) as exc:
+                print(f"  ⚠️  Could not read {cfg_path}: {exc}", file=sys.stderr)
+                data = {}
+            llm_cfg = data.get("llm", {})
+            if isinstance(llm_cfg, dict) and llm_cfg.get("api_key"):
+                return str(llm_cfg["api_key"])
 
     print(
         "\n  No API key found.\n"
@@ -92,13 +93,37 @@ class LLMClient:
         temperature: float = 0.3,
     ) -> str:
         """Send a completion request and return the text response."""
-        response = self.client.messages.create(
-            model=self.model,
-            max_tokens=max_tokens,
-            system=system,
-            messages=[{"role": "user", "content": user}],
-            temperature=temperature,
-        )
+        try:
+            response = self.client.messages.create(
+                model=self.model,
+                max_tokens=max_tokens,
+                system=system,
+                messages=[{"role": "user", "content": user}],
+                temperature=temperature,
+            )
+        except anthropic.AuthenticationError:  # type: ignore[union-attr]
+            print(
+                "\n  Anthropic API rejected the key. Check MMU_ANTHROPIC_API_KEY / "
+                "ANTHROPIC_API_KEY (or [llm] api_key in .mmu/config.toml).\n",
+                file=sys.stderr,
+            )
+            raise SystemExit(1) from None
+        except anthropic.RateLimitError:  # type: ignore[union-attr]
+            print(
+                "\n  Anthropic API rate limit hit. Wait a minute and retry.\n",
+                file=sys.stderr,
+            )
+            raise SystemExit(1) from None
+        except anthropic.APIConnectionError as exc:  # type: ignore[union-attr]
+            print(
+                f"\n  Could not reach the Anthropic API: {exc}. "
+                "Check your network connection and retry.\n",
+                file=sys.stderr,
+            )
+            raise SystemExit(1) from None
+        except anthropic.APIError as exc:  # type: ignore[union-attr]
+            print(f"\n  Anthropic API error: {exc}\n", file=sys.stderr)
+            raise SystemExit(1) from None
         usage = {
             "input_tokens": response.usage.input_tokens,
             "output_tokens": response.usage.output_tokens,

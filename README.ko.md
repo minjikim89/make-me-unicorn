@@ -50,7 +50,7 @@ MMU는 이런 문제를 **사용자, 매출, 신뢰를 잃기 전에** 잡아냅
 ## 작동 방식
 
 ```
-mmu init                    # 1. 15개 카테고리, 534개 이상의 체크리스트 항목 생성
+mmu init                    # 1. 15개 카테고리, 670개 이상의 체크리스트 항목 생성
 mmu scan                    # 2. 기술 스택 자동 감지 — 이미 구현된 항목 자동 체크
 mmu                         # 3. 완료된 것과 빠진 것을 한눈에 확인
 mmu status --why            # 4. 점수 산출 근거 확인 — 반영된 항목, 제외된 항목
@@ -160,7 +160,29 @@ targets_korea = true
 </tr>
 </table>
 
-**534개 이상의 항목, 15개 카테고리. 놓침 없이 준비할 수 있습니다.**
+**670개 이상의 항목, 15개 카테고리. 놓침 없이 준비할 수 있습니다.**
+
+## 다른 도구와 뭐가 다른가요?
+
+| | 범위 | 위치 | 에이전트 네이티브 | 진행 상황 추적 |
+|---|---|---|---|---|
+| **MMU** | SaaS 전체: 코드 + 결제 + 법무 + 그로스 + 운영 | 내 리포의 마크다운 | ✅ Claude 플러그인 + MCP 서버 | ✅ 점수, 게이트, 진화하는 대시보드 |
+| Lighthouse | 프론트엔드 성능/접근성/SEO만 | 브라우저/CI | ❌ | 실행별 점수만, 프로젝트 기억 없음 |
+| 벤더 런치 체크리스트 (Vercel, Stripe 문서) | 해당 벤더 영역만 | 벤더 문서 사이트 | ❌ | ❌ 읽기 전용 |
+| 정적 체크리스트 리포 / Notion 템플릿 | 검증 불가한 경우 다수 | 복사-붙여넣기 | ❌ | ❌ 수동, 금방 낡음 |
+| AI 코드 리뷰어 (CodeRabbit 등) | 코드 diff | PR 워크플로 | 부분적 | PR 단위만, 런치 관점 없음 |
+
+MMU는 린터도, 문서 사이트도 아닙니다 — **AI 코딩 세션과 실제 런치 사이의 운영 레이어**입니다: CLI, CI, AI 에이전트가 같은 체크리스트를 읽고 갱신합니다.
+
+## AI가 쓴 코드, 바이브 체크
+
+AI가 생성한 코드의 45%는 취약점을 안고 출시됩니다. AI 어시스턴트가 가장 자주 빼먹는 것들을 한 커맨드로 스캔하세요:
+
+```bash
+mmu vibecheck
+```
+
+검사 항목: 하드코딩된 시크릿 · `.gitignore` 안 된 `.env` · 웹훅 서명 검증 + 멱등성 · 비밀번호 재설정 플로우 · f-string SQL · rate limiting · 와일드카드 CORS · `DEBUG = True` · 에러 모니터링. P0 발견 시 non-zero exit이므로 CI에 바로 연결됩니다.
 
 ## 이런 분들을 위해 만들었습니다
 
@@ -323,7 +345,7 @@ Claude Desktop 설정 (`~/Library/Application Support/Claude/claude_desktop_conf
 - `mmu_list_blueprints` — 17개 블루프린트(코어 15개 + 산업 2개) 목록
 - `mmu_get_blueprint(name)` — 특정 블루프린트 마크다운 전문
 - `mmu_list_idea_templates` — start/close/ADR 프롬프트 + Product Hunt 키트
-- `mmu_validate_idea(idea)` — stub. 실제 검증은 `mmu validate` 명령
+- `mmu_validate_idea(idea)` — 실제 HN + Reddit 스레드 기반 검증: 평결, 감성 분석, 경쟁자, 주요 스레드 (무료 모드, API 키 불필요. `[validate]` extra 필요)
 
 ## 아이디어 검증
 
@@ -393,7 +415,7 @@ make-me-unicorn/
 ├── docs/
 │   ├── core/              # Strategy, Product, Pricing, Architecture, UX
 │   ├── ops/               # Roadmap, Metrics, Compliance, Reliability
-│   ├── blueprints/        # 15 category checklists (534+ items)
+│   ├── blueprints/        # 15 category checklists (670+ items)
 │   ├── checklists/        # M0–M5 launch gates
 │   └── adr/               # Decision log templates
 ├── prompts/               # Session start/close/ADR templates

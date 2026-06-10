@@ -11,7 +11,7 @@ Concrete scenarios where Make Me Unicorn (MMU) fits. Each scenario maps to speci
 pip install make-me-unicorn
 cd your-project
 mmu init           # writes .mmu/ config + a baseline scan
-mmu scan           # 534-item check across all 15 categories
+mmu scan           # 670-item check across all 15 categories
 mmu                # show status dashboard with 6 gate progress bars
 mmu next           # show the highest-priority missing item
 ```

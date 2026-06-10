@@ -50,7 +50,7 @@ MMU はこれらを**ユーザー・売上・信頼を失う前に**キャッチ
 ## 仕組み
 
 ```
-mmu init                    # 1. 15カテゴリ、534以上のチェックリスト項目を取得
+mmu init                    # 1. 15カテゴリ、670以上のチェックリスト項目を取得
 mmu scan                    # 2. 技術スタックを自動検出 — 既存の対応済み項目を事前チェック
 mmu                         # 3. 完了項目と未対応項目を一覧表示
 mmu status --why            # 4. スコアの内訳を表示 — 反映された項目、除外された項目
@@ -160,7 +160,29 @@ targets_korea = true
 </tr>
 </table>
 
-**534以上の項目。15カテゴリ。抜け漏れゼロ。**
+**670以上の項目。15カテゴリ。抜け漏れゼロ。**
+
+## 他のツールと何が違う？
+
+| | 範囲 | 置き場所 | エージェントネイティブ | 進捗トラッキング |
+|---|---|---|---|---|
+| **MMU** | SaaS 全体：コード + 課金 + 法務 + グロース + 運用 | 自分のリポジトリの markdown | ✅ Claude プラグイン + MCP サーバー | ✅ スコア、ゲート、進化するダッシュボード |
+| Lighthouse | フロントエンドの性能/a11y/SEO のみ | ブラウザ/CI | ❌ | 実行ごとのスコアのみ、プロジェクト記憶なし |
+| ベンダーのローンチチェックリスト（Vercel、Stripe ドキュメント） | そのベンダーの領域のみ | ベンダーのドキュメントサイト | ❌ | ❌ 読み取り専用 |
+| 静的チェックリストのリポジトリ / Notion テンプレート | 検証不能なものが多い | コピペ | ❌ | ❌ 手動、すぐ陳腐化 |
+| AI コードレビュアー（CodeRabbit など） | コード diff | PR ワークフロー | 部分的 | PR 単位のみ、ローンチ視点なし |
+
+MMU はリンターでもドキュメントサイトでもありません — **AI コーディングセッションと実際のローンチの間の運用レイヤー**です。CLI、CI、AI エージェントが同じチェックリストを読み、更新します。
+
+## AI が書いたコードをバイブチェック
+
+AI 生成コードの 45% は脆弱性を抱えたままリリースされます。AI アシスタントが最も見落としがちな項目をワンコマンドでスキャン：
+
+```bash
+mmu vibecheck
+```
+
+チェック内容：ハードコードされたシークレット · gitignore されていない `.env` · Webhook 署名検証 + 冪等性 · パスワードリセットフロー · f-string SQL · レートリミット · ワイルドカード CORS · `DEBUG = True` · エラーモニタリング。P0 検出時は non-zero exit なので、そのまま CI に組み込めます。
 
 ## こんな人のためのツール
 
@@ -323,7 +345,7 @@ Claude Desktop 設定 (`~/Library/Application Support/Claude/claude_desktop_conf
 - `mmu_list_blueprints` — 17 個のブループリント(コア 15 + 業種別 2)一覧
 - `mmu_get_blueprint(name)` — 特定ブループリントのマークダウン全文
 - `mmu_list_idea_templates` — start/close/ADR プロンプト + Product Hunt キット
-- `mmu_validate_idea(idea)` — スタブ。実体は `mmu validate` コマンド
+- `mmu_validate_idea(idea)` — 実際の HN + Reddit スレッドに対する検証：評決、感情分析、競合、主要スレッド（無料モード、API キー不要。`[validate]` extra が必要）
 
 ## アイデアを検証する
 
@@ -393,7 +415,7 @@ make-me-unicorn/
 ├── docs/
 │   ├── core/              # Strategy, Product, Pricing, Architecture, UX
 │   ├── ops/               # Roadmap, Metrics, Compliance, Reliability
-│   ├── blueprints/        # 15 category checklists (534+ items)
+│   ├── blueprints/        # 15 category checklists (670+ items)
 │   ├── checklists/        # M0–M5 launch gates
 │   └── adr/               # Decision log templates
 ├── prompts/               # Session start/close/ADR templates

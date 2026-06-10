@@ -2,8 +2,15 @@
 
 from __future__ import annotations
 
+import hashlib
 import re
 from typing import Any
+
+# Verdict cutoffs on the mean VADER compound score. VADER's own convention
+# treats |compound| >= 0.05 as non-neutral for a single sentence; we average
+# over whole threads, so we require a stronger ±0.2 lean before calling a
+# direction. Anything in between reads as MIXED rather than a false signal.
+VERDICT_THRESHOLD = 0.2
 
 
 def slugify(text: str) -> str:
@@ -11,14 +18,30 @@ def slugify(text: str) -> str:
     return slug[:60] or "idea"
 
 
-def _verdict(compound: float, count: int) -> str:
+def report_filename(idea: str) -> str:
+    """Stable per-idea filename: slug + short content hash.
+
+    The hash suffix keeps repeat runs of the *same* idea writing to the same
+    file, while ideas that collide after slug truncation ("AI tutor for kids
+    in California" vs "... in Texas") get distinct reports.
+    """
+    digest = hashlib.sha256(idea.encode("utf-8")).hexdigest()[:8]
+    return f"{slugify(idea)}-{digest}.md"
+
+
+def verdict(compound: float, count: int) -> str:
+    """Map a mean compound score to a verdict label (see VERDICT_THRESHOLD)."""
     if count == 0:
         return "NO SIGNAL"
-    if compound >= 0.2:
+    if compound >= VERDICT_THRESHOLD:
         return "POSITIVE LEAN"
-    if compound <= -0.2:
+    if compound <= -VERDICT_THRESHOLD:
         return "NEGATIVE LEAN"
     return "MIXED"
+
+
+# Backward-compat alias for the pre-0.7 private name.
+_verdict = verdict
 
 
 def format_text(

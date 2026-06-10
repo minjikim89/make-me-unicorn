@@ -112,8 +112,12 @@ export default function Home() {
           users, money, or trust.
         </p>
         <p style={styles.tagline}>
-          534+ checklist items &middot; 15 categories &middot; 6 launch gates
+          670+ checklist items &middot; 15 categories &middot; 6 launch gates
           &middot; Zero guesswork
+        </p>
+        <p style={styles.tagline}>
+          MCP-native: runs as a Claude Code plugin, an Agent Skill, and an MCP
+          server &mdash; your AI agent reads the same checklist you do.
         </p>
         <div style={styles.cta}>
           <code style={styles.install}>pip install make-me-unicorn</code>
@@ -124,7 +128,7 @@ export default function Home() {
       <section style={styles.demo}>
         <h2 style={styles.sectionTitle}>Try it now &mdash; check some items</h2>
         <p style={styles.sectionDesc}>
-          Showing {totalItems} of 534+ items. Install the CLI for the full
+          Showing {totalItems} of 670+ items. Install the CLI for the full
           checklist with all 15 categories.
         </p>
 

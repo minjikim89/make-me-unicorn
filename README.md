@@ -15,12 +15,16 @@ The open-source launch checklist and operating system for solo builders.
 
 **English** · [🇰🇷 한국어](./README.ko.md) · [🇯🇵 日本語](./README.ja.md) · [🇨🇳 简体中文](./README.zh-CN.md) · [🇪🇸 Español](./README.es.md)
 
+<img src="./assets/brand/unicorn-hero.png" alt="Make Me Unicorn mascot" width="960" />
+
+<img src="./assets/demo.gif" alt="MMU CLI demo — init, scan, status, next" width="720" />
+
 </div>
 
 ## 60-Second Demo
 
 ```bash
-pip install make-me-unicorn
+pip install make-me-unicorn   # or zero-install: uvx make-me-unicorn
 cd your-project
 mmu init && mmu scan && mmu
 ```
@@ -144,7 +148,42 @@ You code with AI. You ship fast. But then:
 </tr>
 </table>
 
-**534+ items. 15 categories. 6 launch gates. Zero guesswork.**
+**670+ items. 15 categories. 6 launch gates. Zero guesswork.**
+
+## How Is MMU Different?
+
+| | Scope | Lives where | Agent-native | Tracks progress |
+|---|---|---|---|---|
+| **MMU** | Full SaaS: code + billing + legal + growth + ops | Your repo, plain markdown | ✅ Claude plugin + MCP server | ✅ Score, gates, evolving dashboard |
+| Lighthouse | Frontend performance/a11y/SEO only | Browser/CI | ❌ | Per-run score, no project memory |
+| Vendor launch checklists (Vercel, Stripe docs) | One vendor's slice | Their docs site | ❌ | ❌ Read-only |
+| Static checklist repos / Notion templates | Varies, usually unverifiable | Copy-paste | ❌ | ❌ Manual, goes stale |
+| AI code reviewers (CodeRabbit etc.) | Code diffs | PR workflow | Partially | Per-PR, no launch view |
+
+MMU is not a linter and not a docs site — it's the **operating layer between your AI coding sessions and an actual launch**: a verifiable checklist your CLI, CI, and AI agents all read and update.
+
+## Vibe Check Your AI-Generated Code
+
+45% of AI-generated code ships with vulnerabilities. One command scans for the gaps AI assistants miss most:
+
+```bash
+mmu vibecheck
+```
+
+```text
+Vibe check — what AI-generated code usually misses
+
+  ✗ (P0) secrets: possible hardcoded secrets in 1 file(s): Stripe live secret key
+  ✗ (P0) webhook-signature: webhook handlers found but no signature verification markers
+        ↳ Verify provider signatures or attackers can forge payment events.
+  ✗ (P0) password-reset: auth code detected but no password reset flow markers
+        ↳ The #1 day-one lockout: users who can log in but can never get back in.
+  ⚠ (P1) rate-limiting: server framework detected but no rate limiting markers
+
+Vibe check result: 3 launch-blocking issue(s), 1 warning(s)
+```
+
+Checks: hardcoded secrets · unignored `.env` · webhook signature + idempotency · password reset flow · f-string SQL · rate limiting · wildcard CORS · `DEBUG = True` · error monitoring. P0 findings exit non-zero, so it drops straight into CI.
 
 ## Personalize Your Checklist
 
@@ -248,7 +287,7 @@ Tools exposed:
 - `mmu_list_blueprints` — list 17 blueprints (15 core + 2 industry)
 - `mmu_get_blueprint(name)` — fetch full blueprint markdown
 - `mmu_list_idea_templates` — list start/close/ADR prompts + Product Hunt kit
-- `mmu_validate_idea(idea)` — stub; the real validator lives in `mmu validate`
+- `mmu_validate_idea(idea)` — validate against real HN + Reddit threads: verdict, sentiment, competitors, top threads (free mode, no API keys; needs the `[validate]` extra)
 
 ## Validate an Idea
 
@@ -284,6 +323,7 @@ mmu check frontend 3          # mark item done
 mmu gate --stage M0           # verify gate readiness
 mmu doctor                    # guardrail health checks
 mmu doctor --deep             # LLM-powered semantic review
+mmu vibecheck                 # scan for AI-generated code blind spots (secrets, webhooks, …)
 mmu share                     # shareable score card
 mmu badge                     # README badge (markdown/svg/html)
 mmu start --mode backend      # start focused session
@@ -330,3 +370,6 @@ See `CONTRIBUTING.md`.
 ## License
 
 MIT. See `LICENSE`.
+
+<!-- MCP Registry ownership proof -->
+mcp-name: io.github.minjikim89/make-me-unicorn

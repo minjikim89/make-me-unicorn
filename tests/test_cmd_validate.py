@@ -28,8 +28,8 @@ class ValidateCommandTests(unittest.TestCase):
             output = buf.getvalue()
             self.assertIn("AI tutor for kids", output)
             self.assertIn("Threads found: 0", output)
-            saved = Path(tmp) / "reports" / "validate" / "ai-tutor-for-kids.md"
-            self.assertTrue(saved.exists())
+            reports = list((Path(tmp) / "reports" / "validate").glob("ai-tutor-for-kids-*.md"))
+            self.assertEqual(len(reports), 1)
 
     def test_json_output(self):
         with tempfile.TemporaryDirectory() as tmp:

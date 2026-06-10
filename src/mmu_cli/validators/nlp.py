@@ -17,6 +17,20 @@ _STOPWORDS = {
     "Even", "While", "Since", "Before", "After", "Because", "Although",
     "Show", "Ask", "OP", "TL", "DR", "FYI", "OK",
     "HN", "AI", "API", "URL", "USA", "EU", "UK", "SaaS", "Reddit",
+    # Common sentence-starters and discourse words that bleed into the
+    # capitalized-token heuristic (most thread text capitalizes them only
+    # because they open a sentence).
+    "All", "Any", "Are", "Been", "Both", "Did", "Does", "Don", "Dont",
+    "Each", "Else", "Every", "For", "From", "Get", "Got", "Had", "Has",
+    "Have", "Hey", "His", "Her", "Hers", "Its", "Just", "Let", "Lets",
+    "Like", "Lol", "Lot", "Make", "Many", "Maybe", "Mine", "More", "Most",
+    "Much", "Need", "New", "Nope", "Nothing", "Once", "One", "Only", "Our",
+    "Ours", "Out", "Over", "People", "Please", "Same", "See", "Some",
+    "Someone", "Something", "Still", "Such", "Sure", "Take", "Thanks",
+    "Their", "Theirs", "Them", "These", "Thing", "Things", "Think",
+    "Those", "Though", "Try", "Until", "Use", "Very", "Want", "Was",
+    "Well", "Were", "With", "Without", "Yeah", "Yes", "Your", "Yours",
+    "Edit", "Update", "Source", "Note", "Btw", "Imo", "Imho", "Tbh",
 }
 
 _CAP_TOKEN = re.compile(r"\b([A-Z][a-zA-Z0-9]+(?:\.[a-zA-Z]+)?)\b")

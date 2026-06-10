@@ -10,7 +10,7 @@
       "name": "make-me-unicorn",
       "source": "./",
       "description": "Startup blueprints, idea validation, and launch checklists for solo SaaS builders.",
-      "version": "0.6.0",
+      "version": "0.7.0",
       "category": "productivity",
       "tags": ["startup", "saas", "checklist", "launch", "founder"]
     }

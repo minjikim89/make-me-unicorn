@@ -17,11 +17,14 @@ def _resolve_repo_root(root: Path | None) -> Path:
             f"--root {root} does not contain docs/blueprints/. "
             "Point it at a checkout of make-me-unicorn, or omit --root to use the package install location."
         )
-    pkg_root = Path(__file__).resolve().parents[2]
-    if (pkg_root / "docs" / "blueprints").is_dir():
-        return pkg_root
+    from mmu_cli._data import find_content_root
+
+    content_root = find_content_root()
+    if content_root is not None:
+        return content_root
     raise FileNotFoundError(
-        "Could not locate docs/blueprints/. Pass --root <path-to-make-me-unicorn>."
+        "Could not locate docs/blueprints/ in the repo checkout or the packaged wheel data. "
+        "Pass --root <path-to-make-me-unicorn>, or reinstall: pip install --force-reinstall make-me-unicorn"
     )
 
 
@@ -83,16 +86,86 @@ def list_idea_templates(root: Path | None = None) -> list[dict[str, str]]:
     return [_summarize(p, repo) for p in _list_idea_template_files(repo)]
 
 
-def validate_idea(idea: str) -> dict[str, str]:
+def validate_idea(idea: str, limit: int = 20) -> dict:
+    """Run the free validation pipeline (HN + Reddit search, local VADER sentiment).
+
+    Mirrors `mmu validate <idea>` default mode: no API keys, no paid calls.
+    LLM synthesis stays CLI-only (`mmu validate --llm`) because it is a paid,
+    interactive opt-in.
+    """
+    try:
+        from mmu_cli.validators import (
+            analyze_sentiment,
+            extract_competitors,
+            search_hn,
+            search_reddit,
+        )
+        from mmu_cli.validators.report import verdict
+    except ImportError:
+        return {
+            "status": "unavailable",
+            "idea": idea,
+            "note": (
+                "Idea validation needs the [validate] extra. "
+                "Install with `pip install make-me-unicorn[validate]` "
+                "(or `[all]`), then call this tool again."
+            ),
+        }
+
+    from concurrent.futures import ThreadPoolExecutor
+
+    hits: list[dict] = []
+    errors: list[str] = []
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        futures = {
+            "HN": pool.submit(search_hn, idea, limit=limit),
+            "Reddit": pool.submit(search_reddit, idea, limit=limit),
+        }
+        for source, future in futures.items():
+            try:
+                hits.extend(future.result())
+            except ImportError:
+                return {
+                    "status": "unavailable",
+                    "idea": idea,
+                    "note": (
+                        "Idea validation needs the [validate] extra. "
+                        "Install with `pip install make-me-unicorn[validate]`."
+                    ),
+                }
+            except Exception as exc:
+                errors.append(f"{source} fetch failed: {type(exc).__name__}: {exc}")
+
+    if errors and not hits:
+        return {"status": "error", "idea": idea, "errors": errors}
+
+    texts = [(h.get("title") or "") + " " + (h.get("text") or "") for h in hits]
+    sentiment = (
+        analyze_sentiment(texts)
+        if texts
+        else {"compound": 0.0, "count": 0, "pos": 0.0, "neg": 0.0, "neu": 0.0}
+    )
+    competitors = extract_competitors(texts) if texts else []
+
     return {
-        "status": "stub",
+        "status": "ok",
         "idea": idea,
+        "threads_found": len(hits),
+        "verdict": verdict(sentiment.get("compound", 0.0), int(sentiment.get("count", 0))),
+        "sentiment": sentiment,
+        "competitors": [{"name": n, "mentions": c} for n, c in competitors],
+        "top_threads": [
+            {
+                "source": h.get("source", "?"),
+                "title": h.get("title", ""),
+                "url": h.get("url", ""),
+            }
+            for h in hits[:10]
+        ],
+        "errors": errors,
         "note": (
-            "Full idea validation is intentionally not exposed over MCP yet — it requires "
-            "external HTTP scraping (HN + Reddit) and optional LLM synthesis, which take "
-            "several seconds and don't fit a stdio tool round-trip. "
-            "Run `mmu validate \"<idea>\"` in your terminal for the free local mode, "
-            "or `mmu validate \"<idea>\" --llm` for an Anthropic-synthesized verdict."
+            "Free mode: public HN + Reddit search with local VADER sentiment. "
+            'For a synthesized 1-page verdict, run `mmu validate "<idea>" --llm` in a terminal.'
         ),
     }
 
@@ -128,9 +201,13 @@ def build_server(root: Path | None = None):
         return list_idea_templates(root)
 
     @mcp.tool()
-    def mmu_validate_idea(idea: str) -> dict[str, str]:
-        """Validate a startup idea. v0.6 stub — full validation lives in `mmu validate <idea>`."""
-        return validate_idea(idea)
+    def mmu_validate_idea(idea: str, limit: int = 20) -> dict:
+        """Validate a startup idea against real HN + Reddit threads.
+
+        Free mode: public search + local VADER sentiment, no API keys or paid
+        calls. Returns verdict, sentiment, candidate competitors, top threads.
+        """
+        return validate_idea(idea, limit=limit)
 
     return mcp
 

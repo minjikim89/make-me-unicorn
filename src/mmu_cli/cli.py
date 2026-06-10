@@ -249,6 +249,13 @@ def parse_args() -> argparse.Namespace:
     p_doctor.add_argument("--root", default=".", help="Project root path")
     p_doctor.add_argument("--deep", action="store_true", help="LLM-powered semantic analysis (requires anthropic SDK)")
 
+    p_vibecheck = sub.add_parser(
+        "vibecheck",
+        help="Scan for the security/UX gaps AI-generated code ships most (secrets, webhooks, rate limits, ...)",
+    )
+    p_vibecheck.add_argument("--json", action="store_true", help="Output structured JSON")
+    p_vibecheck.add_argument("--root", default=".", help="Project root path")
+
     p_gate = sub.add_parser("gate", help="Check stage gate readiness")
     p_gate.add_argument("--json", action="store_true", help="Output structured JSON")
     p_gate.add_argument("--stage", required=True, help="Stage key (for example: M0, M1, M6)")
@@ -424,13 +431,15 @@ def load_config(root: Path) -> dict[str, Any]:
     if tomllib is not None:
         try:
             data = tomllib.loads(content)
-        except Exception:
+        except tomllib.TOMLDecodeError as exc:
+            sys.stderr.write(f"  ⚠️  Ignoring invalid {cfg_path}: {exc}\n")
             return {}
         return data if isinstance(data, dict) else {}
     # Fallback for Python < 3.11 without tomli
     try:
         return _parse_simple_toml(content)
-    except Exception:
+    except (ValueError, IndexError) as exc:
+        sys.stderr.write(f"  ⚠️  Ignoring unparseable {cfg_path}: {exc}\n")
         return {}
 
 
@@ -938,12 +947,10 @@ def command_close(root: Path) -> Result:
 
 
 def _find_mmu_root() -> Path | None:
-    """Find the MMU package root (where docs/blueprints/ lives)."""
-    # Walk up from this file: src/mmu_cli/cli.py -> repo root
-    pkg_root = Path(__file__).resolve().parents[2]
-    if (pkg_root / "docs" / "blueprints").is_dir():
-        return pkg_root
-    return None
+    """Find MMU content (docs/blueprints/): repo checkout, else the wheel's bundled copy."""
+    from mmu_cli._data import find_content_root
+
+    return find_content_root()
 
 
 def _generate_stack_config(root: Path) -> str:
@@ -1200,6 +1207,20 @@ def command_doctor(root: Path) -> Result:
 
     messages.append("Doctor result: clean")
     return Result(exit_code=0, failures=0, messages=messages)
+
+
+def command_vibecheck(root: Path) -> Result:
+    from mmu_cli.vibecheck import format_findings, run_vibecheck
+
+    findings = run_vibecheck(root)
+    messages, exit_code = format_findings(findings)
+    fail_count = sum(1 for f in findings if f.status == "fail")
+    return Result(
+        exit_code=exit_code,
+        failures=fail_count,
+        findings=[f.to_dict() for f in findings],
+        messages=messages,
+    )
 
 
 def command_gate(stage: str, root: Path) -> Result:
@@ -1641,9 +1662,9 @@ def command_validate(
         extract_competitors,
         format_markdown,
         format_text,
+        report_filename,
         search_hn,
         search_reddit,
-        slugify,
     )
 
     if use_llm and not assume_yes:
@@ -1664,14 +1685,19 @@ def command_validate(
     reddit_hits: list[dict[str, Any]] = []
     fetch_errors: list[str] = []
     if limit > 0:
-        try:
-            hn_hits = search_hn(idea, limit=limit)
-        except Exception as exc:
-            fetch_errors.append(f"HN fetch failed: {type(exc).__name__}: {exc}")
-        try:
-            reddit_hits = search_reddit(idea, limit=limit)
-        except Exception as exc:
-            fetch_errors.append(f"Reddit fetch failed: {type(exc).__name__}: {exc}")
+        from concurrent.futures import ThreadPoolExecutor
+
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            hn_future = pool.submit(search_hn, idea, limit=limit)
+            reddit_future = pool.submit(search_reddit, idea, limit=limit)
+            try:
+                hn_hits = hn_future.result()
+            except Exception as exc:
+                fetch_errors.append(f"HN fetch failed: {type(exc).__name__}: {exc}")
+            try:
+                reddit_hits = reddit_future.result()
+            except Exception as exc:
+                fetch_errors.append(f"Reddit fetch failed: {type(exc).__name__}: {exc}")
     hits = hn_hits + reddit_hits
 
     for err in fetch_errors:
@@ -1709,7 +1735,7 @@ def command_validate(
     if save:
         reports_dir = root / "reports" / "validate"
         reports_dir.mkdir(parents=True, exist_ok=True)
-        report_path = reports_dir / f"{slugify(idea)}.md"
+        report_path = reports_dir / report_filename(idea)
         report_path.write_text(
             format_markdown(idea, hits, sentiment, competitors, llm_report),
             encoding="utf-8",
@@ -1722,6 +1748,13 @@ def command_validate(
 def main() -> int:
     args = parse_args()
     root = root_path(getattr(args, "root", "."))
+
+    # serve-mcp validates its own --root (None means "use packaged data").
+    # Every other command operates on the project directory, so a bad --root
+    # should fail here with one clear message instead of deep in file I/O.
+    if args.command != "serve-mcp" and not root.is_dir():
+        print(f"Error: --root {root} is not a directory.", file=sys.stderr)
+        return 2
 
     # Default: `mmu` with no subcommand shows status dashboard
     if not args.command:
@@ -1748,6 +1781,9 @@ def main() -> int:
         return render_result(result, args.json)
     if args.command == "generate":
         result = command_generate(args.doc, root)
+        return render_result(result, args.json)
+    if args.command == "vibecheck":
+        result = command_vibecheck(root)
         return render_result(result, args.json)
     if args.command == "gate":
         result = command_gate(args.stage, root)

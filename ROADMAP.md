@@ -49,15 +49,26 @@
 - 0.6.2 — MCP startup root validation
 - 0.6.3 — `root_path` handles `None` for `mmu serve-mcp` (no `--root`)
 
-## v0.7 Maturity Pass
+## v0.7 Maturity Pass + Vibe Check (shipped 2026-06-10)
 
-- **Bundle blueprints + prompts in the wheel** so `pip install make-me-unicorn[mcp]` + `mmu serve-mcp` works without a clone (currently requires `--root <path-to-make-me-unicorn>`)
-- Wire `mmu_validate_idea` MCP tool through to the actual validate command (currently a stub)
-- Test coverage gaps: `report.py` formatters, `reddit.py` parser (asymmetric vs `hn.py`), `--llm` synthesize path
-- VADER verdict threshold calibration (current ±0.2 is judgment-call; documentation + boundary tests)
-- Competitor stopwords expansion ("All", "Please", common sentence-starters that bleed into capitalized-token NER)
-- Blueprint slug collision protection in `mmu_get_blueprint`
-- Validate report file naming: prevent overwrites on repeat runs (`<slug>-<short-hash>.md` or timestamp)
+- ✅ **Bundle blueprints + prompts in the wheel** — `pip install make-me-unicorn` now works without a clone (`mmu_cli/data/`, synced by `scripts/sync_packaged_data.py`, verified in CI)
+- ✅ Wire `mmu_validate_idea` MCP tool through to the actual validate command (parallel HN + Reddit, free mode)
+- ✅ **`mmu vibecheck`** — one-command scan for AI-generated code blind spots (secrets, webhook safety, password reset, f-string SQL, rate limits, CORS, debug mode, error monitoring)
+- ✅ Test coverage: `report.py` formatters, `reddit.py` parser, VADER boundary tests (125 tests total, up from 89)
+- ✅ VADER verdict threshold documented as `VERDICT_THRESHOLD` constant with boundary tests
+- ✅ Competitor stopwords expansion (~80 sentence-starters)
+- ✅ Validate report file naming: `<slug>-<hash8>.md` prevents overwrites and truncation collisions
+- ✅ `server.json` for the official MCP Registry
+- Deferred: blueprint slug collision protection in `mmu_get_blueprint` (slugs are currently unique; revisit when blueprints are user-extensible)
+- Deferred: `--llm` synthesize path test coverage
+
+## v0.8 Distribution Push
+
+- Submit to MCP registries (official registry, mcp.so, smithery.ai, glama.ai) and awesome lists (awesome-mcp-servers, awesome-claude-skills)
+- Live badge endpoint so `mmu badge` self-updates (shields.io endpoint JSON)
+- GitHub Action: `mmu vibecheck` + score delta comment on PRs, Marketplace listing
+- Showcase gallery of projects using the badge
+- 60-second demo video (idea → validate → vibecheck → launch gates)
 
 ## v1.0 Founder OS
 

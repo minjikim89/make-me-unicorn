@@ -79,7 +79,7 @@ make-me-unicorn/
 │   ├── cli.py             # main CLI entry point
 │   └── llm.py             # optional LLM integration
 ├── docs/
-│   ├── blueprints/        # 15 category checklists (534+ items)
+│   ├── blueprints/        # 15 category checklists (670+ items)
 │   ├── checklists/        # M0–M5 launch gate definitions
 │   ├── core/              # strategy, product, pricing, architecture, UX
 │   └── ops/               # operational docs
