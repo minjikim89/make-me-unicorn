@@ -15,6 +15,8 @@ The format is inspired by Keep a Changelog and follows semantic intent.
 - **`mmu_validate_idea` MCP tool is now wired to the real validator** (was a stub). Agents get verdict, sentiment, candidate competitors, and top threads from live HN + Reddit search — free mode only; `--llm` synthesis stays CLI-only because it is a paid opt-in.
 - `server.json` metadata for the official MCP Registry.
 - Comparison table ("How is MMU different?") and hero/demo media in the English README; all five READMEs synced.
+- **New demo GIF + reproducible demo pipeline** — `scripts/record_demo_cast.py` records real `mmu init → scan → vibecheck → dashboard` output against a fixture project; `scripts/render_cast_gif.py` renders the cast to GIF with Pillow. Regenerate any time with two commands.
+- Release automation: pushing a `v*` tag now runs tests, builds distributions, and publishes a GitHub Release with notes extracted from this changelog (`.github/workflows/release.yml`).
 
 ### Changed
 
@@ -29,6 +31,10 @@ The format is inspired by Keep a Changelog and follows semantic intent.
 - `LLMClient.complete()` now maps Anthropic API failures (auth, rate limit, connection, API errors) to friendly stderr messages and exit code 1 instead of raw tracebacks.
 - Invalid `--root` paths fail fast with one clear error before any command logic runs.
 - Corrupt `.mmu/config.toml` files now print a warning naming the file and the parse error instead of being silently ignored.
+- Python 3.10: `get_api_key()` no longer crashes on `import tomllib` (3.11+ stdlib) — restored the tomllib/tomli fallback.
+- MCP `mmu_validate_idea` without the `[validate]` extra returns a friendly "unavailable" payload instead of leaking an `ImportError` from sentiment analysis.
+- `.gitignore` now covers nested validate reports (`reports/**/*.md`), so saved reports can't be committed accidentally.
+- vibecheck: dict-form and assignment-form wildcard CORS origins are now detected; Next.js detection reuses `detect_nextjs()`; per-run file cache removes repeated reads across the 8 checks.
 
 ## [0.6.3] - 2026-05-08
 
