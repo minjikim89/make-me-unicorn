@@ -17,7 +17,7 @@ La checklist de lanzamiento y sistema operativo de código abierto para creadore
 
 <img src="./assets/brand/unicorn-hero.png" alt="Make Me Unicorn mascot" width="960" />
 
-<img src="./assets/demo.gif" alt="MMU CLI demo — init, scan, status, next" width="720" />
+<img src="./assets/demo.gif" alt="MMU CLI demo — init, scan, vibecheck, dashboard" width="720" />
 
 </div>
 

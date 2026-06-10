@@ -188,9 +188,11 @@ def check_password_reset(root: Path, code_files: list[Path]) -> Finding:
 
 def check_rate_limiting(root: Path, code_files: list[Path]) -> Finding:
     corpus_paths = code_files[:400]
-    server_detected = False
+    server_detected = any(
+        (root / name).exists() for name in ("next.config.js", "next.config.mjs", "next.config.ts")
+    )
     pkg = _read(root / "package.json") + _read(root / "requirements.txt") + _read(root / "pyproject.toml")
-    if any(h in pkg.lower() for h in _SERVER_HINTS):
+    if '"next"' in pkg or any(h in pkg.lower() for h in _SERVER_HINTS):
         server_detected = True
     has_marker = False
     for path in corpus_paths:

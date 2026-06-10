@@ -17,7 +17,7 @@ The open-source launch checklist and operating system for solo builders.
 
 <img src="./assets/brand/unicorn-hero.png" alt="Make Me Unicorn mascot" width="960" />
 
-<img src="./assets/demo.gif" alt="MMU CLI demo — init, scan, status, next" width="720" />
+<img src="./assets/demo.gif" alt="MMU CLI demo — init, scan, vibecheck, dashboard" width="720" />
 
 </div>
 

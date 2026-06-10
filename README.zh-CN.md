@@ -17,7 +17,7 @@
 
 <img src="./assets/brand/unicorn-hero.png" alt="Make Me Unicorn mascot" width="960" />
 
-<img src="./assets/demo.gif" alt="MMU CLI 演示 — init, scan, status, next" width="720" />
+<img src="./assets/demo.gif" alt="MMU CLI 演示 — init, scan, vibecheck, dashboard" width="720" />
 
 </div>
 
