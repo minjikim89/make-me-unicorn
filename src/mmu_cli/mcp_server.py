@@ -71,14 +71,23 @@ def list_blueprints(root: Path | None = None) -> list[dict[str, str]]:
 
 def get_blueprint(name: str, root: Path | None = None) -> dict[str, str]:
     repo = _resolve_repo_root(root)
+    matches = []
     for path in _list_blueprint_files(repo):
         if path.stem == name or path.stem.split("-", 1)[-1] == name:
-            return {
-                "name": path.stem,
-                "path": path.relative_to(repo).as_posix(),
-                "content": path.read_text(encoding="utf-8"),
-            }
-    raise ValueError(f"Blueprint not found: {name}")
+            matches.append(path)
+    if not matches:
+        raise ValueError(f"Blueprint not found: {name}")
+    if len(matches) > 1:
+        paths_str = ", ".join(str(p.relative_to(repo).as_posix()) for p in matches)
+        raise ValueError(
+            f"Multiple blueprints found for '{name}' (slug collision): {paths_str}"
+        )
+    path = matches[0]
+    return {
+        "name": path.stem,
+        "path": path.relative_to(repo).as_posix(),
+        "content": path.read_text(encoding="utf-8"),
+    }
 
 
 def list_idea_templates(root: Path | None = None) -> list[dict[str, str]]:

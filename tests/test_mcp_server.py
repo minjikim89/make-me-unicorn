@@ -34,6 +34,26 @@ class MCPDataLayerTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             mcp_server.get_blueprint("does-not-exist", REPO_ROOT)
 
+    def test_get_blueprint_collision_with_fixtures(self):
+        import tempfile
+        import shutil
+
+        temp_dir = Path(tempfile.mkdtemp())
+        try:
+            blueprints_dir = temp_dir / "docs" / "blueprints"
+            blueprints_dir.mkdir(parents=True, exist_ok=True)
+            (blueprints_dir / "01-billing.md").write_text("Billing 1", encoding="utf-8")
+            (blueprints_dir / "02-billing.md").write_text("Billing 2", encoding="utf-8")
+
+            with self.assertRaises(ValueError) as ctx:
+                mcp_server.get_blueprint("billing", temp_dir)
+
+            self.assertIn("Multiple blueprints found for 'billing'", str(ctx.exception))
+            self.assertIn("docs/blueprints/01-billing.md", str(ctx.exception).replace("\\", "/"))
+            self.assertIn("docs/blueprints/02-billing.md", str(ctx.exception).replace("\\", "/"))
+        finally:
+            shutil.rmtree(temp_dir)
+
     def test_list_idea_templates(self):
         templates = mcp_server.list_idea_templates(REPO_ROOT)
         names = [t["name"] for t in templates]
@@ -94,9 +114,10 @@ class MCPDataLayerTests(unittest.TestCase):
         self.assertIn("[validate]", result["note"])
 
     def test_resolve_repo_root_raises_when_explicit_root_invalid(self):
+        invalid_path = Path("/nonexistent/path")
         with self.assertRaises(FileNotFoundError) as ctx:
-            mcp_server._resolve_repo_root(Path("/nonexistent/path"))
-        self.assertIn("/nonexistent/path", str(ctx.exception))
+            mcp_server._resolve_repo_root(invalid_path)
+        self.assertIn(str(invalid_path), str(ctx.exception))
 
     def test_resolve_repo_root_uses_package_fallback_when_none(self):
         resolved = mcp_server._resolve_repo_root(None)
