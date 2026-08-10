@@ -186,7 +186,7 @@ Vibe check — what AI-generated code usually misses
 Vibe check result: 3 launch-blocking issue(s), 1 warning(s)
 ```
 
-Checks: hardcoded secrets · unignored `.env` · webhook signature + idempotency · password reset flow · f-string SQL · rate limiting · wildcard CORS · `DEBUG = True` · error monitoring. P0 findings exit non-zero, so it drops straight into CI.
+Checks: hardcoded secrets · unignored `.env` · webhook signature + idempotency · password reset flow · f-string SQL · rate limiting · wildcard CORS · `DEBUG = True` · error monitoring · JWT in localStorage. P0 findings exit non-zero, so it drops straight into CI.
 
 ### Run It in GitHub Actions
 

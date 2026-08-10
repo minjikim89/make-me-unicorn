@@ -62,6 +62,11 @@ _SERVER_HINTS = [
     "next.config", "rails", "sinatra", "gin-gonic", "fiber",
 ]
 
+_JWT_LOCALSTORAGE_PATTERN = re.compile(
+    r"""(?:localStorage|sessionStorage)(?:\.setItem\(\s*['"`](?:jwt|token|access_token|id_token|auth_token|authToken)['"`]|\[\s*['"`](?:jwt|token|access_token|id_token|auth_token|authToken)['"`]\s*\]\s*=|\.(?:jwt|token|access_token|id_token|auth_token|authToken)\s*=)""",
+    re.IGNORECASE
+)
+
 
 @dataclass
 class Finding:
@@ -289,6 +294,30 @@ def check_error_monitoring(root: Path, code_files: list[Path]) -> Finding:
     )
 
 
+def check_jwt_localstorage(root: Path, code_files: list[Path]) -> Finding:
+    js_files = [
+        p for p in code_files
+        if p.suffix.lower() in {".js", ".jsx", ".ts", ".tsx"}
+    ]
+    if not js_files:
+        return Finding("jwt-localstorage", "P1", "skip", "no JS/TS frontend files detected")
+    offenders: list[str] = []
+    for path in js_files:
+        text = _read(path)
+        if _JWT_LOCALSTORAGE_PATTERN.search(text):
+            offenders.append(_rel(path, root))
+    if offenders:
+        return Finding(
+            check="jwt-localstorage",
+            severity="P1",
+            status="warn",
+            message=f"JWT or access token stored in localStorage/sessionStorage in {len(offenders)} file(s)",
+            hint="Tokens stored in localStorage/sessionStorage can be stolen via XSS. Use secure httpOnly cookies for session storage instead.",
+            files=sorted(set(offenders)),
+        )
+    return Finding("jwt-localstorage", "P1", "ok", "no JWT localStorage storage detected")
+
+
 def run_vibecheck(root: Path) -> list[Finding]:
     from mmu_cli.cli import doctor_skip_paths, gather_code_files
 
@@ -305,6 +334,7 @@ def run_vibecheck(root: Path) -> list[Finding]:
     findings.append(check_cors(root, code_files))
     findings.append(check_debug_mode(root, code_files))
     findings.append(check_error_monitoring(root, code_files))
+    findings.append(check_jwt_localstorage(root, code_files))
     return findings
 
 
