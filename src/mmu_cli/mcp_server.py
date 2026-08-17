@@ -71,13 +71,24 @@ def list_blueprints(root: Path | None = None) -> list[dict[str, str]]:
 
 def get_blueprint(name: str, root: Path | None = None) -> dict[str, str]:
     repo = _resolve_repo_root(root)
+    matches = []
     for path in _list_blueprint_files(repo):
         if path.stem == name or path.stem.split("-", 1)[-1] == name:
-            return {
-                "name": path.stem,
-                "path": path.relative_to(repo).as_posix(),
-                "content": path.read_text(encoding="utf-8"),
-            }
+            matches.append(path)
+
+    if len(matches) > 1:
+        stems = [p.name for p in matches]
+        raise ValueError(
+            f"Multiple blueprints matched '{name}': {', '.join(stems)}. "
+            "Please specify the exact name."
+        )
+    elif len(matches) == 1:
+        path = matches[0]
+        return {
+            "name": path.stem,
+            "path": path.relative_to(repo).as_posix(),
+            "content": path.read_text(encoding="utf-8"),
+        }
     raise ValueError(f"Blueprint not found: {name}")
 
 

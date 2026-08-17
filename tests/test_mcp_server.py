@@ -30,6 +30,16 @@ class MCPDataLayerTests(unittest.TestCase):
         self.assertEqual(result["name"], "ai-product")
         self.assertTrue(len(result["content"]) > 0)
 
+    @mock.patch("mmu_cli.mcp_server._list_blueprint_files")
+    def test_get_blueprint_collision_raises(self, mock_list):
+        mock_list.return_value = [
+            Path("/mock/01-billing.md"),
+            Path("/mock/02-billing.md"),
+        ]
+        with self.assertRaises(ValueError) as ctx:
+            mcp_server.get_blueprint("billing", REPO_ROOT)
+        self.assertIn("Multiple blueprints matched 'billing'", str(ctx.exception))
+
     def test_get_blueprint_unknown_raises(self):
         with self.assertRaises(ValueError):
             mcp_server.get_blueprint("does-not-exist", REPO_ROOT)
@@ -94,9 +104,10 @@ class MCPDataLayerTests(unittest.TestCase):
         self.assertIn("[validate]", result["note"])
 
     def test_resolve_repo_root_raises_when_explicit_root_invalid(self):
+        path = Path("/nonexistent/path")
         with self.assertRaises(FileNotFoundError) as ctx:
-            mcp_server._resolve_repo_root(Path("/nonexistent/path"))
-        self.assertIn("/nonexistent/path", str(ctx.exception))
+            mcp_server._resolve_repo_root(path)
+        self.assertIn(str(path), str(ctx.exception))
 
     def test_resolve_repo_root_uses_package_fallback_when_none(self):
         resolved = mcp_server._resolve_repo_root(None)
@@ -107,9 +118,10 @@ class MCPDataLayerTests(unittest.TestCase):
             import mcp.server.fastmcp  # noqa: F401
         except ImportError:
             self.skipTest("mcp SDK not installed (install via [mcp] extra)")
+        path = Path("/nonexistent/mmu/root")
         with self.assertRaises(FileNotFoundError) as ctx:
-            mcp_server.build_server(Path("/nonexistent/mmu/root"))
-        self.assertIn("/nonexistent/mmu/root", str(ctx.exception))
+            mcp_server.build_server(path)
+        self.assertIn(str(path), str(ctx.exception))
 
 
 if __name__ == "__main__":
