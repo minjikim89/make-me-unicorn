@@ -151,5 +151,22 @@ class CommandTests(unittest.TestCase):
             self.assertEqual(result.exit_code, 0)
 
 
+class WeakCryptoTests(unittest.TestCase):
+    def test_flags_md5_hashlib(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            write(root, "src/auth.py", "hash = hashlib.md5(password)")
+            finding = vibecheck.check_weak_crypto(root, [root / "src/auth.py"])
+            self.assertEqual(finding.status, "warn")
+            self.assertIn("weak cryptography", finding.message)
+
+    def test_ok_with_secure_hash(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            write(root, "src/auth.py", "hash = hashlib.sha256(password)")
+            finding = vibecheck.check_weak_crypto(root, [root / "src/auth.py"])
+            self.assertEqual(finding.status, "ok")
+
+
 if __name__ == "__main__":
     unittest.main()

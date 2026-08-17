@@ -289,6 +289,29 @@ def check_error_monitoring(root: Path, code_files: list[Path]) -> Finding:
     )
 
 
+def check_weak_crypto(root: Path, code_files: list[Path]) -> Finding:
+    """Discovers insecure hashing/cryptography algorithms (MD5, SHA1) in auth/encryption paths."""
+    pattern = re.compile(r"\b(?:md5|sha1)\b", re.IGNORECASE)
+    offenders = []
+    for path in code_files:
+        if path.suffix.lower() not in {".py", ".js", ".ts", ".jsx", ".tsx"}:
+            continue
+        text = _read(path)
+        if pattern.search(text) and ("hashlib" in text or "crypto" in text or "md5(" in text or "sha1(" in text):
+            offenders.append(_rel(path, root))
+
+    if offenders:
+        return Finding(
+            "weak-crypto",
+            "P1",
+            "warn",
+            f"weak cryptography (MD5/SHA1) detected in {len(offenders)} file(s)",
+            hint="MD5 and SHA-1 are cryptographically broken and vulnerable to collision attacks. Use bcrypt, argon2, or SHA-256/SHA-512 instead.",
+            files=offenders,
+        )
+    return Finding("weak-crypto", "P1", "ok", "no weak cryptography algorithms (MD5/SHA-1) detected")
+
+
 def run_vibecheck(root: Path) -> list[Finding]:
     from mmu_cli.cli import doctor_skip_paths, gather_code_files
 
@@ -305,6 +328,7 @@ def run_vibecheck(root: Path) -> list[Finding]:
     findings.append(check_cors(root, code_files))
     findings.append(check_debug_mode(root, code_files))
     findings.append(check_error_monitoring(root, code_files))
+    findings.append(check_weak_crypto(root, code_files))
     return findings
 
 
