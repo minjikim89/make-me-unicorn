@@ -151,5 +151,43 @@ class CommandTests(unittest.TestCase):
             self.assertEqual(result.exit_code, 0)
 
 
+class DisabledSslTests(unittest.TestCase):
+    def test_flags_verify_false(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            write(root, "src/api.py", "requests.get(url, verify=False)")
+            finding = vibecheck.check_disabled_ssl(root, [root / "src/api.py"])
+            self.assertEqual(finding.status, "warn")
+            self.assertIn("disabled SSL/TLS verification", finding.message)
+
+    def test_flags_reject_unauthorized_false(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            write(root, "src/index.js", "const agent = new https.Agent({ rejectUnauthorized: false });")
+            finding = vibecheck.check_disabled_ssl(root, [root / "src/index.js"])
+            self.assertEqual(finding.status, "warn")
+
+    def test_flags_node_tls_reject_unauthorized_zero(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            write(root, "src/env.ts", "process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0'")
+            finding = vibecheck.check_disabled_ssl(root, [root / "src/env.ts"])
+            self.assertEqual(finding.status, "warn")
+
+    def test_flags_go_insecure_skip_verify(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            write(root, "src/main.go", "TLSClientConfig: &tls.Config{InsecureSkipVerify: true},")
+            finding = vibecheck.check_disabled_ssl(root, [root / "src/main.go"])
+            self.assertEqual(finding.status, "warn")
+
+    def test_ok_with_no_disabled_ssl(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            write(root, "src/api.py", "requests.get(url, verify=True)")
+            finding = vibecheck.check_disabled_ssl(root, [root / "src/api.py"])
+            self.assertEqual(finding.status, "ok")
+
+
 if __name__ == "__main__":
     unittest.main()

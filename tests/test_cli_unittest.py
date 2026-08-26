@@ -66,12 +66,11 @@ class CLITestCase(unittest.TestCase):
         self.assertIn("README.md", result.get("skipped", []))
         self.assertEqual((self.root / "README.md").read_text(encoding="utf-8"), "custom-readme\n")
 
+    @unittest.skipIf(sys.platform == "win32", "bash script execution is not supported on Windows")
     def test_snapshot_command_runs_local_script(self) -> None:
         script = self.root / "snapshot"
         script.write_text(
-            "#!/usr/bin/env bash\n"
-            "set -euo pipefail\n"
-            "echo 'snapshot-ok'\n",
+            "#!/usr/bin/env bash\nset -euo pipefail\necho 'snapshot-ok'\n",
             encoding="utf-8",
         )
         os.chmod(script, 0o755)
