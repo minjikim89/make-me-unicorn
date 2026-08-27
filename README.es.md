@@ -182,7 +182,7 @@ El 45% del código generado por IA se publica con vulnerabilidades. Un comando e
 mmu vibecheck
 ```
 
-Comprueba: secretos hardcodeados · `.env` sin gitignore · verificación de firma + idempotencia de webhooks · flujo de password reset · SQL con f-strings · rate limiting · CORS comodín · `DEBUG = True` · monitoreo de errores. Los hallazgos P0 salen con código distinto de cero, listo para CI.
+Comprueba: secretos hardcodeados · `.env` sin gitignore · verificación de firma + idempotencia de webhooks · flujo de password reset · SQL con f-strings · rate limiting · CORS comodín · `DEBUG = True` · monitoreo de errores · JWT en localStorage. Los hallazgos P0 salen con código distinto de cero, listo para CI.
 
 ## Para Quién Es
 

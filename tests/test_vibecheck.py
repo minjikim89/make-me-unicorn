@@ -132,6 +132,49 @@ class DebugAndMonitoringTests(unittest.TestCase):
             self.assertEqual(finding.status, "ok")
 
 
+class JwtLocalStorageTests(unittest.TestCase):
+    def test_flags_jwt_in_localstorage(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            write(root, "src/auth.ts", 'localStorage.setItem("token", userToken);')
+            finding = vibecheck.check_jwt_localstorage(root, [root / "src/auth.ts"])
+            self.assertEqual(finding.status, "warn")
+            self.assertEqual(finding.check, "jwt-localstorage")
+            self.assertEqual(finding.files, ["src/auth.ts"])
+
+    def test_flags_jwt_in_sessionstorage_bracket(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            write(root, "src/index.js", 'sessionStorage["jwt"] = "my_token";')
+            finding = vibecheck.check_jwt_localstorage(root, [root / "src/index.js"])
+            self.assertEqual(finding.status, "warn")
+            self.assertEqual(finding.check, "jwt-localstorage")
+            self.assertEqual(finding.files, ["src/index.js"])
+
+    def test_flags_jwt_in_localstorage_property(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            write(root, "src/index.js", 'localStorage.authToken = "some_token";')
+            finding = vibecheck.check_jwt_localstorage(root, [root / "src/index.js"])
+            self.assertEqual(finding.status, "warn")
+            self.assertEqual(finding.check, "jwt-localstorage")
+            self.assertEqual(finding.files, ["src/index.js"])
+
+    def test_ok_when_no_token_stored(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            write(root, "src/index.js", 'localStorage.setItem("theme", "dark");')
+            finding = vibecheck.check_jwt_localstorage(root, [root / "src/index.js"])
+            self.assertEqual(finding.status, "ok")
+
+    def test_skips_when_no_js_files(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            write(root, "src/main.py", "pass")
+            finding = vibecheck.check_jwt_localstorage(root, [root / "src/main.py"])
+            self.assertEqual(finding.status, "skip")
+
+
 class CommandTests(unittest.TestCase):
     def test_command_vibecheck_exit_codes(self):
         with tempfile.TemporaryDirectory() as tmp:

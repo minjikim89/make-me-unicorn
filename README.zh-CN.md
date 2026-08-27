@@ -182,7 +182,7 @@ MMU 不是 linter，也不是文档站 —— 它是 **AI 编码会话与真正�
 mmu vibecheck
 ```
 
-检查项：硬编码密钥 · 未被 gitignore 的 `.env` · Webhook 签名验证 + 幂等性 · 密码重置流程 · f-string SQL · 限流 · 通配符 CORS · `DEBUG = True` · 错误监控。发现 P0 问题时以非零状态退出，可直接接入 CI。
+检查项：硬编码密钥 · 未被 gitignore 的 `.env` · Webhook 签名验证 + 幂等性 · 密码重置流程 · f-string SQL · 限流 · 通配符 CORS · `DEBUG = True` · 错误监控 · localStorage 中的 JWT。发现 P0 问题时以非零状态退出，可直接接入 CI。
 
 ## 适用人群
 

@@ -182,7 +182,7 @@ AI가 생성한 코드의 45%는 취약점을 안고 출시됩니다. AI 어시�
 mmu vibecheck
 ```
 
-검사 항목: 하드코딩된 시크릿 · `.gitignore` 안 된 `.env` · 웹훅 서명 검증 + 멱등성 · 비밀번호 재설정 플로우 · f-string SQL · rate limiting · 와일드카드 CORS · `DEBUG = True` · 에러 모니터링. P0 발견 시 non-zero exit이므로 CI에 바로 연결됩니다.
+검사 항목: 하드코딩된 시크릿 · `.gitignore` 안 된 `.env` · 웹훅 서명 검증 + 멱등성 · 비밀번호 재설정 플로우 · f-string SQL · rate limiting · 와일드카드 CORS · `DEBUG = True` · 에러 모니터링 · localStorage의 JWT. P0 발견 시 non-zero exit이므로 CI에 바로 연결됩니다.
 
 ### GitHub Actions에서 실행하기
 

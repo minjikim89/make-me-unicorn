@@ -96,7 +96,7 @@ class MCPDataLayerTests(unittest.TestCase):
     def test_resolve_repo_root_raises_when_explicit_root_invalid(self):
         with self.assertRaises(FileNotFoundError) as ctx:
             mcp_server._resolve_repo_root(Path("/nonexistent/path"))
-        self.assertIn("/nonexistent/path", str(ctx.exception))
+        self.assertIn(str(Path("/nonexistent/path")), str(ctx.exception))
 
     def test_resolve_repo_root_uses_package_fallback_when_none(self):
         resolved = mcp_server._resolve_repo_root(None)
@@ -109,7 +109,7 @@ class MCPDataLayerTests(unittest.TestCase):
             self.skipTest("mcp SDK not installed (install via [mcp] extra)")
         with self.assertRaises(FileNotFoundError) as ctx:
             mcp_server.build_server(Path("/nonexistent/mmu/root"))
-        self.assertIn("/nonexistent/mmu/root", str(ctx.exception))
+        self.assertIn(str(Path("/nonexistent/mmu/root")), str(ctx.exception))
 
 
 if __name__ == "__main__":

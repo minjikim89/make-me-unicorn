@@ -1,5 +1,6 @@
 import io
 import os
+import shutil
 import sys
 import tempfile
 import unittest
@@ -66,6 +67,7 @@ class CLITestCase(unittest.TestCase):
         self.assertIn("README.md", result.get("skipped", []))
         self.assertEqual((self.root / "README.md").read_text(encoding="utf-8"), "custom-readme\n")
 
+    @unittest.skipIf(sys.platform == "win32" and not shutil.which("bash"), "requires bash on Windows")
     def test_snapshot_command_runs_local_script(self) -> None:
         script = self.root / "snapshot"
         script.write_text(

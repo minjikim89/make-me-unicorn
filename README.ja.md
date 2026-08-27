@@ -182,7 +182,7 @@ AI 生成コードの 45% は脆弱性を抱えたままリリースされます
 mmu vibecheck
 ```
 
-チェック内容：ハードコードされたシークレット · gitignore されていない `.env` · Webhook 署名検証 + 冪等性 · パスワードリセットフロー · f-string SQL · レートリミット · ワイルドカード CORS · `DEBUG = True` · エラーモニタリング。P0 検出時は non-zero exit なので、そのまま CI に組み込めます。
+チェック内容：ハードコードされたシークレット · gitignore されていない `.env` · Webhook 署名検証 + 冪等性 · パスワードリセットフロー · f-string SQL · レートリミット · ワイルドカード CORS · `DEBUG = True` · エラーモニタリング · localStorage の JWT。P0 検出時は non-zero exit なので、そのまま CI に組み込めます。
 
 ## こんな人のためのツール
 
