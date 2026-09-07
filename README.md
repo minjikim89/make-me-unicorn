@@ -167,7 +167,7 @@ MMU is not a linter and not a docs site — it's the **operating layer between y
 
 ## Vibe Check Your AI-Generated Code
 
-45% of AI-generated code ships with vulnerabilities. One command scans for the gaps AI assistants miss most:
+One command scans for the gaps AI assistants miss most — the ones that show up in real scans of shipped vibe-coded apps, not a generic linter list:
 
 ```bash
 mmu vibecheck
