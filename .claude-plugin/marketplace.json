@@ -9,10 +9,10 @@
     {
       "name": "make-me-unicorn",
       "source": "./",
-      "description": "Startup blueprints, idea validation, and launch checklists for solo SaaS builders.",
+      "description": "Launch gate for AI-generated SaaS: vibecheck runs before every git commit, plus blueprints and idea validation.",
       "version": "0.7.0",
-      "category": "productivity",
-      "tags": ["startup", "saas", "checklist", "launch", "founder"]
+      "category": "security",
+      "tags": ["security", "vibecheck", "startup", "saas", "launch"]
     }
   ]
 }

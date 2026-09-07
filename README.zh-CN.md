@@ -305,17 +305,17 @@ export ANTHROPIC_API_KEY=sk-ant-...
 
 核心 CLI 零依赖。AI 功能可选，可平滑降级。
 
-## 作为 Claude Skill 使用
-
-MMU 同时打包为 Claude Code 插件 + Anthropic Agent Skill。在 Claude Code、Claude Desktop、OpenAI Codex CLI 等支持 Agent Skills 规范的所有工具中，当用户说"验证我的 SaaS 想法"、"上线检查清单"时，MMU 会被自动触发。
+## 作为 Claude Code 插件使用（提交门禁）
 
 ```bash
-# 在 Claude Code 中：
+# 在 Claude Code 中:
 /plugin marketplace add minjikim89/make-me-unicorn
 /plugin install make-me-unicorn
 ```
 
-通过 progressive disclosure 模式，技能只在对话需要时加载相关蓝图，上下文成本极低。
+安装后，**代理执行的每一次 `git commit` / `git push` 都会先经过 `mmu vibecheck`。** 若发现 P0 问题，命令会被拦截，并向代理展示要修什么、为什么（附 `why:` 出处链接）。用钩子而不用 MCP 工具的原因：代理会跳过可选工具，但跳不过钩子。若扫描器本身无法运行，提交会放行但显示可见警告。想单次绕过，在命令前加 `MMU_HOOK_DISABLE=1`；想整个会话关闭，把同名变量设进 Claude Code 的环境。`MMU_HOOK_ON_PUSH_ONLY=1` 仅对 push 设门禁。
+
+插件还包含 `mmu-startup` 技能（蓝图、创意验证、Product Hunt 套件），只加载对话所需的蓝图。技能可用于支持 Agent Skills 规范的工具（Claude Desktop、OpenAI Codex CLI），但提交门禁仅限 Claude Code。
 
 ## MCP 服务器模式
 
@@ -342,6 +342,7 @@ Claude Desktop 配置（`~/Library/Application Support/Claude/claude_desktop_con
 
 暴露的工具：
 
+- `mmu_vibecheck(project_root)` — 扫描项目中阻碍上线的缺陷，返回结果附带 `ref` 出处链接
 - `mmu_list_blueprints` — 列出 17 个蓝图（15 个核心 + 2 个行业）
 - `mmu_get_blueprint(name)` — 获取单个蓝图的完整 markdown
 - `mmu_list_idea_templates` — 列出 start/close/ADR 提示词 + Product Hunt 工具包

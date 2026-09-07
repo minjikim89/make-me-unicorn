@@ -16,7 +16,7 @@ Three differences. First, MMU is a runnable CLI, not a static blog post or Notio
 
 ## Does MMU work with Claude Code?
 
-Yes. MMU ships as a Claude Code plugin (skill). Inside a Claude Code session, the agent can read MMU's checklist, see the current gate status, and prioritize remaining items autonomously. The minimum integration is one line in your Claude Code skills configuration; details are in the README's "Use as a Claude Skill" section.
+Yes. MMU ships as a Claude Code plugin. Once installed, every `git commit` / `git push` the agent runs goes through `mmu vibecheck` first and is blocked on launch-blocking findings; the plugin also carries the `mmu-startup` skill (blueprints, idea validation, Product Hunt kit) and an MCP server with an `mmu_vibecheck` tool. Details are in the README's "Use as a Claude Code Plugin (commit gate)" section.
 
 ## Does MMU work with MCP (Model Context Protocol)?
 
