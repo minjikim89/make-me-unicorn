@@ -459,7 +459,7 @@ def _jwt_role(token: str) -> str:
 
 
 def _env_files(root: Path) -> list[Path]:
-    out = []
+    out: list[Path] = []
     for p in root.iterdir() if root.is_dir() else []:
         if p.is_file() and p.name.startswith(".env") and not p.name.endswith((".example", ".sample", ".template")):
             out.append(p)
@@ -509,7 +509,7 @@ def check_client_bundle_secrets(root: Path, code_files: list[Path]) -> Finding:
 
 
 def _sql_files(root: Path) -> list[Path]:
-    candidates = []
+    candidates: list[Path] = []
     for sub in ("supabase/migrations", "supabase", "migrations", "db/migrations", "prisma/migrations", "sql"):
         d = root / sub
         if d.is_dir():
@@ -596,7 +596,7 @@ def check_sourcemaps(root: Path, code_files: list[Path]) -> Finding:
 
 def _parse_git_config(text: str) -> list[tuple[str, str, str]]:
     """Return (section, key, value) triples; section is lower-cased and includes subsection (e.g. filter.lfs)."""
-    out = []
+    out: list[tuple[str, str, str]] = []
     section = ""
     for raw in text.splitlines():
         line = raw.strip()
