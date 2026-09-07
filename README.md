@@ -282,7 +282,7 @@ mmu vibecheck: 1 launch-blocking issue(s) in /path/to/app — commit blocked.
       ↳ why: https://vibe-eval.com/updates/vibe-coding-security-monthly-aug-2026/
 ```
 
-Why a hook instead of an MCP tool: agents skip optional tools, but a hook always runs. With Claude Code's auto mode on by default, the commit is the last point where a human still sees what happened. The gate is a PreToolUse hook on `Bash`; it never blocks on its own failure, and `MMU_HOOK_DISABLE=1` bypasses it once. `MMU_HOOK_ON_PUSH_ONLY=1` gates only pushes.
+Why a hook instead of an MCP tool: agents skip optional tools, but a hook always runs. With Claude Code's auto mode on by default, the commit is the last point where a human still sees what happened. The gate is a PreToolUse hook on `Bash`. If the scanner itself cannot run, the commit goes through and you get a visible warning instead of a silent pass. Bypass one command by prefixing it (`MMU_HOOK_DISABLE=1 git commit …`); set the same variable in Claude Code's environment to disable the gate for a session. `MMU_HOOK_ON_PUSH_ONLY=1` gates only pushes.
 
 The plugin also ships the `mmu-startup` skill (blueprints, idea validation, Product Hunt kit), which loads only the blueprint(s) relevant to the conversation. Any tool that supports the Agent Skills spec (Claude Desktop, OpenAI Codex CLI) can use the skill; the commit gate is Claude Code only.
 

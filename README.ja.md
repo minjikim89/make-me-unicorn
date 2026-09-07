@@ -305,9 +305,7 @@ export ANTHROPIC_API_KEY=sk-ant-...
 
 コア CLI は外部依存ゼロ。AI 機能はオプションであり、なくても正常に動作します。
 
-## Claude Skill として使う
-
-MMU は Claude Code プラグイン + Anthropic Agent Skill としてもパッケージされています。Claude Code、Claude Desktop、OpenAI Codex CLI など Agent Skills 仕様に対応するすべてのツールで、「スタートアップのアイデアを検証して」「ローンチチェックリスト出して」といった発話に MMU が自動で応答します。
+## Claude Code プラグインとして使う（コミットゲート）
 
 ```bash
 # Claude Code 内で:
@@ -315,7 +313,9 @@ MMU は Claude Code プラグイン + Anthropic Agent Skill としてもパッ�
 /plugin install make-me-unicorn
 ```
 
-スキルは progressive disclosure により会話に必要なブループリントだけを読み込むため、コンテキストコストを最小限に抑えます。
+インストール後は、**エージェントが実行するすべての `git commit` / `git push` が先に `mmu vibecheck` を通ります。** P0 の検出があればコマンドはブロックされ、何をなぜ直すべきか（`why:` の出典リンク付き）がエージェントに表示されます。MCP ツールではなくフックを使う理由: エージェントは任意のツールは飛ばしますが、フックは飛ばせません。スキャナー自体が動かなかった場合はコミットを通しつつ警告を表示します。一回だけ回避するにはコマンドの先頭に `MMU_HOOK_DISABLE=1` を付け、セッション全体で無効にするには Claude Code の環境変数に設定してください。`MMU_HOOK_ON_PUSH_ONLY=1` は push のみゲートします。
+
+プラグインには `mmu-startup` スキル（ブループリント・アイデア検証・Product Hunt キット）も含まれ、会話に必要なブループリントだけを読み込みます。スキルは Agent Skills 仕様対応ツール（Claude Desktop、OpenAI Codex CLI）でも使えますが、コミットゲートは Claude Code 専用です。
 
 ## MCP サーバーモード
 
@@ -342,6 +342,7 @@ Claude Desktop 設定 (`~/Library/Application Support/Claude/claude_desktop_conf
 
 公開されるツール:
 
+- `mmu_vibecheck(project_root)` — プロジェクトをスキャンしてローンチを妨げる欠陥を `ref` 出典リンク付きで返す
 - `mmu_list_blueprints` — 17 個のブループリント(コア 15 + 業種別 2)一覧
 - `mmu_get_blueprint(name)` — 特定ブループリントのマークダウン全文
 - `mmu_list_idea_templates` — start/close/ADR プロンプト + Product Hunt キット

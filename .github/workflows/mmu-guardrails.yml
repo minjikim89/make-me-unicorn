@@ -26,13 +26,13 @@ jobs:
           pip install -e .[dev]
 
       - name: Lint
-        run: ruff check src tests scripts
+        run: ruff check src tests scripts hooks
 
       - name: Packaged data in sync
         run: python scripts/sync_packaged_data.py --check
 
       - name: Type check
-        run: mypy src/mmu_cli
+        run: mypy src/mmu_cli hooks
 
       - name: Unit tests
         run: python -m unittest discover -s tests -p "test_*.py" -v

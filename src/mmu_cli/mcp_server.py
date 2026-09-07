@@ -221,9 +221,12 @@ def build_server(root: Path | None = None):
             idea: one sentence describing the product (e.g. "invoice reminders for freelancers").
             limit: max threads to fetch per source (default 20).
 
-        Returns: {"verdict", "sentiment", "competitors": [...], "threads": [{title, url,
-        source, score, created_at}]}. Treat `threads` as the evidence and `verdict`
-        as a summary of it, not the other way round.
+        Returns: {"status": "ok", "verdict", "sentiment", "threads_found",
+        "competitors": [{name, mentions}], "top_threads": [{source, title, url}],
+        "errors", "note"}. Treat `top_threads` as the evidence and `verdict` as a
+        summary of it. When the `[validate]` extra is missing the result is
+        {"status": "unavailable", "note"}; on search failure {"status": "error", "errors"}
+        — neither carries a verdict, so check `status` first.
         """
         return validate_idea(idea, limit=limit)
 
@@ -245,10 +248,10 @@ def build_server(root: Path | None = None):
 
     @mcp.tool()
     def mmu_list_blueprints() -> list[dict[str, str]]:
-        """List the available MMU launch blueprints (15 core + industry) with a one-line description each.
+        """List the available MMU launch blueprints (15 core + 2 industry) with a one-line description each.
 
         Use when: you need the exact slug to pass to mmu_get_blueprint, or the user
-        asks "what areas does a launch checklist cover?". Cheap; returns ~20 rows.
+        asks "what areas does a launch checklist cover?". Cheap; returns 17 rows.
 
         Returns: [{"name", "path", "description"}].
         """
