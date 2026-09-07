@@ -264,9 +264,7 @@ export ANTHROPIC_API_KEY=sk-ant-...
 
 Core CLI stays zero-dependency. AI features degrade gracefully.
 
-## Use as a Claude Skill
-
-MMU is also packaged as a Claude Code plugin and Anthropic Agent Skill, so any Claude-based agent (Claude Code, Claude Desktop, or any tool that supports the Agent Skills spec — including OpenAI Codex CLI) can auto-invoke MMU when the user mentions a startup idea, validation, launch checklist, or Product Hunt prep.
+## Use as a Claude Code Plugin (commit gate)
 
 ```bash
 # In Claude Code:
@@ -274,7 +272,19 @@ MMU is also packaged as a Claude Code plugin and Anthropic Agent Skill, so any C
 /plugin install make-me-unicorn
 ```
 
-The skill auto-loads only the blueprint(s) relevant to the conversation (progressive disclosure), so it stays cheap on context.
+Once installed, **every `git commit` / `git push` the agent runs goes through `mmu vibecheck` first.** A P0 finding blocks the command and shows the agent exactly what to fix and why:
+
+```text
+mmu vibecheck: 1 launch-blocking issue(s) in /path/to/app — commit blocked.
+  ✗ (P0) supabase-rls: 1 table(s) created without ENABLE ROW LEVEL SECURITY: payments
+      - supabase/migrations/20260901_init.sql
+      ↳ Every table reachable with the anon key needs RLS plus at least one policy.
+      ↳ why: https://vibe-eval.com/updates/vibe-coding-security-monthly-aug-2026/
+```
+
+Why a hook instead of an MCP tool: agents skip optional tools, but a hook always runs. With Claude Code's auto mode on by default, the commit is the last point where a human still sees what happened. The gate is a PreToolUse hook on `Bash`; it never blocks on its own failure, and `MMU_HOOK_DISABLE=1` bypasses it once. `MMU_HOOK_ON_PUSH_ONLY=1` gates only pushes.
+
+The plugin also ships the `mmu-startup` skill (blueprints, idea validation, Product Hunt kit), which loads only the blueprint(s) relevant to the conversation. Any tool that supports the Agent Skills spec (Claude Desktop, OpenAI Codex CLI) can use the skill; the commit gate is Claude Code only.
 
 ## MCP Server Mode
 
@@ -301,9 +311,10 @@ Claude Desktop config (`~/Library/Application Support/Claude/claude_desktop_conf
 
 Tools exposed:
 
-- `mmu_list_blueprints` — list 17 blueprints (15 core + 2 industry)
-- `mmu_get_blueprint(name)` — fetch full blueprint markdown
-- `mmu_list_idea_templates` — list start/close/ADR prompts + Product Hunt kit
+- `mmu_vibecheck(project_root)` — scan a project for launch-blocking gaps; returns findings with `ref` links
+- `mmu_validate_idea(idea)` — check an idea against live HN + Reddit threads
+- `mmu_get_blueprint(name)` / `mmu_list_blueprints` — launch checklists per area
+- `mmu_list_idea_templates` — start/close/ADR prompts + Product Hunt kit
 - `mmu_validate_idea(idea)` — validate against real HN + Reddit threads: verdict, sentiment, competitors, top threads (free mode, no API keys; needs the `[validate]` extra)
 
 ## Validate an Idea

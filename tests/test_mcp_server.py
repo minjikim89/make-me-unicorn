@@ -109,6 +109,20 @@ class MCPDataLayerTests(unittest.TestCase):
             mcp_server._resolve_repo_root(path)
         self.assertIn(str(path), str(ctx.exception))
 
+    def test_build_server_exposes_vibecheck_first(self):
+        try:
+            import mcp.server.fastmcp  # noqa: F401
+        except ImportError:
+            self.skipTest("mcp SDK not installed (install via [mcp] extra)")
+        import asyncio
+        server = mcp_server.build_server(REPO_ROOT)
+        tools = asyncio.run(server.list_tools())
+        names = [t.name for t in tools]
+        self.assertIn("mmu_vibecheck", names)
+        self.assertEqual(len(names), 5)
+        for t in tools:
+            self.assertIn("Use when", t.description or "", f"{t.name} description must say when to use it")
+
     def test_resolve_repo_root_uses_package_fallback_when_none(self):
         resolved = mcp_server._resolve_repo_root(None)
         self.assertEqual(resolved, REPO_ROOT)
