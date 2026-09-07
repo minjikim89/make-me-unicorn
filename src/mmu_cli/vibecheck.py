@@ -423,10 +423,9 @@ _SQL_ENABLE_RLS = re.compile(
 )
 
 _SOURCEMAP_SIGNALS: list[tuple[str, re.Pattern[str]]] = [
-    ("vite build.sourcemap", re.compile(r"\bsourcemap\s*:\s*(?:true|['\"](?:inline|hidden)['\"])")),
+    ("vite build.sourcemap", re.compile(r"\bsourcemap\s*:\s*(?:true|['\"]inline['\"])")),
     ("next productionBrowserSourceMaps", re.compile(r"\bproductionBrowserSourceMaps\s*:\s*true\b")),
     ("webpack devtool", re.compile(r"\bdevtool\s*:\s*['\"](?:source-map|inline-source-map|eval-source-map)['\"]")),
-    ("sentry sourcemaps upload without hide", re.compile(r"\bsourcemaps\s*:\s*\{(?![^}]*filesToDeleteAfterUpload)")),
 ]
 _BUILD_CONFIG_NAMES = (
     "vite.config.ts", "vite.config.js", "vite.config.mts", "vite.config.mjs",
@@ -437,7 +436,7 @@ _BUILD_CONFIG_NAMES = (
 
 # `.git/config` keys that make git run a command when an agent (or you) opens the repo.
 _GIT_CONFIG_EXEC_KEYS = {
-    "core": {"fsmonitor", "sshcommand", "pager", "editor", "hookspath", "askpass"},
+    "core": {"fsmonitor", "sshcommand", "hookspath", "askpass"},
     "diff": {"external", "textconv"},
     "merge": {"driver"},
     "credential": {"helper"},

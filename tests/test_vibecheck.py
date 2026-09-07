@@ -314,11 +314,13 @@ class SourcemapTests(unittest.TestCase):
             write(root, "next.config.mjs", "export default { productionBrowserSourceMaps: true }")
             self.assertEqual(vibecheck.check_sourcemaps(root, []).status, "warn")
 
-    def test_ok_when_disabled_or_absent(self):
+    def test_ok_when_disabled_hidden_or_absent(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             write(root, "vite.config.ts", "export default { build: { sourcemap: false } }")
             self.assertEqual(vibecheck.check_sourcemaps(root, []).status, "ok")
+            write(root, "vite.config.ts", "export default { build: { sourcemap: 'hidden' } }")
+            self.assertEqual(vibecheck.check_sourcemaps(root, []).status, "ok", "hidden maps are the recommended fix")
 
 
 class GitConfigExecTests(unittest.TestCase):
@@ -339,7 +341,7 @@ class GitConfigExecTests(unittest.TestCase):
             root = Path(tmp)
             write(root, ".git/config",
                   "[core]\n\tbare = false\n\tfilemode = true\n[remote \"origin\"]\n\turl = https://example.com/x.git\n"
-                  "[credential]\n\thelper = osxkeychain\n[filter \"lfs\"]\n\trequired = true\n")
+                  "[credential]\n\thelper = osxkeychain\n[filter \"lfs\"]\n\trequired = true\n[core]\n\tpager = delta\n\teditor = vim\n")
             self.assertEqual(vibecheck.check_git_config_exec(root, []).status, "ok")
 
     def test_skips_without_git_dir(self):
