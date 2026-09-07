@@ -1,9 +1,11 @@
 name: "MMU Vibe Check"
 description: >-
   Scan for the launch-blocking gaps AI-generated code misses most: hardcoded
-  secrets, missing webhook signature verification, no password reset flow,
-  f-string SQL, wildcard CORS, missing rate limits, DEBUG=True, and more.
-  P0 findings fail the build.
+  secrets, secrets behind NEXT_PUBLIC_/VITE_ prefixes, Supabase tables without
+  RLS, production source maps, command-executing .git/config keys, missing
+  webhook signature verification, no password reset flow, f-string SQL, unsafe
+  pickle/yaml, wildcard CORS, missing rate limits, DEBUG=True, and more.
+  P0 findings fail the build; every finding links the incident data behind it.
 author: "minjikim89"
 branding:
   icon: "shield"

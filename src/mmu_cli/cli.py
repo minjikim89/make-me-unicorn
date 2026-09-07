@@ -73,7 +73,15 @@ DEFAULT_SKIP_PATHS = {
     "tests",
 }
 
-CODE_EXTENSIONS = {".js", ".jsx", ".ts", ".tsx", ".py", ".go", ".rb", ".java", ".cs"}
+CODE_EXTENSIONS = {".js", ".jsx", ".ts", ".tsx", ".mjs", ".mts", ".cjs", ".py", ".go", ".rb", ".java", ".cs"}
+
+# Directory basenames pruned at ANY depth (DEFAULT_SKIP_PATHS only matches from the root).
+# Dependencies and build output dominate scan time on real projects and are never the
+# code a commit gate should be judging.
+PRUNE_DIR_NAMES = {
+    "node_modules", ".next", ".nuxt", ".svelte-kit", ".turbo", ".venv", "venv", ".tox",
+    "site-packages", "__pycache__", ".git", ".mypy_cache", ".pytest_cache", ".ruff_cache", "coverage",
+}
 HEADING_PATTERN = re.compile(r"^##\s*(M\d+)\s+(.+?)\s*$")
 UNCHECKED_PATTERN = re.compile(r"^\s*-\s*\[\s\]\s+(.+)$")
 
@@ -556,6 +564,8 @@ def gather_code_files(root: Path, skip_paths: set[str]) -> list[Path]:
 
         kept_dirs: list[str] = []
         for dirname in dirnames:
+            if dirname in PRUNE_DIR_NAMES:
+                continue
             child = f"{rel_dir}/{dirname}" if rel_dir else dirname
             if not should_skip_rel(child, skip_paths):
                 kept_dirs.append(dirname)
