@@ -315,7 +315,8 @@ Tools exposed:
 - `mmu_validate_idea(idea)` — check an idea against live HN + Reddit threads
 - `mmu_get_blueprint(name)` / `mmu_list_blueprints` — launch checklists per area
 - `mmu_list_idea_templates` — start/close/ADR prompts + Product Hunt kit
-- `mmu_validate_idea(idea)` — validate against real HN + Reddit threads: verdict, sentiment, competitors, top threads (free mode, no API keys; needs the `[validate]` extra)
+
+`mmu_validate_idea` needs the `[validate]` extra for sentiment scoring; it is free mode only (no API keys).
 
 ## Validate an Idea
 

@@ -199,7 +199,10 @@ def build_server(root: Path | None = None):
         """
         from mmu_cli.cli import command_vibecheck
 
-        result = command_vibecheck(Path(project_root))
+        target = Path(project_root).expanduser()
+        if not target.is_dir():
+            raise ValueError(f"project_root is not a directory: {project_root}")
+        result = command_vibecheck(target)
         return {
             "findings": result.get("findings", []),
             "failures": result.get("failures", 0),

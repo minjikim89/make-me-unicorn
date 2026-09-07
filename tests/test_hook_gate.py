@@ -24,12 +24,18 @@ def _payload(command: str, cwd: str = ".") -> str:
 
 class ShouldGateTests(unittest.TestCase):
     def test_gates_commit_and_push_variants(self):
-        for cmd in ["git commit -m x", "git add -A && git commit -m 'y'", "cd app; git push origin main", "git -C /tmp/x commit -am z"]:
+        for cmd in [
+            "git commit -m x", "git add -A && git commit -m 'y'", "cd app; git push origin main",
+            "git -C /tmp/x commit -am z", "MMU_HOOK_DISABLE=1 git commit -m bypass", "LANG=C git push",
+            "git -c user.name=x commit -m y", "git --git-dir=/r/.git --work-tree=/r commit -m y",
+            "git --no-pager push --force-with-lease", "(git commit -m x)", "echo $(git push)",
+            "git add . &&\n  git commit -m 'multi'",
+        ]:
             with self.subTest(cmd=cmd):
                 self.assertTrue(gate._should_gate(cmd))
 
     def test_ignores_other_git_and_non_git(self):
-        for cmd in ["git status", "git log --oneline", "ls -la", "echo 'git commit' > notes.txt", "gitk"]:
+        for cmd in ["git status", "git log --oneline", "ls -la", "gitk", "git commit-tree HEAD^{tree}", "git pushx", "legit commit", "./git commit"]:
             with self.subTest(cmd=cmd):
                 self.assertFalse(gate._should_gate(cmd))
 
@@ -79,6 +85,11 @@ class MainTests(unittest.TestCase):
         code, err = self._run(_payload("git push"), None)
         self.assertEqual(code, 0)
         self.assertIn("allowing", err)
+
+    def test_allows_when_tool_input_null(self):
+        payload = json.dumps({"tool_name": "Bash", "tool_input": None, "cwd": "."})
+        with mock.patch.object(sys, "stdin", io.StringIO(payload)):
+            self.assertEqual(gate.main(), 0)
 
     def test_allows_on_malformed_stdin(self):
         with mock.patch.object(sys, "stdin", io.StringIO("not json")):

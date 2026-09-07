@@ -24,8 +24,13 @@ import subprocess
 import sys
 from pathlib import Path
 
-_GIT_COMMIT = re.compile(r"(?:^|[;&|]\s*)git\s+(?:-C\s+\S+\s+)?commit\b")
-_GIT_PUSH = re.compile(r"(?:^|[;&|]\s*)git\s+(?:-C\s+\S+\s+)?push\b")
+# `git` as a word, then any number of global options (-C dir, -c k=v, --git-dir=…,
+# --no-pager, …), then the subcommand as a whole word. Env-var prefixes
+# (`FOO=1 git commit`), subshells, and chained commands all still match; a word
+# boundary that is not a hyphen keeps `git commit-tree` / `git push-x` out.
+_GIT_OPTS = r"(?:\s+(?:-[cC]\s+\S+|--[a-z-]+(?:=\S+)?|-\w+))*"
+_GIT_COMMIT = re.compile(r"(?<![\w./-])git" + _GIT_OPTS + r"\s+commit(?![\w-])")
+_GIT_PUSH = re.compile(r"(?<![\w./-])git" + _GIT_OPTS + r"\s+push(?![\w-])")
 
 
 def _should_gate(command: str) -> bool:
@@ -95,9 +100,12 @@ def main() -> int:
         payload = json.load(sys.stdin)
     except (json.JSONDecodeError, ValueError):
         return 0
-    if payload.get("tool_name") != "Bash":
+    if not isinstance(payload, dict) or payload.get("tool_name") != "Bash":
         return 0
-    command = str(payload.get("tool_input", {}).get("command", ""))
+    tool_input = payload.get("tool_input") or {}
+    if not isinstance(tool_input, dict):
+        return 0
+    command = str(tool_input.get("command") or "")
     if not _should_gate(command):
         return 0
     root = _repo_root(payload.get("cwd") or os.getcwd())
