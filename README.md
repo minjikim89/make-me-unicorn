@@ -186,7 +186,9 @@ Vibe check — what AI-generated code usually misses
 Vibe check result: 3 launch-blocking issue(s), 1 warning(s)
 ```
 
-Checks: hardcoded secrets · unignored `.env` · webhook signature + idempotency · password reset flow · f-string SQL · unsafe Python deserialization · rate limiting · wildcard CORS · `DEBUG = True` · error monitoring. P0 findings exit non-zero, so it drops straight into CI.
+Checks: hardcoded secrets · unignored `.env` · webhook signature + idempotency · password reset flow · f-string SQL · unsafe Python deserialization · rate limiting · wildcard CORS · `DEBUG = True` · error monitoring · secrets behind `NEXT_PUBLIC_`/`VITE_` prefixes · Supabase tables without RLS · production source maps · command-executing `.git/config` keys. P0 findings exit non-zero, so it drops straight into CI.
+
+The newest checks come straight from what is actually broken in the wild. [Reeve's August 2026 scan](https://vibe-eval.com/updates/vibe-coding-security-monthly-aug-2026/) of 30,998 live vibe-coded apps found **57% of Supabase-backed apps allowed unauthenticated table reads** (no RLS), **1 in 23 shipped a secret in the public bundle**, and **13% published source maps**. Every finding prints a `why:` link to the incident report or dataset behind the rule, so you can judge the risk yourself instead of trusting a scanner. Findings that live only under `tests/` or `fixtures/` are downgraded to warnings — fake keys in fixtures should not block your build.
 
 ### Run It in GitHub Actions
 

@@ -6,6 +6,13 @@ The format is inspired by Keep a Changelog and follows semantic intent.
 
 ## [Unreleased]
 
+### Added
+
+- **Four new `mmu vibecheck` rules grounded in field data.** Reeve's August 2026 scan of 30,998 live vibe-coded apps found 57% of Supabase-backed apps with unauthenticated table reads, 1 in 23 shipping a secret in the public bundle, and 13% publishing source maps — so: `client-bundle-secrets` (P0: secret-looking or `service_role`-JWT values behind `NEXT_PUBLIC_`/`VITE_`/`REACT_APP_`… prefixes, in `.env*` files and client code), `supabase-rls` (P0: tables created in migrations without `ENABLE ROW LEVEL SECURITY`; warns when Supabase is used but no migrations are in the repo), `sourcemaps-exposed` (P1: Vite/Next/webpack production source-map flags), and `git-config-exec` (P0: `.git/config` keys such as `core.fsmonitor` that run a command when an agent opens the repo — the GitSpawn class, Sep 2026).
+- **`ref` on findings** — every new rule prints a `why:` link to the incident report or dataset that motivated it. JSON output carries the same field.
+- **Test/fixture downgrade** — a P0 whose offending files all live under `__tests__/`, `fixtures/`, `*.test.*` etc. becomes a P1 warning instead of failing the build.
+
+
 ## [0.7.0] - 2026-06-10
 
 ### Added

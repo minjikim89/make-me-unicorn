@@ -3,7 +3,12 @@
 Heuristic, zero-dependency, read-only. Each check answers one question a solo
 builder forgets to ask before launch: leaked secrets, unverified webhooks,
 missing password reset, no rate limiting, wildcard CORS, f-string SQL,
-debug mode left on, no error monitoring.
+debug mode left on, no error monitoring, secrets behind public env prefixes,
+Supabase tables without RLS, production source maps, command-executing
+`.git/config` keys.
+
+Checks carry a `ref` — the incident report or dataset that motivated them — so a
+finding is never "the tool says so" but "here is what happened to people who shipped this".
 
 Severities: P0 findings exit non-zero (block launch), P1 findings warn.
 Checks that find no relevant surface (e.g. no webhook handlers) report SKIP.
@@ -12,6 +17,8 @@ Checks that find no relevant surface (e.g. no webhook handlers) report SKIP.
 from __future__ import annotations
 
 import ast
+import base64
+import json
 import re
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
@@ -72,6 +79,7 @@ class Finding:
     message: str
     hint: str = ""
     files: list[str] = field(default_factory=list)
+    ref: str = ""  # URL of the real-world incident / dataset that motivates the check
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -392,6 +400,281 @@ def check_error_monitoring(root: Path, code_files: list[Path]) -> Finding:
     )
 
 
+# --- Evidence refs: every new check points at the data that motivated it. ---
+_REF_REEVE_AUG_2026 = "https://vibe-eval.com/updates/vibe-coding-security-monthly-aug-2026/"
+_REF_GITSPAWN = "https://www.manifold.security/blog/ai-coding-agents-git-hijack"
+
+_PUBLIC_ENV_PREFIXES = ("NEXT_PUBLIC_", "VITE_", "REACT_APP_", "EXPO_PUBLIC_", "NUXT_PUBLIC_", "PUBLIC_", "GATSBY_")
+_SECRETISH_NAME = re.compile(r"(SECRET|SERVICE_ROLE|SERVICE_KEY|PRIVATE|SK_LIVE|SK_TEST|WEBHOOK_SIGNING|CLIENT_SECRET)", re.IGNORECASE)
+_ENV_LINE = re.compile(r"^\s*(?:export\s+)?([A-Z][A-Z0-9_]*)\s*=\s*(.*)$", re.MULTILINE)
+_JWT = re.compile(r"\beyJ[0-9A-Za-z_-]{10,}\.eyJ[0-9A-Za-z_-]{10,}\.[0-9A-Za-z_-]{10,}\b")
+_PUBLIC_ENV_IN_CODE = re.compile(
+    r"(?:process\.env|import\.meta\.env)\.((?:" + "|".join(_PUBLIC_ENV_PREFIXES) + r")[A-Z0-9_]+)"
+)
+
+_SUPABASE_MARKERS = ("@supabase/supabase-js", "supabase.co", "createClient(", "supabase-py", "from supabase import")
+_SQL_CREATE_TABLE = re.compile(
+    r"create\s+table\s+(?:if\s+not\s+exists\s+)?(?:(?:public|\"public\")\.)?\"?([a-zA-Z_][a-zA-Z0-9_]*)\"?",
+    re.IGNORECASE,
+)
+_SQL_ENABLE_RLS = re.compile(
+    r"alter\s+table\s+(?:only\s+)?(?:(?:public|\"public\")\.)?\"?([a-zA-Z_][a-zA-Z0-9_]*)\"?\s+enable\s+row\s+level\s+security",
+    re.IGNORECASE,
+)
+
+_SOURCEMAP_SIGNALS: list[tuple[str, re.Pattern[str]]] = [
+    ("vite build.sourcemap", re.compile(r"\bsourcemap\s*:\s*(?:true|['\"](?:inline|hidden)['\"])")),
+    ("next productionBrowserSourceMaps", re.compile(r"\bproductionBrowserSourceMaps\s*:\s*true\b")),
+    ("webpack devtool", re.compile(r"\bdevtool\s*:\s*['\"](?:source-map|inline-source-map|eval-source-map)['\"]")),
+    ("sentry sourcemaps upload without hide", re.compile(r"\bsourcemaps\s*:\s*\{(?![^}]*filesToDeleteAfterUpload)")),
+]
+_BUILD_CONFIG_NAMES = (
+    "vite.config.ts", "vite.config.js", "vite.config.mts", "vite.config.mjs",
+    "next.config.js", "next.config.mjs", "next.config.ts",
+    "webpack.config.js", "webpack.config.ts", "webpack.config.mjs",
+    "astro.config.mjs", "astro.config.ts", "nuxt.config.ts",
+)
+
+# `.git/config` keys that make git run a command when an agent (or you) opens the repo.
+_GIT_CONFIG_EXEC_KEYS = {
+    "core": {"fsmonitor", "sshcommand", "pager", "editor", "hookspath", "askpass"},
+    "diff": {"external", "textconv"},
+    "merge": {"driver"},
+    "credential": {"helper"},
+    "filter": {"clean", "smudge", "process"},
+    "alias": None,  # any alias starting with "!" runs a shell command
+}
+
+_TEST_PATH_HINTS = ("test", "tests", "__tests__", "spec", "specs", "fixture", "fixtures", "examples", "example", "mocks", "__mocks__", "testdata")
+
+
+def _jwt_role(token: str) -> str:
+    try:
+        payload = token.split(".")[1]
+        payload += "=" * (-len(payload) % 4)
+        data = json.loads(base64.urlsafe_b64decode(payload).decode("utf-8", errors="ignore"))
+        return str(data.get("role", ""))
+    except (ValueError, IndexError, UnicodeDecodeError):
+        return ""
+
+
+def _env_files(root: Path) -> list[Path]:
+    out = []
+    for p in root.iterdir() if root.is_dir() else []:
+        if p.is_file() and p.name.startswith(".env") and not p.name.endswith((".example", ".sample", ".template")):
+            out.append(p)
+    return sorted(out)
+
+
+def check_client_bundle_secrets(root: Path, code_files: list[Path]) -> Finding:
+    """Secrets that the framework will inline into the browser bundle.
+
+    Public-prefixed env vars (NEXT_PUBLIC_, VITE_, …) are shipped to every visitor.
+    Reeve's Aug-2026 scan: 1 in 23 live vibe-coded apps shipped a secret this way.
+    """
+    offenders: list[str] = []
+    details: set[str] = set()
+    for env in _env_files(root):
+        for name, value in _ENV_LINE.findall(_read(env)):
+            if not name.startswith(_PUBLIC_ENV_PREFIXES):
+                continue
+            value = value.strip().strip("'\"")
+            if _SECRETISH_NAME.search(name):
+                details.add(f"{name} (secret-looking name with a public prefix)")
+                offenders.append(_rel(env, root))
+            elif _JWT.fullmatch(value) and _jwt_role(value) == "service_role":
+                details.add(f"{name} (Supabase service_role JWT)")
+                offenders.append(_rel(env, root))
+            elif any(pat.search(value) for _, pat in _SECRET_PATTERNS):
+                details.add(f"{name} (matches a known secret signature)")
+                offenders.append(_rel(env, root))
+    for path in code_files:
+        if path.suffix.lower() not in {".js", ".jsx", ".ts", ".tsx", ".mjs"}:
+            continue
+        for name in _PUBLIC_ENV_IN_CODE.findall(_read(path)):
+            if _SECRETISH_NAME.search(name):
+                details.add(f"{name} (read in client code)")
+                offenders.append(_rel(path, root))
+    if offenders:
+        return Finding(
+            "client-bundle-secrets",
+            "P0",
+            "fail",
+            f"secret shipped to the browser bundle via public env prefix in {len(set(offenders))} file(s): " + "; ".join(sorted(details)),
+            hint="Anything prefixed NEXT_PUBLIC_/VITE_/REACT_APP_ is inlined into the JS every visitor downloads. Move it server-side and rotate it.",
+            files=sorted(set(offenders)),
+            ref=_REF_REEVE_AUG_2026,
+        )
+    return Finding("client-bundle-secrets", "P0", "ok", "no secrets behind public env prefixes")
+
+
+def _sql_files(root: Path) -> list[Path]:
+    candidates = []
+    for sub in ("supabase/migrations", "supabase", "migrations", "db/migrations", "prisma/migrations", "sql"):
+        d = root / sub
+        if d.is_dir():
+            candidates.extend(p for p in d.rglob("*.sql") if p.is_file())
+    return sorted(set(candidates))[:500]
+
+
+def check_supabase_rls(root: Path, code_files: list[Path]) -> Finding:
+    """Supabase tables created without Row Level Security.
+
+    With the anon key in the browser, a table without RLS is readable (often writable)
+    by anyone. Reeve Aug-2026: 57% of reachable Supabase-backed apps (2,096 of 3,680)
+    allowed unauthenticated table reads.
+    """
+    pkg = (_read(root / "package.json") + _read(root / "requirements.txt") + _read(root / "pyproject.toml")).lower()
+    uses_supabase = any(m.lower() in pkg for m in _SUPABASE_MARKERS) or (root / "supabase").is_dir()
+    if not uses_supabase:
+        for path in code_files[:400]:
+            if any(m in _read(path) for m in _SUPABASE_MARKERS):
+                uses_supabase = True
+                break
+    if not uses_supabase:
+        return Finding("supabase-rls", "P0", "skip", "no Supabase usage detected")
+
+    sql_files = _sql_files(root)
+    if not sql_files:
+        return Finding(
+            "supabase-rls",
+            "P0",
+            "warn",
+            "Supabase detected but no SQL migrations found — RLS cannot be verified from the repo",
+            hint="If tables were created in the dashboard, confirm every public table has RLS enabled + a policy. `supabase db pull` brings the schema into the repo so this check can see it.",
+            ref=_REF_REEVE_AUG_2026,
+        )
+    created: dict[str, str] = {}
+    rls_enabled: set[str] = set()
+    for sql in sql_files:
+        text = _read(sql)
+        for name in _SQL_CREATE_TABLE.findall(text):
+            created.setdefault(name.lower(), _rel(sql, root))
+        for name in _SQL_ENABLE_RLS.findall(text):
+            rls_enabled.add(name.lower())
+    missing = sorted(t for t in created if t not in rls_enabled)
+    if missing:
+        return Finding(
+            "supabase-rls",
+            "P0",
+            "fail",
+            f"{len(missing)} table(s) created without ENABLE ROW LEVEL SECURITY: " + ", ".join(missing[:8]) + (" …" if len(missing) > 8 else ""),
+            hint="Every table reachable with the anon key needs `alter table X enable row level security;` plus at least one policy — otherwise any visitor can read it.",
+            files=sorted({created[t] for t in missing}),
+            ref=_REF_REEVE_AUG_2026,
+        )
+    if not created:
+        return Finding("supabase-rls", "P0", "ok", "no CREATE TABLE statements found in migrations")
+    return Finding("supabase-rls", "P0", "ok", f"RLS enabled on all {len(created)} table(s) found in migrations")
+
+
+def check_sourcemaps(root: Path, code_files: list[Path]) -> Finding:
+    """Production source maps published alongside the bundle (Reeve Aug-2026: 13% of apps)."""
+    offenders: list[str] = []
+    details: set[str] = set()
+    for name in _BUILD_CONFIG_NAMES:
+        cfg = root / name
+        if not cfg.is_file():
+            continue
+        text = _read(cfg)
+        for label, pat in _SOURCEMAP_SIGNALS:
+            if pat.search(text):
+                offenders.append(name)
+                details.add(label)
+    if offenders:
+        return Finding(
+            "sourcemaps-exposed",
+            "P1",
+            "warn",
+            f"production source maps enabled in {len(set(offenders))} build config(s): " + ", ".join(sorted(details)),
+            hint="Source maps let anyone read your original source (and the comments, TODOs, and internal URLs in it). Use `hidden` maps uploaded to your error tracker, or disable them for production.",
+            files=sorted(set(offenders)),
+            ref=_REF_REEVE_AUG_2026,
+        )
+    return Finding("sourcemaps-exposed", "P1", "ok", "no production source-map flags in build configs")
+
+
+def _parse_git_config(text: str) -> list[tuple[str, str, str]]:
+    """Return (section, key, value) triples; section is lower-cased and includes subsection (e.g. filter.lfs)."""
+    out = []
+    section = ""
+    for raw in text.splitlines():
+        line = raw.strip()
+        if not line or line.startswith(("#", ";")):
+            continue
+        if line.startswith("["):
+            header = line.strip("[]").strip()
+            parts = header.split(None, 1)
+            section = parts[0].lower()
+            if len(parts) > 1:
+                section += "." + parts[1].strip().strip('"').lower()
+            continue
+        if "=" in line:
+            key, _, value = line.partition("=")
+            out.append((section, key.strip().lower(), value.strip()))
+    return out
+
+
+def check_git_config_exec(root: Path, code_files: list[Path]) -> Finding:
+    """`.git/config` keys that execute commands when the repo is opened.
+
+    GitSpawn (Sep 2026): coding agents run `git status` etc. on startup; keys like
+    core.fsmonitor turn that into arbitrary code execution before any approval prompt.
+    """
+    cfg = root / ".git" / "config"
+    if not cfg.is_file():
+        return Finding("git-config-exec", "P0", "skip", "no .git/config found")
+    hits: list[str] = []
+    for section, key, value in _parse_git_config(_read(cfg)):
+        top = section.split(".", 1)[0]
+        allowed = _GIT_CONFIG_EXEC_KEYS.get(top)
+        if top not in _GIT_CONFIG_EXEC_KEYS:
+            continue
+        if top == "alias":
+            if value.startswith("!"):
+                hits.append(f"alias.{key} = {value[:60]}")
+        elif top == "credential" and key == "helper":
+            if value.startswith("!") or "/" in value:
+                hits.append(f"{section}.{key} = {value[:60]}")
+        elif allowed and key in allowed:
+            hits.append(f"{section}.{key} = {value[:60]}")
+    if hits:
+        return Finding(
+            "git-config-exec",
+            "P0",
+            "fail",
+            f".git/config contains {len(hits)} command-executing key(s): " + "; ".join(hits[:5]),
+            hint="These keys run a program whenever git (or your coding agent) touches the repo. If you did not set them yourself, the repo you cloned/unzipped is hostile — remove them before opening it in an agent.",
+            files=[".git/config"],
+            ref=_REF_GITSPAWN,
+        )
+    return Finding("git-config-exec", "P0", "ok", "no command-executing keys in .git/config")
+
+
+def _is_test_path(rel: str) -> bool:
+    parts = [p.lower() for p in Path(rel).parts]
+    if any(p in _TEST_PATH_HINTS for p in parts[:-1]):
+        return True
+    name = parts[-1] if parts else ""
+    return name.startswith(("test_", "spec_")) or ".test." in name or ".spec." in name or name.endswith(("_test.py", "_test.go", "_spec.rb"))
+
+
+def downgrade_test_only_findings(findings: list[Finding]) -> list[Finding]:
+    """A P0 whose every offending file lives under tests/fixtures/examples becomes a P1 warn.
+
+    Fixtures legitimately contain fake secrets and deliberately bad code; blocking the
+    build on them trains people to ignore the tool.
+    """
+    for f in findings:
+        if f.status != "fail" or not f.files:
+            continue
+        if all(_is_test_path(rel) for rel in f.files):
+            f.severity = "P1"
+            f.status = "warn"
+            f.message += " (all in test/fixture paths — downgraded)"
+    return findings
+
+
 def run_vibecheck(root: Path) -> list[Finding]:
     from mmu_cli.cli import doctor_skip_paths, gather_code_files
 
@@ -409,7 +692,11 @@ def run_vibecheck(root: Path) -> list[Finding]:
     findings.append(check_cors(root, code_files))
     findings.append(check_debug_mode(root, code_files))
     findings.append(check_error_monitoring(root, code_files))
-    return findings
+    findings.append(check_client_bundle_secrets(root, code_files))
+    findings.append(check_supabase_rls(root, code_files))
+    findings.append(check_sourcemaps(root, code_files))
+    findings.append(check_git_config_exec(root, code_files))
+    return downgrade_test_only_findings(findings)
 
 
 def format_findings(findings: list[Finding]) -> tuple[list[str], int]:
@@ -428,6 +715,8 @@ def format_findings(findings: list[Finding]) -> tuple[list[str], int]:
                     lines.append(f"        - … and {len(f.files) - 5} more")
             if f.hint:
                 lines.append(f"        ↳ {f.hint}")
+            if f.ref:
+                lines.append(f"        ↳ why: {f.ref}")
     lines.append("")
     if fails:
         lines.append(f"Vibe check result: {len(fails)} launch-blocking issue(s), {len(warns)} warning(s)")
