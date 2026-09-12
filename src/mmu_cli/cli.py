@@ -73,6 +73,20 @@ DEFAULT_SKIP_PATHS = {
     "tests",
 }
 
+# Vendor and build output, which is never first-party source. These are skipped
+# wherever they appear, not only at the project root: a frontend in `web/` or a
+# monorepo package brings its own `node_modules`, and scanning it produces
+# findings about someone else's code. Entries in DEFAULT_SKIP_PATHS keep their
+# root-anchored meaning, so a nested `scripts/` or `tests/` is still scanned.
+NESTED_SKIP_DIRS = {
+    ".git",
+    ".venv",
+    "node_modules",
+    "dist",
+    "build",
+    ".mmu",
+}
+
 CODE_EXTENSIONS = {".js", ".jsx", ".ts", ".tsx", ".py", ".go", ".rb", ".java", ".cs"}
 HEADING_PATTERN = re.compile(r"^##\s*(M\d+)\s+(.+?)\s*$")
 UNCHECKED_PATTERN = re.compile(r"^\s*-\s*\[\s\]\s+(.+)$")
@@ -382,6 +396,8 @@ def normalize_rel(path: str) -> str:
 
 def should_skip_rel(rel_path: str, skip_paths: set[str]) -> bool:
     rel_path = normalize_rel(rel_path)
+    if any(part in NESTED_SKIP_DIRS for part in rel_path.split("/") if part):
+        return True
     for skip in skip_paths:
         s = normalize_rel(skip)
         if not s:

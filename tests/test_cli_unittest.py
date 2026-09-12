@@ -150,5 +150,58 @@ class CLITestCase(unittest.TestCase):
         self.assertEqual(resolved, self.root.resolve())
 
 
+class NestedSkipDirTests(unittest.TestCase):
+    """Vendor and build output is skipped wherever it sits, not only at the root."""
+
+    def setUp(self) -> None:
+        self.tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self.tmp.name)
+        self.skip = set(cli.DEFAULT_SKIP_PATHS)
+
+    def tearDown(self) -> None:
+        self.tmp.cleanup()
+
+    def _write(self, rel: str, text: str = "const x = 1;\n") -> None:
+        path = self.root / rel
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text, encoding="utf-8")
+
+    def test_nested_node_modules_is_skipped(self) -> None:
+        self.assertTrue(cli.should_skip_rel("website/node_modules/next/index.js", self.skip))
+        self.assertTrue(cli.should_skip_rel("apps/web/node_modules", self.skip))
+
+    def test_root_node_modules_still_skipped(self) -> None:
+        self.assertTrue(cli.should_skip_rel("node_modules/next/index.js", self.skip))
+
+    def test_other_nested_vendor_dirs_are_skipped(self) -> None:
+        for rel in ("packages/ui/dist/bundle.js", "services/api/build/out.js", "sub/.venv/lib/x.py"):
+            self.assertTrue(cli.should_skip_rel(rel, self.skip), rel)
+
+    def test_nested_source_dirs_are_still_scanned(self) -> None:
+        # `scripts` and `tests` are root-anchored conventions, not vendor output:
+        # a nested one can hold first-party code worth scanning.
+        self.assertFalse(cli.should_skip_rel("apps/api/scripts/deploy.py", self.skip))
+        self.assertFalse(cli.should_skip_rel("apps/api/tests/test_x.py", self.skip))
+        self.assertTrue(cli.should_skip_rel("scripts/deploy.py", self.skip))
+
+    def test_a_name_containing_a_vendor_dir_is_not_skipped(self) -> None:
+        self.assertFalse(cli.should_skip_rel("src/node_modules_helper.py", self.skip))
+        self.assertFalse(cli.should_skip_rel("src/my-build/app.js", self.skip))
+
+    def test_gather_code_files_prunes_nested_vendor_dirs(self) -> None:
+        self._write("web/node_modules/next/index.js")
+        self._write("web/src/app.js")
+        self._write("packages/ui/dist/bundle.js")
+        self._write("apps/api/scripts/deploy.py", "x = 1\n")
+        found = {
+            p.relative_to(self.root).as_posix()
+            for p in cli.gather_code_files(self.root, self.skip)
+        }
+        self.assertIn("web/src/app.js", found)
+        self.assertIn("apps/api/scripts/deploy.py", found)
+        self.assertNotIn("web/node_modules/next/index.js", found)
+        self.assertNotIn("packages/ui/dist/bundle.js", found)
+
+
 if __name__ == "__main__":
     unittest.main()
