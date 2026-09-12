@@ -118,6 +118,22 @@ class UnsafeDeserializationTests(unittest.TestCase):
             self.assertEqual(finding.status, "fail")
             self.assertIn("yaml.load without SafeLoader", finding.message)
 
+    def test_flags_yaml_load_all_without_safe_loader(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            write(root, "src/config.py", "import yaml\nconfigs = yaml.load_all(raw_config)\n")
+            finding = vibecheck.check_unsafe_deserialization(root, [root / "src/config.py"])
+            self.assertEqual(finding.status, "fail")
+            self.assertIn("yaml.load_all without SafeLoader", finding.message)
+
+    def test_flags_yaml_module_alias_load_all_without_safe_loader(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            write(root, "src/config.py", "import yaml as y\nconfigs = y.load_all(raw_config)\n")
+            finding = vibecheck.check_unsafe_deserialization(root, [root / "src/config.py"])
+            self.assertEqual(finding.status, "fail")
+            self.assertIn("yaml.load_all without SafeLoader", finding.message)
+
     def test_flags_yaml_unsafe_load(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -196,6 +212,14 @@ class UnsafeDeserializationTests(unittest.TestCase):
             self.assertEqual(finding.status, "fail")
             self.assertIn("yaml.load without SafeLoader", finding.message)
 
+    def test_flags_imported_yaml_load_all_alias_without_safe_loader(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            write(root, "src/config.py", "from yaml import load_all as load_yaml\nconfigs = load_yaml(raw)\n")
+            finding = vibecheck.check_unsafe_deserialization(root, [root / "src/config.py"])
+            self.assertEqual(finding.status, "fail")
+            self.assertIn("yaml.load_all without SafeLoader", finding.message)
+
     def test_ok_for_safe_yaml_load(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -217,6 +241,30 @@ class UnsafeDeserializationTests(unittest.TestCase):
             finding = vibecheck.check_unsafe_deserialization(root, [root / "src/config.py"])
             self.assertEqual(finding.status, "ok")
 
+    def test_ok_for_yaml_load_all_with_safe_loaders(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            write(
+                root,
+                "src/config.py",
+                "import yaml\nfirst = yaml.load_all(raw, Loader=yaml.SafeLoader)\n"
+                "second = yaml.load_all(raw, Loader=yaml.CSafeLoader)\n",
+            )
+            finding = vibecheck.check_unsafe_deserialization(root, [root / "src/config.py"])
+            self.assertEqual(finding.status, "ok")
+
+    def test_ok_for_imported_yaml_load_all_alias_with_safe_loader(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            write(
+                root,
+                "src/config.py",
+                "from yaml import load_all as load_yaml\nfrom yaml import SafeLoader\n"
+                "configs = load_yaml(raw, Loader=SafeLoader)\n",
+            )
+            finding = vibecheck.check_unsafe_deserialization(root, [root / "src/config.py"])
+            self.assertEqual(finding.status, "ok")
+
     def test_ignores_unrelated_convenience_loader_names(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -227,8 +275,9 @@ class UnsafeDeserializationTests(unittest.TestCase):
                 "from data_tools import full_load_all as load_all_yaml\n"
                 "def unsafe_load(value): return value\n"
                 "def unsafe_load_all(value): return value\n"
+                "def load_all(value): return value\n"
                 "first = load_yaml(raw)\nsecond = load_all_yaml(raw)\n"
-                "third = unsafe_load(raw)\nfourth = unsafe_load_all(raw)\n",
+                "third = unsafe_load(raw)\nfourth = unsafe_load_all(raw)\nfifth = load_all(raw)\n",
             )
             finding = vibecheck.check_unsafe_deserialization(root, [root / "src/config.py"])
             self.assertEqual(finding.status, "ok")
