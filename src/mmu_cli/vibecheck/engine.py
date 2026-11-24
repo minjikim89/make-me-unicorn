@@ -7,6 +7,7 @@ Pipeline: run every check -> apply suppressions (inline `mmu-ignore[...]` and
 from __future__ import annotations
 
 import fnmatch
+import hashlib
 import re
 import subprocess
 from dataclasses import dataclass, field, replace
@@ -110,6 +111,13 @@ class Location:
         return f"{self.path}:{self.line}" if self.line else self.path
 
 
+def fingerprint(rule_id: str, loc: Location | None) -> str:
+    """Line-shift-stable identity: sha256 of rule id, path and whitespace-normalised snippet, first 16 hex chars."""
+    path = loc.path if loc else ""
+    snippet = " ".join(loc.snippet.split()) if loc else ""
+    return hashlib.sha256("\n".join((rule_id, path, snippet)).encode("utf-8")).hexdigest()[:16]
+
+
 @dataclass
 class Finding:
     check: str  # rule id
@@ -164,6 +172,7 @@ class Finding:
             "confidence": self.confidence or "medium",
             "suppression": suppression,
             "notes": list(self.notes),
+            "fingerprint": fingerprint(self.check, self.locations[0] if self.locations else None),
         }
 
 

@@ -266,8 +266,9 @@ def parse_args() -> argparse.Namespace:
         "vibecheck",
         help="Scan for the security/UX gaps AI-generated code ships most (secrets, webhooks, rate limits, ...)",
     )
-    p_vibecheck.add_argument("--json", action="store_true", help="Output structured JSON")
-    p_vibecheck.add_argument("--root", default=".", help="Project root path")
+    from mmu_cli.vibecheck.command import add_arguments as add_vibecheck_arguments
+
+    add_vibecheck_arguments(p_vibecheck)
 
     p_gate = sub.add_parser("gate", help="Check stage gate readiness")
     p_gate.add_argument("--json", action="store_true", help="Output structured JSON")
@@ -410,7 +411,8 @@ def _parse_simple_toml(text: str) -> dict[str, Any]:
     """Minimal TOML parser for flat section/key=value configs.
 
     Only handles ``[section]`` headers and ``key = value`` lines where
-    values are booleans, quoted strings, or numbers.  This covers the
+    values are booleans, quoted strings, numbers, or single-line string
+    arrays.  This covers the
     .mmu/config.toml format without requiring tomllib (Python 3.11+).
     """
     data: dict[str, Any] = {}
@@ -427,13 +429,18 @@ def _parse_simple_toml(text: str) -> dict[str, Any]:
         if "=" in line and section is not None:
             key, _, val = line.partition("=")
             key = key.strip()
+            raw_val = val.strip()
             val = val.split("#", 1)[0].strip()  # strip inline comments
+            if raw_val.startswith("[") and "]" in raw_val:  # single-line array; may hold "#" inside strings
+                val = raw_val[: raw_val.rindex("]") + 1]
             if val.lower() == "true":
                 section[key] = True
             elif val.lower() == "false":
                 section[key] = False
             elif val.startswith('"') and val.endswith('"'):
                 section[key] = val[1:-1]
+            elif val.startswith("[") and val.endswith("]"):
+                section[key] = [a or b for a, b in re.findall(r"\"([^\"]*)\"|'([^']*)'", val)]
             else:
                 try:
                     section[key] = int(val)
@@ -1233,13 +1240,14 @@ def command_doctor(root: Path) -> Result:
 
 
 def command_vibecheck(root: Path) -> Result:
+    """Programmatic full scan. The CLI itself goes through `mmu_cli.vibecheck.command.run`."""
     from mmu_cli.vibecheck import format_findings, run_vibecheck
 
     findings = run_vibecheck(root)
     messages, exit_code = format_findings(findings)
     fail_count = sum(1 for f in findings if f.status == "fail")
     return Result(
-        exit_code=exit_code,
+        exit_code=exit_code,  # 0 = no blockers, 1 = P0 findings
         failures=fail_count,
         findings=[f.to_dict() for f in findings],
         messages=messages,
@@ -1767,6 +1775,12 @@ def main() -> int:
     # serve-mcp validates its own --root (None means "use packaged data").
     # Every other command operates on the project directory, so a bad --root
     # should fail here with one clear message instead of deep in file I/O.
+    if args.command == "vibecheck":
+        # Owns its error contract (exit 2, JSON error object with --format json), including a bad --root.
+        from mmu_cli.vibecheck.command import run as run_vibecheck_command
+
+        return run_vibecheck_command(args, root)
+
     if args.command != "serve-mcp" and not root.is_dir():
         print(f"Error: --root {root} is not a directory.", file=sys.stderr)
         return 2
@@ -1796,9 +1810,6 @@ def main() -> int:
         return render_result(result, args.json)
     if args.command == "generate":
         result = command_generate(args.doc, root)
-        return render_result(result, args.json)
-    if args.command == "vibecheck":
-        result = command_vibecheck(root)
         return render_result(result, args.json)
     if args.command == "gate":
         result = command_gate(args.stage, root)

@@ -13,6 +13,7 @@ from mmu_cli.vibecheck.engine import (
     Rule,
     ScanResult,
     all_rules,
+    fingerprint,
     tool_version,
 )
 
@@ -178,7 +179,12 @@ def _sarif_rule(rule: Rule) -> dict[str, Any]:
         "fullDescription": {"text": rule.summary},
         "help": {"text": rule.fix},
         "defaultConfiguration": {"level": "error" if rule.severity == "P0" else "warning"},
-        "properties": {"tags": list(rule.tags), "severity": rule.severity, "confidence": rule.confidence},
+        "properties": {
+            "tags": [*rule.tags, "security"],
+            "security-severity": "8.0" if rule.severity == "P0" else "5.0",  # GitHub: high / medium
+            "severity": rule.severity,
+            "confidence": rule.confidence,
+        },
     }
     if rule.ref:
         out["helpUri"] = rule.ref
@@ -218,9 +224,13 @@ def to_sarif(result: ScanResult) -> dict[str, Any]:
             kind = "inSource" if f.suppress_source == "inline" else "external"
             base["suppressions"] = [{"kind": kind, "justification": f.suppress_reason}]
         if not f.locations:
-            results.append(base)
+            results.append({**base, "partialFingerprints": {"primaryLocationLineHash": f"{fingerprint(f.check, None)}:1"}})
         for loc in f.locations:
-            results.append({**base, "locations": [_sarif_location(loc)]})
+            results.append({
+                **base,
+                "locations": [_sarif_location(loc)],
+                "partialFingerprints": {"primaryLocationLineHash": f"{fingerprint(f.check, loc)}:1"},
+            })
     return {
         "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
         "version": "2.1.0",
