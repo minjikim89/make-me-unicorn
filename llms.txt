@@ -19,7 +19,7 @@ Make Me Unicorn (MMU) is a developer tool for solo founders shipping AI-generate
 - `mmu scan` — analyze the codebase against the 670-item checklist
 - `mmu` (no args) — show the status dashboard with launch-gate progress
 - `mmu next` — show the next highest-priority item to fix
-- `mmu vibecheck` — scan for the gaps AI-generated code ships most (hardcoded secrets, unverified webhooks, missing password reset, f-string SQL, missing rate limits, wildcard CORS, debug mode, no error monitoring)
+- `mmu vibecheck` — scan for the gaps AI-generated code ships most (hardcoded secrets, secrets behind NEXT_PUBLIC_/VITE_ prefixes, Supabase tables without RLS, production source maps, command-executing .git/config keys, unverified webhooks, missing password reset, f-string SQL, unsafe pickle/yaml, missing rate limits, wildcard CORS, debug mode, no error monitoring). Each finding links the incident data behind the rule.
 - `mmu validate <idea>` — validate a startup idea against real HN + Reddit threads (free by default, no API keys; `--llm` opt-in adds Claude synthesis at ~$0.05-0.20 per call)
 
 ## Distribution

@@ -181,28 +181,93 @@ def build_server(root: Path | None = None):
     mcp = FastMCP("make-me-unicorn")
 
     @mcp.tool()
-    def mmu_list_blueprints() -> list[dict[str, str]]:
-        """List all available MMU blueprints (core + industry) with name, path, and one-line description."""
-        return list_blueprints(root)
+    def mmu_vibecheck(project_root: str) -> dict:
+        """Scan a codebase for the launch-blocking gaps AI-generated code ships most.
 
-    @mcp.tool()
-    def mmu_get_blueprint(name: str) -> dict[str, str]:
-        """Fetch the full markdown content of a single blueprint by name (e.g. 'frontend', 'billing', 'ai-product')."""
-        return get_blueprint(name, root)
+        Use when: the user is about to commit, deploy, or launch, or asks "is this
+        safe to ship?" about a project on disk. Deterministic and read-only — no
+        LLM, no network, runs in under a second on most repos.
 
-    @mcp.tool()
-    def mmu_list_idea_templates() -> list[dict[str, str]]:
-        """List MMU idea + launch templates (start/close/ADR prompts, Product Hunt kit)."""
-        return list_idea_templates(root)
+        Args:
+            project_root: absolute path of the project to scan (the git root).
+
+        Returns: {"findings": [{check, severity (P0|P1), status (fail|warn|ok|skip),
+        message, hint, files, ref}], "failures": <count of P0 fails>, "exit_code"}.
+        P0 fails mean "do not ship yet"; `ref` links the incident data behind the rule.
+        Do NOT use for: reviewing code style or architecture — this only checks the
+        specific gaps listed in each finding.
+        """
+        from mmu_cli.cli import command_vibecheck
+
+        target = Path(project_root).expanduser()
+        if not target.is_dir():
+            raise ValueError(f"project_root is not a directory: {project_root}")
+        result = command_vibecheck(target)
+        return {
+            "findings": result.get("findings", []),
+            "failures": result.get("failures", 0),
+            "exit_code": result.exit_code,
+        }
 
     @mcp.tool()
     def mmu_validate_idea(idea: str, limit: int = 20) -> dict:
-        """Validate a startup idea against real HN + Reddit threads.
+        """Check a startup idea against real Hacker News + Reddit threads.
 
-        Free mode: public search + local VADER sentiment, no API keys or paid
-        calls. Returns verdict, sentiment, candidate competitors, top threads.
+        Use when: the user describes a product idea and wants to know if people
+        already complain about the problem, who the competitors are, and how the
+        sentiment leans. Free mode — public search + local sentiment, no API keys.
+
+        Args:
+            idea: one sentence describing the product (e.g. "invoice reminders for freelancers").
+            limit: max threads to fetch per source (default 20).
+
+        Returns: {"status": "ok", "verdict", "sentiment", "threads_found",
+        "competitors": [{name, mentions}], "top_threads": [{source, title, url}],
+        "errors", "note"}. Treat `top_threads` as the evidence and `verdict` as a
+        summary of it. When the `[validate]` extra is missing the result is
+        {"status": "unavailable", "note"}; on search failure {"status": "error", "errors"}
+        — neither carries a verdict, so check `status` first.
         """
         return validate_idea(idea, limit=limit)
+
+    @mcp.tool()
+    def mmu_get_blueprint(name: str) -> dict[str, str]:
+        """Fetch one MMU launch blueprint (a checklist of what a shipped SaaS needs in one area).
+
+        Use when: the user asks what they must have before launch for a specific
+        area — billing, auth/security, frontend, backend, ai-product, marketplace…
+        Call mmu_list_blueprints first if you do not know the exact name.
+
+        Args:
+            name: blueprint slug, e.g. "billing", "security", "ai-product".
+
+        Returns: {"name", "path", "content"} where content is the full markdown
+        checklist. Raises ValueError if the name is unknown or ambiguous.
+        """
+        return get_blueprint(name, root)
+
+    @mcp.tool()
+    def mmu_list_blueprints() -> list[dict[str, str]]:
+        """List the available MMU launch blueprints (15 core + 2 industry) with a one-line description each.
+
+        Use when: you need the exact slug to pass to mmu_get_blueprint, or the user
+        asks "what areas does a launch checklist cover?". Cheap; returns 17 rows.
+
+        Returns: [{"name", "path", "description"}].
+        """
+        return list_blueprints(root)
+
+    @mcp.tool()
+    def mmu_list_idea_templates() -> list[dict[str, str]]:
+        """List MMU prompt templates: session start/close, ADR, and the Product Hunt launch kit.
+
+        Use when: the user wants a structured prompt for planning a work session,
+        recording a decision, or drafting a Product Hunt launch. Returns names and
+        paths only; read the file for the template body.
+
+        Returns: [{"name", "path"}].
+        """
+        return list_idea_templates(root)
 
     return mcp
 

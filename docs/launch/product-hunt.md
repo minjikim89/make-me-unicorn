@@ -112,7 +112,7 @@ In 2026, more developers ask Claude or Cursor "what should I check before launch
 
 So MMU v0.6 plants on both rails:
 
-→ Claude Code plugin / Anthropic Agent Skill — auto-triggers on phrases like "validate my SaaS idea" or "launch checklist". Compatible with Claude Code, Claude Desktop, and OpenAI Codex CLI.
+→ Claude Code plugin — blocks `git commit` / `git push` when `mmu vibecheck` finds launch-blocking gaps, and ships the MMU skill (blueprints, idea validation) for Claude Code, Claude Desktop, and OpenAI Codex CLI.
 
 → `mmu serve-mcp` — exposes 17 blueprints + idea templates as native MCP tools, callable from any MCP client.
 

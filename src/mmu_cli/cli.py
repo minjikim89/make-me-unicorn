@@ -73,21 +73,20 @@ DEFAULT_SKIP_PATHS = {
     "tests",
 }
 
-# Vendor and build output, which is never first-party source. These are skipped
-# wherever they appear, not only at the project root: a frontend in `web/` or a
-# monorepo package brings its own `node_modules`, and scanning it produces
-# findings about someone else's code. Entries in DEFAULT_SKIP_PATHS keep their
-# root-anchored meaning, so a nested `scripts/` or `tests/` is still scanned.
-NESTED_SKIP_DIRS = {
-    ".git",
-    ".venv",
-    "node_modules",
-    "dist",
-    "build",
-    ".mmu",
-}
+CODE_EXTENSIONS = {".js", ".jsx", ".ts", ".tsx", ".mjs", ".mts", ".cjs", ".py", ".go", ".rb", ".java", ".cs"}
 
-CODE_EXTENSIONS = {".js", ".jsx", ".ts", ".tsx", ".py", ".go", ".rb", ".java", ".cs"}
+# Vendor, cache, and build-output directory basenames, pruned at ANY depth
+# (DEFAULT_SKIP_PATHS keeps its root-anchored meaning, so a nested `scripts/`
+# or `tests/` is still scanned). A frontend in `web/` or a monorepo package
+# brings its own `node_modules`; scanning it produces findings about someone
+# else's code and dominates scan time.
+PRUNE_DIR_NAMES = {
+    "node_modules", ".next", ".nuxt", ".svelte-kit", ".turbo", ".venv", "venv", ".tox",
+    "site-packages", "__pycache__", ".git", ".mypy_cache", ".pytest_cache", ".ruff_cache", "coverage",
+    "dist", "build", ".mmu",
+}
+NESTED_SKIP_DIRS = PRUNE_DIR_NAMES
+
 HEADING_PATTERN = re.compile(r"^##\s*(M\d+)\s+(.+?)\s*$")
 UNCHECKED_PATTERN = re.compile(r"^\s*-\s*\[\s\]\s+(.+)$")
 
@@ -572,6 +571,8 @@ def gather_code_files(root: Path, skip_paths: set[str]) -> list[Path]:
 
         kept_dirs: list[str] = []
         for dirname in dirnames:
+            if dirname in PRUNE_DIR_NAMES:
+                continue
             child = f"{rel_dir}/{dirname}" if rel_dir else dirname
             if not should_skip_rel(child, skip_paths):
                 kept_dirs.append(dirname)

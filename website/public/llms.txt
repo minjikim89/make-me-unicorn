@@ -16,7 +16,7 @@ Solo SaaS founders using Claude Code, Cursor, or other AI agents. Indie hackers.
 - `mmu scan` — full 670-item check
 - `mmu` — status dashboard with launch gates
 - `mmu next` — highest-priority missing item
-- `mmu vibecheck` — scan for AI-generated code blind spots (secrets, webhook safety, rate limits, ...)
+- `mmu vibecheck` — scan for the gaps AI-generated code ships most (hardcoded secrets, secrets behind NEXT_PUBLIC_/VITE_ prefixes, Supabase tables without RLS, production source maps, command-executing .git/config keys, unverified webhooks, missing password reset, f-string SQL, unsafe pickle/yaml, missing rate limits, wildcard CORS, debug mode, no error monitoring). Each finding links the incident data behind the rule.
 - `mmu validate <idea>` — startup idea check against real HN + Reddit threads (free by default; `--llm` adds Claude synthesis, ~$0.05–$0.20)
 - `mmu serve-mcp` — start MCP server (with [mcp] extra installed)
 

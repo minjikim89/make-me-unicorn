@@ -317,9 +317,7 @@ export ANTHROPIC_API_KEY=sk-ant-...
 
 코어 CLI는 외부 의존성 제로. AI 기능은 선택이며, 없어도 정상 동작합니다.
 
-## Claude Skill로 사용하기
-
-MMU는 Claude Code 플러그인 + Anthropic Agent Skill로도 패키징되어 있습니다. Claude Code, Claude Desktop, OpenAI Codex CLI 등 Agent Skills 사양을 지원하는 모든 도구에서 "스타트업 아이디어 검증해줘", "출시 체크리스트 알려줘" 같은 문구를 입력하면 MMU가 자동 호출됩니다.
+## Claude Code 플러그인으로 사용하기 (커밋 게이트)
 
 ```bash
 # Claude Code 안에서:
@@ -327,7 +325,9 @@ MMU는 Claude Code 플러그인 + Anthropic Agent Skill로도 패키징되어 �
 /plugin install make-me-unicorn
 ```
 
-스킬은 progressive disclosure 방식으로 대화에 필요한 블루프린트만 로드하므로 컨텍스트 비용이 적습니다.
+설치하면 **에이전트가 실행하는 모든 `git commit` / `git push`가 먼저 `mmu vibecheck`를 통과해야 합니다.** P0 발견 사항이 있으면 명령이 차단되고, 무엇을 왜 고쳐야 하는지(`why:` 출처 링크 포함)가 에이전트에게 표시됩니다. MCP 툴 대신 훅을 쓰는 이유: 에이전트는 선택적 툴은 건너뛰지만 훅은 건너뛸 수 없습니다. 스캐너 자체가 실행되지 못하면 커밋은 통과하되 경고가 표시됩니다. 한 번만 우회하려면 명령 앞에 `MMU_HOOK_DISABLE=1`을 붙이고, 세션 전체를 끄려면 Claude Code 환경변수로 설정하세요. `MMU_HOOK_ON_PUSH_ONLY=1`은 push만 게이트합니다.
+
+플러그인에는 `mmu-startup` 스킬(블루프린트·아이디어 검증·Product Hunt 키트)도 들어 있으며, 대화에 필요한 블루프린트만 로드합니다. 스킬은 Agent Skills 사양을 지원하는 도구(Claude Desktop, OpenAI Codex CLI)에서도 쓸 수 있지만 커밋 게이트는 Claude Code 전용입니다.
 
 ## MCP 서버 모드
 
@@ -354,6 +354,7 @@ Claude Desktop 설정 (`~/Library/Application Support/Claude/claude_desktop_conf
 
 노출되는 도구:
 
+- `mmu_vibecheck(project_root)` — 프로젝트를 스캔해 출시 차단 결함을 찾고 `ref` 출처 링크와 함께 반환
 - `mmu_list_blueprints` — 17개 블루프린트(코어 15개 + 산업 2개) 목록
 - `mmu_get_blueprint(name)` — 특정 블루프린트 마크다운 전문
 - `mmu_list_idea_templates` — start/close/ADR 프롬프트 + Product Hunt 키트

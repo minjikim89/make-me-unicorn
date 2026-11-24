@@ -305,9 +305,7 @@ export ANTHROPIC_API_KEY=sk-ant-...
 
 El CLI core no tiene dependencias externas. Las funciones de IA son opcionales y se degradan de forma segura.
 
-## Usar como Skill de Claude
-
-MMU también está empaquetado como plugin de Claude Code + Anthropic Agent Skill. En cualquier herramienta compatible con la especificación Agent Skills (Claude Code, Claude Desktop, OpenAI Codex CLI), MMU se invoca automáticamente cuando mencionás frases como "validar mi idea de SaaS" o "checklist de lanzamiento".
+## Usar como plugin de Claude Code (gate de commits)
 
 ```bash
 # Dentro de Claude Code:
@@ -315,7 +313,9 @@ MMU también está empaquetado como plugin de Claude Code + Anthropic Agent Skil
 /plugin install make-me-unicorn
 ```
 
-El skill carga solamente los blueprints relevantes para la conversación (progressive disclosure), manteniendo bajo el costo de contexto.
+Una vez instalado, **cada `git commit` / `git push` que ejecuta el agente pasa primero por `mmu vibecheck`.** Un hallazgo P0 bloquea el comando y le muestra al agente qué arreglar y por qué (con el enlace `why:` a la fuente). Por qué un hook y no una herramienta MCP: los agentes se saltan las herramientas opcionales, pero no pueden saltarse un hook. Si el escáner en sí no puede ejecutarse, el commit pasa pero con una advertencia visible. Para omitirlo una sola vez, prefijá el comando con `MMU_HOOK_DISABLE=1`; para desactivarlo en toda la sesión, definí la misma variable en el entorno de Claude Code. `MMU_HOOK_ON_PUSH_ONLY=1` solo controla los push.
+
+El plugin también incluye el skill `mmu-startup` (blueprints, validación de ideas, kit de Product Hunt), que carga solo los blueprints relevantes. El skill funciona en cualquier herramienta compatible con Agent Skills (Claude Desktop, OpenAI Codex CLI); el gate de commits es solo para Claude Code.
 
 ## Modo Servidor MCP
 
@@ -342,6 +342,7 @@ Configuración de Claude Desktop (`~/Library/Application Support/Claude/claude_d
 
 Herramientas expuestas:
 
+- `mmu_vibecheck(project_root)` — escanea un proyecto en busca de fallas que bloquean el lanzamiento; devuelve hallazgos con enlaces `ref`
 - `mmu_list_blueprints` — lista 17 blueprints (15 core + 2 de industria)
 - `mmu_get_blueprint(name)` — obtiene el markdown completo de un blueprint
 - `mmu_list_idea_templates` — lista los prompts start/close/ADR + el kit de Product Hunt
