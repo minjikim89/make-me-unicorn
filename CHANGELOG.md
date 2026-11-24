@@ -6,8 +6,22 @@ The format is inspired by Keep a Changelog and follows semantic intent.
 
 ## [Unreleased]
 
+### Breaking
+
+- **`mmu vibecheck` exit codes.** `0` = no blocking findings, `1` = blocking (P0) findings, `2` = usage/runtime error (bad `--root`, git unavailable for a scoped scan, unknown rule id). Blocking findings previously exited `2`; scripts that test for "non-zero" keep working, scripts that test for `== 2` must change.
+- **`mmu vibecheck --json` output is now the `mmu.vibecheck/v1` document** (`docs/vibecheck-json-schema.md`): `schema`, `tool`, `root`, `scope`, `summary`, `findings`. The `messages` text blob, `failures` and `exit_code` keys are gone; `ok`/`skip` findings are listed only with `--all`. Findings keep `check`, `hint` and `files` as deprecated aliases next to `rule_id`, `fix` and `locations`.
+- The `webhook-safety` skip finding is replaced by `webhook-signature` and `webhook-idempotency` skips, so every finding id is a registered rule.
+- `mmu_vibecheck` MCP tool returns the same v1 document (was `{findings, failures, exit_code}`).
+
 ### Added
 
+- **Vibecheck engine v2: an output contract built for coding agents.**
+  - Every finding carries `locations` with `path`, `line` and a `snippet` (secret values redacted). Absence findings (no password reset, unverified webhook, no rate limiting, no error monitoring) anchor to the file that creates the obligation.
+  - Rule registry: stable `rule_id`, title, summary, concrete `fix` instructions, `ref`, tags, confidence. `mmu vibecheck --list-rules` and `mmu vibecheck --explain <rule-id>`.
+  - Suppressions: `mmu-ignore[<rule-id>]: <reason>` on the flagged line or alone on the line above (a marker without a reason is not applied), and `[vibecheck] ignore = ["rule-id", "path/glob/**:rule-id"]` in `.mmu/config.toml`. Suppressed findings are reported with status `suppressed` and counted in `summary.suppressed`.
+  - Scoping for agent loops: `--changed` (tracked changes vs HEAD + untracked), `--staged`, `--since <ref>`. Without git or outside a repository these exit `2` instead of silently scanning everything.
+  - `--format text|json|sarif|agent`, `--output <file>`, `--fail-on P0|P1|never`, `--all`. `agent` is compact plain text for LLM context; `sarif` is SARIF 2.1.0 for code-scanning upload. `mmu --json vibecheck` (flag before the subcommand) now works. With `--format json`, errors are a JSON object `{"schema", "error": {"code", "message"}}` on stdout.
+  - GitHub Action inputs `format`, `sarif-file` and `fail-on`.
 - **Four new `mmu vibecheck` rules grounded in field data.** Reeve's August 2026 scan of 30,998 live vibe-coded apps found 57% of Supabase-backed apps with unauthenticated table reads, 1 in 23 shipping a secret in the public bundle, and 13% publishing source maps — so: `client-bundle-secrets` (P0: `service_role` JWTs, known key signatures, or credential-named values behind `NEXT_PUBLIC_`/`VITE_`/`REACT_APP_`… prefixes, in `.env*` files and client code), `supabase-rls` (P0: tables created under `supabase/` without `ENABLE ROW LEVEL SECURITY`; P1 warn when Supabase is used but no SQL is in the repo), `sourcemaps-exposed` (P1: Vite/Next/webpack production source-map flags), and `git-config-exec` (P0: git config keys such as `core.fsmonitor` that run a command when an agent opens the repo — the GitSpawn class, Sep 2026; follows `gitdir:` pointers and `include.path`, ignores husky/git-lfs/`ssh` settings).
 - **`ref` on findings** — every new rule prints a `why:` link to the incident report or dataset that motivated it. JSON output carries the same field.
 - **Test/fixture downgrade** — a P0 whose offending files all live in test directories (`tests/`, `__tests__/`, `fixtures/`, …) or test-suffixed code files becomes a P1 warning instead of failing the build. Deliberately narrow: `examples/`, `mocks/`, Next.js `app/test/route.ts`, and dotfiles are not treated as tests.
@@ -17,6 +31,9 @@ The format is inspired by Keep a Changelog and follows semantic intent.
 
 ### Changed
 
+- `mmu_cli.vibecheck` is now a package (`engine`, `output`, `command`, `rules/`); existing imports (`check_*`, `Finding`, `run_vibecheck`, `format_findings`, `downgrade_test_only_findings`) are re-exported unchanged.
+- The commit-gate hook reads the v1 document: the block reason lists `rule-id path:line` and the fix, and a scanner error (exit 2) allows the commit with a visible warning.
+- Vibecheck text output shows `path:line` and the fix for each finding.
 - MCP tool descriptions rewritten to state purpose, when to use, arguments and return shape (following the TDQS tool-definition guidance); `mmu_vibecheck` and `mmu_validate_idea` are listed first, and `mmu_validate_idea` now documents its real `status`/`top_threads` shape.
 - Plugin manifest category `productivity` → `security`; description leads with the commit gate. FAQ, Product Hunt kit, `server.json`, and the four translated READMEs updated to match.
 - CI lint and type-check now cover `hooks/`.

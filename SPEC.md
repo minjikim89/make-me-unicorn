@@ -18,7 +18,7 @@ This document defines the current runtime behavior for `Make Me Unicorn`.
 | `mmu snapshot --target <path>` | Run project diagnostic snapshot | terminal summary + optional markdown report | `0` success |
 | `mmu close` | End a session safely | close checklist and update reminders | `0` success |
 | `mmu doctor` | Validate operating baseline | pass/fail report for docs and codebase guardrails | `0` pass, `2` fail |
-| `mmu vibecheck` | Scan for AI-generated code blind spots | per-check findings with severity and hints | `0` pass/warn-only, `2` P0 fail |
+| `mmu vibecheck` | Scan for AI-generated code blind spots | per-rule findings with `path:line`, fix, and rule id (`--format text\|json\|sarif\|agent`) | `0` no blockers, `1` P0 findings, `2` scanner error |
 | `mmu gate --stage <M#>` | Stage-gate readiness check | pass/fail for unresolved checklist items | `0` pass, `3` fail |
 | `mmu badge` | Generate README badge (markdown/svg/html) | badge snippet | `0` success |
 | `mmu share` | Generate shareable score card | plain-text card with CTA | `0` success |
