@@ -831,6 +831,34 @@ def downgrade_test_only_findings(findings: list[Finding]) -> list[Finding]:
     return findings
 
 
+def check_disabled_ssl(root: Path, code_files: list[Path]) -> Finding:
+    """Discovers disabled SSL/TLS certificate verification (e.g. verify=False, rejectUnauthorized: false)."""
+    patterns = [
+        re.compile(r"\bverify\s*=\s*False\b", re.IGNORECASE),
+        re.compile(r"\brejectUnauthorized\s*:\s*false\b", re.IGNORECASE),
+        re.compile(r"\bNODE_TLS_REJECT_UNAUTHORIZED\s*=\s*['\"]?0['\"]?", re.IGNORECASE),
+        re.compile(r"\bInsecureSkipVerify\s*:\s*true\b", re.IGNORECASE),
+    ]
+    offenders = []
+    for path in code_files:
+        if path.suffix.lower() not in {".py", ".js", ".ts", ".jsx", ".tsx", ".go"}:
+            continue
+        text = _read(path)
+        if any(pat.search(text) for pat in patterns):
+            offenders.append(_rel(path, root))
+
+    if offenders:
+        return Finding(
+            "disabled-ssl",
+            "P1",
+            "warn",
+            f"disabled SSL/TLS verification detected in {len(offenders)} file(s)",
+            hint="Disabling SSL/TLS verification exposes your application to Man-in-the-Middle (MitM) attacks. Enable certificate validation in production.",
+            files=offenders,
+        )
+    return Finding("disabled-ssl", "P1", "ok", "no disabled SSL/TLS verification detected")
+
+
 def run_vibecheck(root: Path) -> list[Finding]:
     from mmu_cli.cli import doctor_skip_paths, gather_code_files
 
@@ -852,6 +880,7 @@ def run_vibecheck(root: Path) -> list[Finding]:
     findings.append(check_supabase_rls(root, code_files))
     findings.append(check_sourcemaps(root, code_files))
     findings.append(check_git_config_exec(root, code_files))
+    findings.append(check_disabled_ssl(root, code_files))
     return downgrade_test_only_findings(findings)
 
 
