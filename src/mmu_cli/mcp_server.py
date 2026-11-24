@@ -181,33 +181,40 @@ def build_server(root: Path | None = None):
     mcp = FastMCP("make-me-unicorn")
 
     @mcp.tool()
-    def mmu_vibecheck(project_root: str) -> dict:
+    def mmu_vibecheck(project_root: str, scope: str = "all") -> dict:
         """Scan a codebase for the launch-blocking gaps AI-generated code ships most.
 
-        Use when: the user is about to commit, deploy, or launch, or asks "is this
-        safe to ship?" about a project on disk. Deterministic and read-only — no
-        LLM, no network, runs in under a second on most repos.
+        Use when: you are about to commit, deploy, or declare a task done, or the user
+        asks "is this safe to ship?" about a project on disk. Deterministic and
+        read-only — no LLM, no network, runs in under a second on most repos.
 
         Args:
             project_root: absolute path of the project to scan (the git root).
+            scope: "all" (default, whole project), "changed" (files changed vs HEAD
+                plus untracked), or "staged" (staged files). Scoped scans need git.
 
-        Returns: {"findings": [{check, severity (P0|P1), status (fail|warn|ok|skip),
-        message, hint, files, ref}], "failures": <count of P0 fails>, "exit_code"}.
-        P0 fails mean "do not ship yet"; `ref` links the incident data behind the rule.
+        Returns the `mmu.vibecheck/v1` document: {"schema", "tool", "root", "scope",
+        "summary": {blocking, warnings, passed, skipped, suppressed}, "findings":
+        [{rule_id, severity (P0|P1), status (fail|warn|suppressed), title, message,
+        locations: [{path, line, end_line, snippet}], files, fix, ref, confidence,
+        suppression, notes}]}. `summary.blocking` > 0 means "do not ship yet": apply
+        each finding's `fix` at its `locations`, then scan again. A false positive is
+        silenced with a `mmu-ignore[<rule_id>]: <reason>` comment on the flagged line.
         Do NOT use for: reviewing code style or architecture — this only checks the
         specific gaps listed in each finding.
         """
-        from mmu_cli.cli import command_vibecheck
+        from mmu_cli.vibecheck.engine import ScanError, scan
+        from mmu_cli.vibecheck.output import to_json
 
         target = Path(project_root).expanduser()
         if not target.is_dir():
             raise ValueError(f"project_root is not a directory: {project_root}")
-        result = command_vibecheck(target)
-        return {
-            "findings": result.get("findings", []),
-            "failures": result.get("failures", 0),
-            "exit_code": result.exit_code,
-        }
+        if scope not in {"all", "changed", "staged"}:
+            raise ValueError(f"scope must be all, changed, or staged (got {scope!r})")
+        try:
+            return to_json(scan(target, scope=scope))
+        except ScanError as exc:
+            raise ValueError(f"{exc.code}: {exc.message}") from None
 
     @mcp.tool()
     def mmu_validate_idea(idea: str, limit: int = 20) -> dict:

@@ -10,6 +10,11 @@ Contract (Claude Code hooks):
   exit 0 — allow. A JSON object on stdout with "systemMessage" shows a warning
            to the user (used when the scanner itself could not run).
   exit 2 — block; stderr is shown to the agent as the reason.
+
+Scanner contract (`mmu vibecheck --format json`, schema mmu.vibecheck/v1):
+  exit 0 — no blocking findings; exit 1 — blocking (P0) findings, listed in
+  `findings[]` with `locations[]` and `fix`; exit 2 — the scanner itself failed
+  (`{"error": {...}}`), which this hook treats as "allow, but tell the user".
   A hook that exceeds its timeout is treated as "allow", so every subprocess
   here shares one deadline well under the 60s configured in hooks.json.
 
@@ -91,8 +96,8 @@ def _launcher() -> tuple[list[str], dict[str, str]]:
     plugin_root = env.get("CLAUDE_PLUGIN_ROOT")
     if plugin_root and (Path(plugin_root) / "src" / "mmu_cli").is_dir():
         env["PYTHONPATH"] = str(Path(plugin_root) / "src") + os.pathsep + env.get("PYTHONPATH", "")
-        return [sys.executable, "-m", "mmu_cli", "vibecheck", "--json"], env
-    return ["mmu", "vibecheck", "--json"], env
+        return [sys.executable, "-m", "mmu_cli", "vibecheck", "--format", "json"], env
+    return ["mmu", "vibecheck", "--format", "json"], env
 
 
 def _run_vibecheck(root: Path, deadline: float) -> dict | str:
@@ -112,22 +117,45 @@ def _run_vibecheck(root: Path, deadline: float) -> dict | str:
     except json.JSONDecodeError:
         tail = (proc.stderr or proc.stdout).strip().splitlines()[-1:] or ["no output"]
         return f"scanner returned no JSON (exit {proc.returncode}): {tail[0][:120]}"
-    return result if isinstance(result, dict) else "scanner returned unexpected JSON"
+    if not isinstance(result, dict):
+        return "scanner returned unexpected JSON"
+    error = result.get("error")
+    if isinstance(error, dict):
+        return f"scanner error: {str(error.get('message') or error.get('code') or 'unknown')[:160]}"
+    if proc.returncode not in (0, 1) and "summary" in result:
+        return f"scanner exited {proc.returncode}"
+    return result
+
+
+def _places(finding: dict) -> list[str]:
+    """`path:line` labels from v1 `locations`, falling back to the legacy `files` list."""
+    out: list[str] = []
+    for loc in finding.get("locations") or []:
+        if isinstance(loc, dict) and loc.get("path"):
+            out.append(f"{loc['path']}:{loc['line']}" if loc.get("line") else str(loc["path"]))
+    return out or [str(rel) for rel in finding.get("files") or []]
 
 
 def _format_block(fails: list[dict], root: Path) -> str:
     lines = [f"mmu vibecheck: {len(fails)} launch-blocking issue(s) in {root} — commit blocked."]
     for f in fails[:6]:
-        lines.append(f"  ✗ ({f.get('severity')}) {f.get('check')}: {f.get('message')}")
-        for rel in f.get("files", [])[:3]:
-            lines.append(f"      - {rel}")
-        if f.get("hint"):
-            lines.append(f"      ↳ {f['hint']}")
+        rule = f.get("rule_id") or f.get("check")
+        places = _places(f)
+        where = f" {places[0]}" if places else ""
+        more = f" (+{len(places) - 1}: {', '.join(places[1:4])})" if len(places) > 1 else ""
+        lines.append(f"{f.get('severity')} {rule}{where}{more}")
+        lines.append(f"  what: {f.get('message')}")
+        fix = f.get("fix") or f.get("hint")
+        if fix:
+            lines.append("  fix: " + " ".join(part.strip() for part in str(fix).splitlines()))
         if f.get("ref"):
-            lines.append(f"      ↳ why: {f['ref']}")
+            lines.append(f"  why: {f['ref']}")
+    if len(fails) > 6:
+        lines.append(f"… and {len(fails) - 6} more; run `mmu vibecheck --format agent` for all of them.")
     lines.append(
-        "Fix the P0 findings, or run `mmu vibecheck` for the full report. If a finding is a false positive, "
-        "prefix this one command with MMU_HOOK_DISABLE=1 and open an issue."
+        "Fix the P0 findings and retry the commit (`mmu vibecheck --format agent` re-checks). If a finding is a "
+        "false positive, add a `mmu-ignore[<rule-id>]: <reason>` comment on the flagged line, or "
+        "prefix this one command with MMU_HOOK_DISABLE=1."
     )
     return "\n".join(lines)
 

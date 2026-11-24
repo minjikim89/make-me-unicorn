@@ -112,6 +112,23 @@ class MainTests(unittest.TestCase):
         self.assertIn("MMU_HOOK_DISABLE=1", err)
         self.assertIn("prefix this one command", err)
 
+    def test_block_reason_uses_v1_locations_and_fix(self):
+        result = {"schema": "mmu.vibecheck/v1", "summary": {"blocking": 1}, "findings": [{
+            "rule_id": "sql-fstring", "check": "sql-fstring", "severity": "P0", "status": "fail",
+            "message": "f-string SQL queries in 1 file(s)",
+            "locations": [{"path": "app/db.py", "line": 12, "end_line": None, "snippet": "q = f\"SELECT\""},
+                          {"path": "app/db.py", "line": 30, "end_line": None, "snippet": ""}],
+            "files": ["app/db.py"], "fix": "Use bound parameters.\nNever interpolate.", "ref": "",
+        }, {"rule_id": "debug-mode", "severity": "P1", "status": "warn", "message": "w", "locations": []},
+           {"rule_id": "secrets", "severity": "P0", "status": "suppressed", "message": "s", "locations": []}]}
+        code, err = self._run(_payload("git commit -m x"), result)
+        self.assertEqual(code, 2)
+        self.assertIn("P0 sql-fstring app/db.py:12 (+1: app/db.py:30)", err)
+        self.assertIn("fix: Use bound parameters. Never interpolate.", err)
+        self.assertIn("mmu-ignore[<rule-id>]: <reason>", err)
+        self.assertNotIn("debug-mode", err)
+        self.assertNotIn("secrets", err)
+
     def test_allows_visibly_when_scanner_unavailable(self):
         out = io.StringIO()
         with mock.patch.object(sys, "stdin", io.StringIO(_payload("git push"))), \
@@ -144,8 +161,26 @@ class EndToEndTests(unittest.TestCase):
             with mock.patch.dict(os.environ, env, clear=False):
                 result = gate._run_vibecheck(root, __import__("time").monotonic() + 30)
         self.assertIsInstance(result, dict, result)
-        checks = {f["check"]: f for f in result["findings"]}
+        self.assertEqual(result["schema"], "mmu.vibecheck/v1")
+        checks = {f["rule_id"]: f for f in result["findings"]}
         self.assertEqual(checks["secrets"]["status"], "fail")
+        self.assertEqual(checks["secrets"]["locations"][0]["path"], "src/pay.py")
+        self.assertEqual(checks["secrets"]["locations"][0]["line"], 1)
+        self.assertNotIn("a1b2c3d4e5a1b2", json.dumps(result))
+
+    def test_scanner_error_exit_2_fails_open_with_reason(self):
+        """Exit 2 + JSON error object (e.g. bad root) is a scanner error, not a block."""
+        with tempfile.TemporaryDirectory() as tmp:
+            env = {"CLAUDE_PLUGIN_ROOT": str(REPO_ROOT), "PATH": "/nonexistent"}
+            proc_result = mock.Mock(returncode=2, stderr="", stdout=json.dumps(
+                {"schema": "mmu.vibecheck/v1", "error": {"code": "bad-root", "message": "--root x is not a directory"}}
+            ))
+            with mock.patch.dict(os.environ, env, clear=False), \
+                 mock.patch.object(gate.subprocess, "run", return_value=proc_result):
+                result = gate._run_vibecheck(Path(tmp), __import__("time").monotonic() + 30)
+        self.assertIsInstance(result, str)
+        self.assertIn("scanner error", result)
+        self.assertIn("not a directory", result)
 
 
 if __name__ == "__main__":

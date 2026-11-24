@@ -134,6 +134,28 @@ class MCPDataLayerTests(unittest.TestCase):
             asyncio.run(server.call_tool("mmu_vibecheck", {"project_root": "/nonexistent/mmu/project"}))
         self.assertIn("not a directory", str(ctx.exception))
 
+    def test_mmu_vibecheck_tool_returns_v1_document(self):
+        try:
+            import mcp.server.fastmcp  # noqa: F401
+        except ImportError:
+            self.skipTest("mcp SDK not installed (install via [mcp] extra)")
+        import asyncio
+        import json
+        import tempfile
+        server = mcp_server.build_server(REPO_ROOT)
+        with tempfile.TemporaryDirectory() as tmp:
+            (Path(tmp) / "db.py").write_text('q = f"SELECT * FROM t WHERE id = {i}"\n', encoding="utf-8")
+            out = asyncio.run(server.call_tool("mmu_vibecheck", {"project_root": tmp}))
+            payload = json.dumps(out, default=lambda o: getattr(o, "text", str(o)))
+            self.assertIn("mmu.vibecheck/v1", payload)
+            self.assertIn("sql-fstring", payload)
+            with self.assertRaises(Exception) as ctx:
+                asyncio.run(server.call_tool("mmu_vibecheck", {"project_root": tmp, "scope": "changed"}))
+            self.assertIn("not-a-git-repo", str(ctx.exception))
+            with self.assertRaises(Exception) as ctx:
+                asyncio.run(server.call_tool("mmu_vibecheck", {"project_root": tmp, "scope": "bogus"}))
+            self.assertIn("scope must be", str(ctx.exception))
+
     def test_resolve_repo_root_uses_package_fallback_when_none(self):
         resolved = mcp_server._resolve_repo_root(None)
         self.assertEqual(resolved, REPO_ROOT)
