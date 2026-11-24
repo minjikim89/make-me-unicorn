@@ -382,7 +382,7 @@ class CommandTests(unittest.TestCase):
             # Webhook handler without signature/idempotency -> P0 fails
             write(root, "src/webhooks/stripe.ts", "export async function POST(req) { return ok() }")
             result = command_vibecheck(root)
-            self.assertEqual(result.exit_code, 2)
+            self.assertEqual(result.exit_code, 1)  # 1 = blocking findings; 2 is reserved for scanner errors
             self.assertTrue(any("webhook" in m for m in result["messages"]))
             self.assertIn("findings", result)
 

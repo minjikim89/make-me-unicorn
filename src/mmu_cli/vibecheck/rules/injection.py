@@ -6,26 +6,59 @@ import ast
 import re
 from pathlib import Path
 
-from mmu_cli.vibecheck.engine import Finding, _read, _rel
+from mmu_cli.vibecheck.engine import Finding, Location, Rule, _read, _rel, loc_at, loc_line, register
+
+register(Rule(
+    id="sql-fstring",
+    title="SQL built with an f-string",
+    severity="P0",
+    summary="Interpolating values into a SQL string lets request data rewrite the query (SQL injection).",
+    fix=(
+        "Pass values as bound parameters instead of interpolating them: cursor.execute(\"SELECT * FROM users WHERE id = %s\", (user_id,)) "
+        "or SQLAlchemy text(\"... WHERE id = :id\") with {\"id\": user_id}.\n"
+        "Table and column names cannot be bound: choose them from a hardcoded allowlist."
+    ),
+    ref="https://cheatsheetseries.owasp.org/cheatsheets/SQL_Injection_Prevention_Cheat_Sheet.html",
+    tags=("injection", "python"),
+    confidence="high",
+))
+
+register(Rule(
+    id="unsafe-deserialization",
+    title="Unsafe deserialization",
+    severity="P0",
+    summary="pickle and non-safe YAML loaders execute code embedded in the data, so loading untrusted input is remote code execution.",
+    fix=(
+        "Use yaml.safe_load / yaml.safe_load_all (or Loader=yaml.SafeLoader) instead of yaml.load / unsafe_load / full_load.\n"
+        "Replace pickle.load(s) on anything that crosses a trust boundary (uploads, caches, queues, network) with JSON or another data-only format."
+    ),
+    ref="https://cheatsheetseries.owasp.org/cheatsheets/Deserialization_Cheat_Sheet.html",
+    tags=("injection", "python"),
+    confidence="high",
+))
 
 _SQL_FSTRING = re.compile(r"""f["']\s*(?:SELECT|INSERT|UPDATE|DELETE)\b""", re.IGNORECASE)
 
 
 def check_sql_strings(root: Path, code_files: list[Path]) -> Finding:
     offenders = []
+    locations: list[Location] = []
     for path in code_files:
         if path.suffix.lower() != ".py":
             continue
-        if _SQL_FSTRING.search(_read(path)):
+        text = _read(path)
+        hits = [loc_at(path, root, text, m.start()) for m in _SQL_FSTRING.finditer(text)]
+        if hits:
             offenders.append(_rel(path, root))
+            locations.extend(hits)
     if offenders:
         return Finding(
             "sql-fstring",
             "P0",
             "fail",
             f"f-string SQL queries in {len(offenders)} file(s)",
-            hint="Interpolating values into SQL is the classic AI-generated injection hole. Use parameterized queries.",
             files=offenders,
+            locations=locations,
         )
     return Finding("sql-fstring", "P0", "ok", "no f-string SQL queries detected")
 
@@ -45,6 +78,7 @@ class _UnsafeDeserializationVisitor(ast.NodeVisitor):
         self.yaml_modules = {"yaml"}
         self.yaml_loaders: dict[str, str] = {}
         self.details: set[str] = set()
+        self.hits: list[tuple[int, str]] = []
 
     def visit_Import(self, node: ast.Import) -> None:
         for alias in node.names:
@@ -67,12 +101,10 @@ class _UnsafeDeserializationVisitor(ast.NodeVisitor):
         self.generic_visit(node)
 
     def visit_Call(self, node: ast.Call) -> None:
-        if self._is_pickle_loader_call(node):
-            self.details.add(self._pickle_label(node))
-        else:
-            yaml_label = self._unsafe_yaml_loader_label(node)
-            if yaml_label:
-                self.details.add(yaml_label)
+        label = self._pickle_label(node) if self._is_pickle_loader_call(node) else self._unsafe_yaml_loader_label(node)
+        if label:
+            self.details.add(label)
+            self.hits.append((node.lineno, label))
         self.generic_visit(node)
 
     def _is_pickle_loader_call(self, node: ast.Call) -> bool:
@@ -113,34 +145,41 @@ class _UnsafeDeserializationVisitor(ast.NodeVisitor):
         return f"yaml.{loader_name} without SafeLoader"
 
 
-def _unsafe_deserialization_details(text: str) -> set[str]:
+def _unsafe_deserialization_hits(text: str) -> list[tuple[int, str]]:
+    """(line, label) for every unsafe pickle/yaml call in a Python source text."""
     try:
         tree = ast.parse(text)
     except SyntaxError:
-        return set()
+        return []
     visitor = _UnsafeDeserializationVisitor()
     visitor.visit(tree)
-    return visitor.details
+    return sorted(visitor.hits)
+
+
+def _unsafe_deserialization_details(text: str) -> set[str]:
+    return {label for _, label in _unsafe_deserialization_hits(text)}
 
 
 def check_unsafe_deserialization(root: Path, code_files: list[Path]) -> Finding:
     offenders: list[str] = []
     details: list[str] = []
+    locations: list[Location] = []
     for path in code_files:
         if path.suffix.lower() != ".py":
             continue
         text = _read(path)
-        file_details = _unsafe_deserialization_details(text)
-        if file_details:
+        hits = _unsafe_deserialization_hits(text)
+        if hits:
             offenders.append(_rel(path, root))
-            details.extend(sorted(file_details))
+            details.extend(sorted({label for _, label in hits}))
+            locations.extend(loc_line(path, root, lineno, text) for lineno in dict.fromkeys(n for n, _ in hits))
     if offenders:
         return Finding(
             "unsafe-deserialization",
             "P0",
             "fail",
             f"unsafe deserialization in {len(offenders)} file(s): " + ", ".join(sorted(set(details))),
-            hint="Do not deserialize untrusted input with pickle or unsafe YAML loaders. Prefer JSON or yaml.safe_load.",
             files=sorted(set(offenders)),
+            locations=locations,
         )
     return Finding("unsafe-deserialization", "P0", "ok", "no unsafe Python deserialization detected")

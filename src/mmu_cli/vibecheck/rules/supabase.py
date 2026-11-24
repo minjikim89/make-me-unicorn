@@ -5,7 +5,33 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from mmu_cli.vibecheck.engine import _ENV_SCAN_DEPTH, _REF_REEVE_AUG_2026, Finding, _read, _rel, _walk_shallow
+from mmu_cli.vibecheck.engine import (
+    _ENV_SCAN_DEPTH,
+    _REF_REEVE_AUG_2026,
+    Finding,
+    Location,
+    Rule,
+    _read,
+    _walk_shallow,
+    loc_at,
+    register,
+    server_anchor,
+)
+
+register(Rule(
+    id="supabase-rls",
+    title="Supabase table without Row Level Security",
+    severity="P0",
+    summary="With the anon key in the browser, a table without RLS can be read (and often written) by any visitor.",
+    fix=(
+        "Add a migration for each listed table: `alter table <schema>.<table> enable row level security;` plus at least "
+        "one policy, e.g. `create policy \"owner can read\" on <table> for select using (auth.uid() = user_id);`.\n"
+        "Tables only the server touches still need RLS enabled; with no policy only the service role can reach them."
+    ),
+    ref=_REF_REEVE_AUG_2026,
+    tags=("supabase", "authz"),
+    confidence="high",
+))
 
 # Markers must be Supabase-specific: `createClient(` alone matches redis/viem/sanity/urql.
 _SUPABASE_MARKERS = ("@supabase/supabase-js", "@supabase/ssr", "supabase.co", "supabase-py", "from supabase import", "supabase_py")
@@ -39,12 +65,28 @@ def _sql_files(root: Path) -> list[Path]:
     return sorted(set(out))
 
 
-def _strip_sql_comments(text: str) -> str:
-    return _SQL_LINE_COMMENT.sub("", _SQL_BLOCK_COMMENT.sub("", text))
+def _blank(m: re.Match[str]) -> str:
+    return re.sub(r"[^\n]", " ", m.group(0))
+
+
+def _blank_sql_comments(text: str) -> str:
+    """Comments replaced by spaces, so match offsets still map to the original lines."""
+    return _SQL_LINE_COMMENT.sub(_blank, _SQL_BLOCK_COMMENT.sub(_blank, text))
 
 
 def _qualified(schema: str | None, name: str) -> str:
     return f"{(schema or 'public').lower()}.{name.lower()}"
+
+
+def _supabase_anchor(root: Path, code_files: list[Path]) -> Location | None:
+    """Where Supabase enters the project: the first code line that references it, else the manifest."""
+    for path in code_files[:400]:
+        text = _read(path)
+        for marker in _SUPABASE_MARKERS:
+            pos = text.find(marker)
+            if pos >= 0:
+                return loc_at(path, root, text, pos)
+    return server_anchor(root, [], [m.lower() for m in _SUPABASE_MARKERS])
 
 
 def check_supabase_rls(root: Path, code_files: list[Path]) -> Finding:
@@ -66,20 +108,25 @@ def check_supabase_rls(root: Path, code_files: list[Path]) -> Finding:
 
     sql_files = _sql_files(root)
     if not sql_files:
+        anchor = _supabase_anchor(root, code_files)
         return Finding(
             "supabase-rls",
             "P1",
             "warn",
             "Supabase detected but no SQL under supabase/ — RLS cannot be verified from the repo",
-            hint="If tables were created in the dashboard, confirm every public table has RLS enabled + a policy. `supabase db pull` brings the schema into the repo so this check can see it.",
-            ref=_REF_REEVE_AUG_2026,
+            hint=(
+                "If tables were created in the dashboard, confirm every public table has RLS enabled plus a policy.\n"
+                "Run `supabase db pull` to bring the schema into supabase/migrations so this rule can verify it."
+            ),
+            locations=[anchor] if anchor else [],
         )
-    created: dict[str, str] = {}
+    created: dict[str, Location] = {}
     rls_enabled: set[str] = set()
     for sql in sql_files:
-        text = _strip_sql_comments(_read(sql))
-        for schema, name in _SQL_CREATE_TABLE.findall(text):
-            created.setdefault(_qualified(schema, name), _rel(sql, root))
+        original = _read(sql)
+        text = _blank_sql_comments(original)
+        for m in _SQL_CREATE_TABLE.finditer(text):
+            created.setdefault(_qualified(m.group(1), m.group(2)), loc_at(sql, root, original, m.start()))
         for schema, name in _SQL_ENABLE_RLS.findall(text):
             rls_enabled.add(_qualified(schema, name))
     missing = sorted(t for t in created if t not in rls_enabled)
@@ -89,9 +136,8 @@ def check_supabase_rls(root: Path, code_files: list[Path]) -> Finding:
             "P0",
             "fail",
             f"{len(missing)} table(s) created without ENABLE ROW LEVEL SECURITY: " + ", ".join(missing[:8]) + (" …" if len(missing) > 8 else ""),
-            hint="Every table reachable with the anon key needs `alter table X enable row level security;` plus at least one policy — otherwise any visitor can read it.",
-            files=sorted({created[t] for t in missing}),
-            ref=_REF_REEVE_AUG_2026,
+            files=sorted({created[t].path for t in missing}),
+            locations=[created[t] for t in missing],
         )
     if not created:
         return Finding("supabase-rls", "P0", "ok", "no CREATE TABLE statements found in migrations")

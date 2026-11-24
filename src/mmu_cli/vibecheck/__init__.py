@@ -10,8 +10,12 @@ Supabase tables without RLS, production source maps, command-executing
 Checks carry a `ref` — the incident report or dataset that motivated them — so a
 finding is never "the tool says so" but "here is what happened to people who shipped this".
 
-Severities: P0 findings exit non-zero (block launch), P1 findings warn.
+Severities: P0 findings exit 1 (block), P1 findings warn; exit 2 is a scanner error.
 Checks that find no relevant surface (e.g. no webhook handlers) report SKIP.
+
+Layout: `engine` (types, rule registry, suppression, scoping, runner), `rules/`
+(the checks and their metadata), `output` (text/json/agent/sarif), `command` (CLI).
+The JSON contract is documented in docs/vibecheck-json-schema.md.
 """
 
 
@@ -19,14 +23,24 @@ from __future__ import annotations
 
 from mmu_cli.vibecheck.engine import (
     _READ_CACHE,
+    RULES,
+    SCHEMA,
     Finding,
+    Location,
+    Rule,
+    ScanError,
+    ScanResult,
     _is_test_path,
     _read,
     _rel,
+    all_rules,
+    apply_suppressions,
     downgrade_test_only_findings,
+    get_rule,
     run_vibecheck,
+    scan,
 )
-from mmu_cli.vibecheck.output import format_findings
+from mmu_cli.vibecheck.output import format_findings, render_agent, render_text, to_json, to_sarif
 from mmu_cli.vibecheck.rules import (
     check_client_bundle_secrets,
     check_cors,
@@ -46,8 +60,22 @@ from mmu_cli.vibecheck.rules import (
 )
 
 __all__ = [
+    "RULES",
+    "SCHEMA",
     "_READ_CACHE",
     "Finding",
+    "Location",
+    "Rule",
+    "ScanError",
+    "ScanResult",
+    "all_rules",
+    "apply_suppressions",
+    "get_rule",
+    "render_agent",
+    "render_text",
+    "scan",
+    "to_json",
+    "to_sarif",
     "_is_test_path",
     "_read",
     "_rel",
