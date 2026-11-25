@@ -8,6 +8,8 @@ from __future__ import annotations
 
 import fnmatch
 import hashlib
+import json
+import os
 import re
 import subprocess
 from dataclasses import dataclass, field, replace
@@ -21,13 +23,16 @@ INFORMATION_URI = "https://github.com/minjikim89/make-me-unicorn"
 # credentials, not in placeholder-style docs (`sk_live_...` etc. with
 # enough trailing payload to rule out truncated examples).
 _SECRET_PATTERNS: list[tuple[str, re.Pattern[str]]] = [
-    ("Stripe live secret key", re.compile(r"sk_live_[0-9a-zA-Z]{20,}")),
+    ("Stripe live secret key", re.compile(r"[sr]k_live_[0-9a-zA-Z]{20,}")),
     ("Stripe test secret key", re.compile(r"sk_test_[0-9a-zA-Z]{20,}")),
+    ("Stripe webhook signing secret", re.compile(r"\bwhsec_[0-9a-zA-Z]{24,}")),
     ("Anthropic API key", re.compile(r"sk-ant-[0-9a-zA-Z_-]{20,}")),
     ("OpenAI API key", re.compile(r"sk-proj-[0-9a-zA-Z_-]{20,}")),
     ("AWS access key id", re.compile(r"\bAKIA[0-9A-Z]{16}\b")),
     ("GitHub token", re.compile(r"\bgh[pousr]_[0-9a-zA-Z]{30,}\b")),
     ("Slack token", re.compile(r"\bxox[baprs]-[0-9a-zA-Z-]{20,}\b")),
+    ("SendGrid API key", re.compile(r"\bSG\.[0-9A-Za-z_-]{22}\.[0-9A-Za-z_-]{43}\b")),
+    ("GitLab token", re.compile(r"\bglpat-[0-9A-Za-z_-]{20,}\b")),
     ("Private key block", re.compile(r"-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----")),
 ]
 _JWT = re.compile(r"\beyJ[0-9A-Za-z_-]{10,}\.eyJ[0-9A-Za-z_-]{10,}\.[0-9A-Za-z_-]{10,}\b")
@@ -61,6 +66,15 @@ class Rule:
     ref: str = ""  # incident data or authoritative documentation
     tags: tuple[str, ...] = ()
     confidence: str = "medium"  # "high" (exact pattern) | "medium" | "low" (absence-of-marker heuristic)
+    # (framework, fix) pairs: the fix a finding carries when its first location is a file of that framework.
+    fix_variants: tuple[tuple[str, str], ...] = ()
+    repo_level: bool = False  # about the repository as a whole: never filtered out by --changed/--staged/--since
+
+    def fix_for(self, framework: str) -> str:
+        for name, fix in self.fix_variants:
+            if name == framework:
+                return fix
+        return self.fix
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -69,6 +83,7 @@ class Rule:
             "severity": self.severity,
             "summary": self.summary,
             "fix": self.fix,
+            "fix_variants": dict(self.fix_variants),
             "ref": self.ref,
             "tags": list(self.tags),
             "confidence": self.confidence,
@@ -122,7 +137,7 @@ def fingerprint(rule_id: str, loc: Location | None) -> str:
 class Finding:
     check: str  # rule id
     severity: str  # "P0" | "P1"
-    status: str  # "fail" | "warn" | "ok" | "skip" | "suppressed"
+    status: str  # "fail" | "warn" | "ok" | "skip" | "suppressed" | "baselined"
     message: str
     hint: str = ""  # fix instructions; defaults to the rule's `fix`
     files: list[str] = field(default_factory=list)
@@ -133,11 +148,12 @@ class Finding:
     suppress_reason: str = ""
     suppress_source: str = ""  # "inline" | "config"
     notes: list[str] = field(default_factory=list)
+    framework: str = ""  # picks the rule's fix variant (nextjs | express | hono | fastapi | flask | django | supabase)
 
     def __post_init__(self) -> None:
         rule = RULES.get(self.check)
         if rule is not None:
-            self.hint = self.hint or rule.fix
+            self.hint = self.hint or rule.fix_for(self.framework)
             self.ref = self.ref or rule.ref
             self.title = self.title or rule.title
             self.confidence = self.confidence or rule.confidence
@@ -183,7 +199,7 @@ class ScanResult:
     scope: dict[str, Any] = field(default_factory=lambda: {"mode": "all"})
 
     def summary(self) -> dict[str, int]:
-        count = {s: 0 for s in ("fail", "warn", "ok", "skip", "suppressed")}
+        count = {s: 0 for s in ("fail", "warn", "ok", "skip", "suppressed", "baselined")}
         for f in self.findings:
             count[f.status] = count.get(f.status, 0) + 1
         return {
@@ -192,6 +208,7 @@ class ScanResult:
             "passed": count["ok"],
             "skipped": count["skip"],
             "suppressed": count["suppressed"],
+            "baselined": count["baselined"],
         }
 
     def exit_code(self, fail_on: str = "P0") -> int:
@@ -221,6 +238,19 @@ def _unique(items: Any) -> list[str]:
 # Per-run content cache: several checks scan the same files; one read each.
 # Cleared at the start of run_vibecheck so long-lived processes stay fresh.
 _READ_CACHE: dict[Path, str] = {}
+_RUN_CACHES: list[dict[Any, Any]] = [_READ_CACHE]  # every per-run cache; rule modules append theirs
+
+
+def run_cache() -> dict[Any, Any]:
+    """A dict that is emptied at the start of every scan."""
+    cache: dict[Any, Any] = {}
+    _RUN_CACHES.append(cache)
+    return cache
+
+
+def reset_caches() -> None:
+    for cache in _RUN_CACHES:
+        cache.clear()
 
 
 def _read(path: Path) -> str:
@@ -232,11 +262,93 @@ def _read(path: Path) -> str:
     return _READ_CACHE[path]
 
 
+# --- File gathering ----------------------------------------------------------
+
+_MAX_FILE_BYTES = 1_000_000  # larger files are bundles, dumps or data, not hand-written source
+_MAX_FILES = 20_000  # deterministic cut-off for pathological trees; reported in scope.truncated
+_EXTRA_CODE_EXTENSIONS = {".cts", ".vue", ".svelte"}
+# Non-code files that routinely carry credentials. Scanned by the secrets rule only.
+_CONFIG_EXTENSIONS = {
+    ".json", ".yaml", ".yml", ".toml", ".properties", ".ini", ".cfg", ".conf", ".tf", ".tfvars", ".sh", ".bash",
+    ".zsh", ".php", ".rs", ".kt", ".swift", ".dart", ".html", ".xml", ".gradle", ".env",
+}
+_LOCKFILES = {
+    "package-lock.json", "npm-shrinkwrap.json", "yarn.lock", "pnpm-lock.yaml", "bun.lock", "bun.lockb", "poetry.lock",
+    "uv.lock", "pdm.lock", "pipfile.lock", "cargo.lock", "composer.lock", "gemfile.lock", "go.sum", "flake.lock",
+    "deno.lock", "packages.lock.json",
+}
+_ENV_TEMPLATE_SUFFIXES = (".example", ".sample", ".template", ".dist", ".defaults", ".tpl", ".tmpl")
+
+
+def is_env_file(name: str) -> bool:
+    """A dotenv file that holds real values: `.env`, `.env.local`, `prod.env`; not `.env.example`, not `.envrc`."""
+    low = name.lower()
+    if low == ".envrc" or low.endswith(_ENV_TEMPLATE_SUFFIXES) or "example" in low or "sample" in low:
+        return False
+    return low == ".env" or low.startswith(".env.") or low.endswith(".env")
+
+
+def _is_config_file(name: str) -> bool:
+    low = name.lower()
+    if low in _LOCKFILES or low.endswith((".lock", ".min.js", ".map", ".snap")):
+        return False
+    if low.startswith(("dockerfile", "docker-compose")) or low.endswith(".dockerfile") or is_env_file(name):
+        return True
+    return Path(low).suffix in _CONFIG_EXTENSIONS
+
+
+def gather_files(root: Path, skip_paths: set[str]) -> tuple[list[Path], list[Path]]:
+    """(code files, config files), each sorted by path so results never depend on directory order.
+
+    Vendor and build directories are pruned at any depth; lockfiles, minified bundles and
+    files over 1 MB are left out.
+    """
+    from mmu_cli.cli import CODE_EXTENSIONS, PRUNE_DIR_NAMES, should_skip_rel
+
+    code: list[Path] = []
+    config: list[Path] = []
+    code_ext = CODE_EXTENSIONS | _EXTRA_CODE_EXTENSIONS
+    for dirpath, dirnames, filenames in os.walk(root):
+        rel_dir = Path(dirpath).relative_to(root).as_posix()
+        rel_dir = "" if rel_dir == "." else rel_dir
+        dirnames[:] = sorted(
+            d for d in dirnames
+            if d not in PRUNE_DIR_NAMES and not should_skip_rel(f"{rel_dir}/{d}" if rel_dir else d, skip_paths)
+        )
+        for filename in filenames:
+            rel_file = f"{rel_dir}/{filename}" if rel_dir else filename
+            low = filename.lower()
+            suffix = Path(low).suffix
+            is_code = suffix in code_ext and not low.endswith(".min.js")
+            if not is_code and not _is_config_file(filename):
+                continue
+            if should_skip_rel(rel_file, skip_paths):
+                continue
+            path = root / rel_file
+            try:
+                if not path.is_file() or path.stat().st_size > _MAX_FILE_BYTES:
+                    continue
+            except OSError:
+                continue
+            (code if is_code else config).append(path)
+    key = lambda p: p.as_posix()  # noqa: E731
+    return sorted(code, key=key), sorted(config, key=key)
+
+
+_REL_CACHE: dict[tuple[Path, Path], str] = {}
+_RUN_CACHES.append(_REL_CACHE)
+
+
 def _rel(path: Path, root: Path) -> str:
-    try:
-        return path.relative_to(root).as_posix()
-    except ValueError:
-        return str(path)
+    key = (path, root)
+    rel = _REL_CACHE.get(key)
+    if rel is None:
+        try:
+            rel = path.relative_to(root).as_posix()
+        except ValueError:
+            rel = str(path)
+        _REL_CACHE[key] = rel
+    return rel
 
 
 # --- Locations -------------------------------------------------------------
@@ -314,7 +426,7 @@ def server_anchor(root: Path, code_files: list[Path], hints: list[str] | None = 
     Preference: the line that creates the server app, then the manifest line that
     declares the server framework, then a Next.js config, then any manifest.
     """
-    for path in code_files[:400]:
+    for path in code_files:
         text = _read(path)
         m = _SERVER_ENTRY.search(text)
         if m:
@@ -585,14 +697,28 @@ def scoped_files(root: Path, mode: str, since: str | None = None) -> set[str]:
     return {p for p in raw.split("\0") if p}
 
 
+def _repo_level_location(loc: Location) -> bool:
+    """Locations no diff can contain: dotenv files (untracked by design), `.git/config`, files outside the root."""
+    name = loc.path.rsplit("/", 1)[-1]
+    return is_env_file(name) or loc.path.startswith(".git/") or Path(loc.path).is_absolute()
+
+
 def apply_scope(findings: list[Finding], files: set[str]) -> list[Finding]:
-    """Keep active/suppressed findings only where a location is in `files`; trim their locations to it."""
+    """Keep active/suppressed findings only where a location is in `files`; trim their locations to it.
+
+    Repo-level findings stay whatever the scope: rules marked `repo_level`, and locations in
+    dotenv files or git config, which never show up in a diff.
+    """
     out: list[Finding] = []
     for f in findings:
-        if f.status not in _ACTIVE and f.status != "suppressed":
+        if f.status not in _ACTIVE and f.status not in {"suppressed", "baselined"}:
             out.append(f)
             continue
-        kept = [loc for loc in f.locations if loc.path in files]
+        rule = RULES.get(f.check)
+        if rule is not None and rule.repo_level:
+            out.append(f)
+            continue
+        kept = [loc for loc in f.locations if loc.path in files or _repo_level_location(loc)]
         if kept:
             f.locations = kept
             f.files = [p for p in f.files if p in files] or _unique(loc.path for loc in kept)
@@ -600,11 +726,147 @@ def apply_scope(findings: list[Finding], files: set[str]) -> list[Finding]:
     return out
 
 
+# --- Git ignore ------------------------------------------------------------
+
+def _gitignore_patterns(directory: Path) -> list[str]:
+    return [ln.strip() for ln in _read(directory / ".gitignore").splitlines() if ln.strip() and not ln.startswith("#")]
+
+
+def _pattern_ignores(rel: str, pattern: str) -> bool:
+    """Does one .gitignore pattern (without a leading `!`) match the file `rel`, relative to the .gitignore's directory?"""
+    dir_only = pattern.endswith("/")
+    pattern = pattern.rstrip("/")
+    anchored = "/" in pattern
+    pattern = pattern.lstrip("/")
+    if not pattern:
+        return False
+    parts = rel.split("/")
+    if anchored:
+        candidates = ["/".join(parts[:i]) for i in range(1, len(parts) + 1)]
+        if dir_only:
+            candidates = candidates[:-1]
+        if pattern.startswith("**/"):
+            return any(_glob_match(c, pattern) for c in candidates)
+        return any(fnmatch.fnmatchcase(c, pattern) for c in candidates)
+    names = parts[:-1] if dir_only else parts
+    return any(fnmatch.fnmatchcase(name, pattern) for name in names)
+
+
+def _ignored_by_gitignore_files(root: Path, rel: str) -> bool:
+    """Fallback matcher for projects that are not git repositories: `.gitignore` files from the root down."""
+    parts = rel.split("/")
+    ignored = False
+    for depth in range(len(parts)):
+        sub = "/".join(parts[depth:])
+        for pattern in _gitignore_patterns(root.joinpath(*parts[:depth])):
+            negated = pattern.startswith("!")
+            if _pattern_ignores(sub, pattern[1:] if negated else pattern):
+                ignored = not negated
+    return ignored
+
+
+def git_ignored(root: Path, rels: list[str]) -> set[str]:
+    """The subset of root-relative paths that git ignores.
+
+    Inside a work tree `git check-ignore` decides (so nested and global ignore files and tracked
+    files behave as git does: a tracked file is not ignored). Elsewhere the `.gitignore` files
+    are matched directly.
+    """
+    if not rels:
+        return set()
+    cmd = ["git", "-c", "core.fsmonitor=false", "-C", str(root), "check-ignore", "-z", "--stdin"]
+    try:
+        proc = subprocess.run(cmd, input="\0".join(rels) + "\0", capture_output=True, text=True, timeout=10)
+        if proc.returncode in (0, 1):
+            return {p for p in proc.stdout.split("\0") if p}
+    except (OSError, subprocess.SubprocessError):
+        pass
+    return {rel for rel in rels if _ignored_by_gitignore_files(root, rel)}
+
+
+# --- Baseline ----------------------------------------------------------------
+
+BASELINE_SCHEMA = "mmu.vibecheck-baseline/v1"
+DEFAULT_BASELINE = ".mmu/vibecheck-baseline.json"
+
+
+def baseline_path(root: Path, value: str | None) -> Path:
+    path = Path(value or DEFAULT_BASELINE).expanduser()
+    return path if path.is_absolute() else root / path
+
+
+def baseline_entries(findings: list[Finding]) -> list[dict[str, str]]:
+    """One entry per active location: fingerprint, rule id and path."""
+    entries: dict[str, dict[str, str]] = {}
+    for f in findings:
+        if f.status not in _ACTIVE:
+            continue
+        for loc in f.locations or [None]:  # type: ignore[list-item]
+            fp = fingerprint(f.check, loc)
+            entries.setdefault(fp, {"fingerprint": fp, "rule_id": f.check, "path": loc.path if loc else ""})
+    return sorted(entries.values(), key=lambda e: (e["path"], e["rule_id"], e["fingerprint"]))
+
+
+def write_baseline(result: ScanResult, path: Path) -> int:
+    """Record every active finding of `result` in `path`; returns the number of entries."""
+    entries = baseline_entries(result.findings)
+    doc = {"schema": BASELINE_SCHEMA, "tool": {"name": "mmu", "version": tool_version()}, "entries": entries}
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(doc, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    except OSError as exc:
+        raise ScanError("output-failed", f"cannot write baseline {path}: {exc}") from None
+    return len(entries)
+
+
+def load_baseline(path: Path) -> set[str]:
+    try:
+        doc = json.loads(path.read_text(encoding="utf-8"))
+        entries = doc["entries"]
+        return {str(entry["fingerprint"]) for entry in entries}
+    except OSError as exc:
+        raise ScanError("bad-baseline", f"cannot read baseline {path}: {exc.strerror or exc}") from None
+    except (ValueError, KeyError, TypeError):
+        raise ScanError("bad-baseline", f"{path} is not a vibecheck baseline (run `mmu vibecheck --write-baseline`)") from None
+
+
+def apply_baseline(findings: list[Finding], fingerprints: set[str]) -> list[Finding]:
+    """Findings (or the part of their locations) recorded in the baseline get status `baselined`."""
+    out: list[Finding] = []
+    for f in findings:
+        if f.status not in _ACTIVE:
+            out.append(f)
+            continue
+        if not f.locations:
+            if fingerprint(f.check, None) in fingerprints:
+                f.status = "baselined"
+            out.append(f)
+            continue
+        known = [loc for loc in f.locations if fingerprint(f.check, loc) in fingerprints]
+        if not known:
+            out.append(f)
+            continue
+        fresh = [loc for loc in f.locations if fingerprint(f.check, loc) not in fingerprints]
+        if not fresh:
+            f.status = "baselined"
+            out.append(f)
+            continue
+        fresh_paths = {loc.path for loc in fresh}
+        old = replace(f, status="baselined", locations=known, files=_unique(loc.path for loc in known), notes=[])
+        f.locations = fresh
+        f.files = [p for p in f.files if p in fresh_paths]
+        out.extend([f, old])
+    return out
+
+
 # --- Runner ----------------------------------------------------------------
 
-def scan(root: Path, scope: str = "all", since: str | None = None) -> ScanResult:
-    """Run every rule on `root` and return findings for `scope` (all | changed | staged | since)."""
-    from mmu_cli.cli import doctor_skip_paths, gather_code_files
+def scan(root: Path, scope: str = "all", since: str | None = None, baseline: Path | None = None) -> ScanResult:
+    """Run every rule on `root` and return findings for `scope` (all | changed | staged | since).
+
+    `baseline`: a file written by `write_baseline`; findings recorded in it get status `baselined`.
+    """
+    from mmu_cli.cli import vibecheck_skip_paths
     from mmu_cli.vibecheck import rules
 
     if not root.is_dir():
@@ -616,29 +878,22 @@ def scan(root: Path, scope: str = "all", since: str | None = None) -> ScanResult
         if scope == "since":
             scope_info["since"] = since
         scope_info["files"] = len(files)
+    known = load_baseline(baseline) if baseline is not None else None
 
-    _READ_CACHE.clear()
-    skip_paths = doctor_skip_paths(root)
-    code_files = gather_code_files(root, skip_paths)
+    reset_caches()
+    code_files, config_files = gather_files(root, vibecheck_skip_paths(root))
+    if len(code_files) > _MAX_FILES:
+        scope_info["truncated"] = len(code_files) - _MAX_FILES
+        code_files = code_files[:_MAX_FILES]
 
     findings: list[Finding] = []
-    findings.append(rules.check_secrets(root, code_files))
-    findings.extend(rules.check_webhooks(root, code_files))
-    findings.append(rules.check_password_reset(root, code_files))
-    findings.append(rules.check_sql_strings(root, code_files))
-    findings.append(rules.check_unsafe_deserialization(root, code_files))
-    findings.append(rules.check_rate_limiting(root, code_files))
-    findings.append(rules.check_cors(root, code_files))
-    findings.append(rules.check_debug_mode(root, code_files))
-    findings.append(rules.check_error_monitoring(root, code_files))
-    findings.append(rules.check_client_bundle_secrets(root, code_files))
-    findings.append(rules.check_supabase_rls(root, code_files))
-    findings.append(rules.check_sourcemaps(root, code_files))
-    findings.append(rules.check_git_config_exec(root, code_files))
-    findings.append(rules.check_disabled_ssl(root, code_files))
-    findings.append(rules.check_jwt_localstorage(root, code_files))
+    for check in rules.CHECKS:
+        found = check(root, code_files, config_files)
+        findings.extend(found if isinstance(found, list) else [found])
     findings = apply_suppressions(findings, root, load_config_ignores(root))
     findings = downgrade_test_only_findings(findings)
+    if known is not None:
+        findings = apply_baseline(findings, known)
     if files is not None:
         findings = apply_scope(findings, files)
     return ScanResult(root=root, findings=findings, scope=scope_info)

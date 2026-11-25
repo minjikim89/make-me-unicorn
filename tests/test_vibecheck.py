@@ -14,7 +14,7 @@ def write(root: Path, rel: str, content: str) -> None:
     path = root / rel
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(content, encoding="utf-8")
-    vibecheck._READ_CACHE.pop(path, None)  # checks share a per-run read cache; a rewritten fixture must not hit it
+    vibecheck.engine.reset_caches()  # checks share per-run caches; a rewritten fixture must not hit them
 
 
 class SecretCheckTests(unittest.TestCase):
@@ -27,14 +27,32 @@ class SecretCheckTests(unittest.TestCase):
             self.assertIn("Stripe live secret key", finding.message)
             self.assertEqual(finding.files, ["src/pay.py"])
 
-    def test_flags_unignored_env_file(self):
+    def test_flags_key_in_unignored_env_file(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            write(root, ".env", "SECRET=hello")
+            write(root, ".env", "STRIPE_SECRET_KEY=sk_live_" + "a1b2c3d4e5" * 3 + "\n")
             write(root, ".gitignore", "node_modules/\n")
             finding = vibecheck.check_secrets(root, [])
             self.assertEqual(finding.status, "fail")
-            self.assertIn(".env", finding.files)
+            self.assertEqual(finding.files, [".env"])
+            self.assertIn("git does not ignore", finding.message)
+            self.assertIn(".gitignore", finding.fix)
+
+    def test_unignored_env_without_a_known_key_is_a_warning_not_a_blocker(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            write(root, ".env", "PORT=3000\nSESSION_SECRET=q8Zr2mW5vK1pX7cL\n")
+            self.assertEqual(vibecheck.check_secrets(root, []).status, "ok")
+            warned = vibecheck.check_env_ignored(root, [])
+            self.assertEqual((warned.severity, warned.status), ("P1", "warn"))
+            self.assertEqual([(loc.path, loc.line) for loc in warned.locations], [(".env", 2)])
+            self.assertNotIn("q8Zr2mW5vK1pX7cL", warned.locations[0].snippet)
+
+    def test_placeholder_env_values_are_not_reported(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            write(root, ".env", "SECRET_KEY=changethis\nPOSTGRES_PASSWORD=changethis\nNEXT_PUBLIC_KEY=abcdefghijkl\nAPI_TOKEN=\n")
+            self.assertEqual(vibecheck.check_env_ignored(root, []).status, "ok")
 
     def test_clean_when_env_ignored(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -47,19 +65,52 @@ class SecretCheckTests(unittest.TestCase):
 
 
 class PasswordResetTests(unittest.TestCase):
-    def test_fails_when_auth_without_reset(self):
+    LOGIN = "export async function login(e, p) {\n  return supabase.auth.signInWithPassword({ email: e, password: p });\n}\n"
+
+    def test_fails_when_password_login_without_reset(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            write(root, "src/auth/login.ts", "export function login() {}")
+            write(root, "src/auth/login.ts", self.LOGIN)
             finding = vibecheck.check_password_reset(root, [root / "src/auth/login.ts"])
             self.assertEqual(finding.status, "fail")
+            self.assertEqual([(loc.path, loc.line) for loc in finding.locations], [("src/auth/login.ts", 2)])
 
-    def test_ok_when_reset_present(self):
+    def test_ok_when_reset_present_anywhere(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            write(root, "src/auth/login.ts", "// handles forgot password flow")
-            finding = vibecheck.check_password_reset(root, [root / "src/auth/login.ts"])
-            self.assertEqual(finding.status, "ok")
+            write(root, "src/auth/login.ts", self.LOGIN)
+            write(root, "src/pages/forgot.ts", "export const send = (e) => supabase.auth.resetPasswordForEmail(e);\n")
+            files = [root / "src/auth/login.ts", root / "src/pages/forgot.ts"]
+            self.assertEqual(vibecheck.check_password_reset(root, files).status, "ok")
+
+    def test_reset_identifier_spellings_count(self):
+        for spelling in ("password_reset", "password-reset", "reset_password", "resetPassword", "forgot-password"):
+            with self.subTest(spelling=spelling), tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp)
+                write(root, "src/auth/login.ts", self.LOGIN + f'export const route = "/{spelling}";\n')
+                self.assertEqual(vibecheck.check_password_reset(root, [root / "src/auth/login.ts"]).status, "ok")
+
+    def test_a_comment_is_not_a_reset_flow(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            write(root, "src/auth/login.ts", "// TODO: forgot password flow\n" + self.LOGIN)
+            self.assertEqual(vibecheck.check_password_reset(root, [root / "src/auth/login.ts"]).status, "fail")
+
+    def test_skips_auth_named_files_without_password_login(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            write(root, "components/AuthorBio.tsx", "export function AuthorBio({ name }) { return <p>{name}</p>; }\n")
+            write(root, "lib/auth.ts", "export const magic = (email) => supabase.auth.signInWithOtp({ email });\n")
+            write(root, "src/auth/login.ts", "export function login() {}\n")
+            files = [root / "components/AuthorBio.tsx", root / "lib/auth.ts", root / "src/auth/login.ts"]
+            self.assertEqual(vibecheck.check_password_reset(root, files).status, "skip")
+
+    def test_skips_when_a_managed_auth_product_owns_recovery(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            write(root, "package.json", '{"dependencies": {"@clerk/nextjs": "6"}}')
+            write(root, "src/auth/login.ts", self.LOGIN)
+            self.assertEqual(vibecheck.check_password_reset(root, [root / "src/auth/login.ts"]).status, "skip")
 
     def test_skips_without_auth_files(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -327,9 +378,22 @@ class DebugAndMonitoringTests(unittest.TestCase):
     def test_monitoring_detected_from_requirements(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            write(root, "requirements.txt", "sentry-sdk==2.0\n")
+            write(root, "requirements.txt", "fastapi\nsentry-sdk==2.0\n")
             finding = vibecheck.check_error_monitoring(root, [])
             self.assertEqual(finding.status, "ok")
+
+    def test_monitoring_todo_comment_is_not_monitoring(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            write(root, "package.json", '{"dependencies": {"express": "^4"}}')
+            write(root, "server.js", "const app = express();\n// TODO: add sentry someday\n")
+            self.assertEqual(vibecheck.check_error_monitoring(root, [root / "server.js"]).status, "warn")
+
+    def test_monitoring_skips_projects_without_a_server(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            write(root, "lib.py", "def add(a, b): return a + b\n")
+            self.assertEqual(vibecheck.check_error_monitoring(root, [root / "lib.py"]).status, "skip")
 
 
 class JwtLocalStorageTests(unittest.TestCase):
@@ -380,7 +444,11 @@ class CommandTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             # Webhook handler without signature/idempotency -> P0 fails
-            write(root, "src/webhooks/stripe.ts", "export async function POST(req) { return ok() }")
+            write(
+                root, "app/api/webhooks/stripe/route.ts",
+                'export async function POST(req) {\n  const event = await req.json();\n'
+                '  if (event.type === "invoice.paid") await grant(event.data.object.customer);\n  return ok();\n}\n',
+            )
             result = command_vibecheck(root)
             self.assertEqual(result.exit_code, 1)  # 1 = blocking findings; 2 is reserved for scanner errors
             self.assertTrue(any("webhook" in m for m in result["messages"]))
@@ -600,15 +668,16 @@ class ReviewRegressionTests(unittest.TestCase):
     def test_downgrade_uses_full_offender_list_not_truncated(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
+            key = 'const KEY = "sk_live_' + "a1b2c3d4e5" * 3 + '";'
             for i in range(11):
-                write(root, f"src/__tests__/auth_{i:02d}.test.ts", "login()")
-            write(root, "src/zz_routes/auth.ts", "session login signin")
+                write(root, f"src/__tests__/pay_{i:02d}.test.ts", key)
+            write(root, "src/zz_routes/pay.ts", key)
             files = sorted((root / "src").rglob("*.ts"))
-            finding = vibecheck.check_password_reset(root, files)
+            finding = vibecheck.check_secrets(root, files)
             self.assertEqual(finding.status, "fail")
             self.assertEqual(len(finding.files), 12)
             out = vibecheck.downgrade_test_only_findings([finding])[0]
-            self.assertEqual(out.status, "fail", "a real auth file is in the list; must not be downgraded")
+            self.assertEqual(out.status, "fail", "a real source file is in the list; must not be downgraded")
 
     def test_is_test_path_is_conservative(self):
         yes = ["tests/fixtures/keys.py", "src/__tests__/a.test.ts", "pkg/foo_test.go", "spec/models/user_spec.rb", "src/util.spec.tsx"]

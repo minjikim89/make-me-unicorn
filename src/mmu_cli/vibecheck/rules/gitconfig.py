@@ -18,6 +18,7 @@ register(Rule(
     ref=_REF_GITSPAWN,
     tags=("supply-chain", "agents"),
     confidence="high",
+    repo_level=True,
 ))
 
 # `.git/config` keys that make git run a command when an agent (or you) opens the repo,
@@ -99,7 +100,15 @@ def _is_shellish(value: str) -> bool:
     return value.startswith("!") or any(ch in value for ch in "|;&$`")
 
 
-def _git_config_exec_hit(root: Path, section: str, key: str, value: str) -> bool:
+def _inside(path: str, parents: tuple[Path, ...]) -> bool:
+    try:
+        resolved = Path(path).expanduser().resolve()
+    except (OSError, RuntimeError):
+        return False
+    return any(resolved == parent or parent in resolved.parents for parent in parents)
+
+
+def _git_config_exec_hit(root: Path, section: str, key: str, value: str, gitdir: Path | None = None) -> bool:
     """True when this entry runs a program on ordinary git use and is not a known-benign tool setting."""
     top = section.split(".", 1)[0]
     v = value.strip().strip('"').strip("'")
@@ -110,8 +119,11 @@ def _git_config_exec_hit(root: Path, section: str, key: str, value: str) -> bool
             first = v.split(None, 1)[0].strip('"').strip("'").lower() if v else ""
             return not (Path(first).name in {"ssh", "plink", "putty"} and not _is_shellish(v))
         if key == "hookspath":
-            # husky/lefthook point inside the repo (`.husky/_`); a path outside it or absolute is not yours
-            return v.startswith(("/", "~")) or ".." in Path(v).parts
+            # husky/lefthook point inside the repo (`.husky/_`); a path outside the repo and its git dir is not yours
+            if v.startswith(("/", "~")):
+                own = tuple(p.resolve() for p in (root, gitdir) if p is not None)
+                return not _inside(v, own)
+            return ".." in Path(v).parts
         return key == "askpass"
     if top == "alias":
         return v.startswith("!")
@@ -126,7 +138,7 @@ def _git_config_exec_hit(root: Path, section: str, key: str, value: str) -> bool
     return False
 
 
-def check_git_config_exec(root: Path, code_files: list[Path]) -> Finding:
+def check_git_config_exec(root: Path, code_files: list[Path], config_files: list[Path] | None = None) -> Finding:
     """`.git/config` entries that execute commands when the repo is opened.
 
     GitSpawn (Sep 2026): coding agents run `git status` etc. on startup; keys like
@@ -139,7 +151,7 @@ def check_git_config_exec(root: Path, code_files: list[Path]) -> Finding:
     hits: list[str] = []
     locations: list[Location] = []
     for section, key, value, src, lineno in _git_config_entries_located(cfg):
-        if _git_config_exec_hit(root, section, key, value):
+        if _git_config_exec_hit(root, section, key, value, cfg.parent):
             hits.append(f"{section}.{key} = {value[:60]}")
             locations.append(Location(_rel(src, root), lineno, snippet=clean_snippet(f"{section}.{key} = {value}")))
     if hits:

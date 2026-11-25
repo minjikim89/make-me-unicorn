@@ -80,7 +80,7 @@ def _qualified(schema: str | None, name: str) -> str:
 
 def _supabase_anchor(root: Path, code_files: list[Path]) -> Location | None:
     """Where Supabase enters the project: the first code line that references it, else the manifest."""
-    for path in code_files[:400]:
+    for path in code_files:
         text = _read(path)
         for marker in _SUPABASE_MARKERS:
             pos = text.find(marker)
@@ -89,7 +89,7 @@ def _supabase_anchor(root: Path, code_files: list[Path]) -> Location | None:
     return server_anchor(root, [], [m.lower() for m in _SUPABASE_MARKERS])
 
 
-def check_supabase_rls(root: Path, code_files: list[Path]) -> Finding:
+def check_supabase_rls(root: Path, code_files: list[Path], config_files: list[Path] | None = None) -> Finding:
     """Supabase tables created without Row Level Security.
 
     With the anon key in the browser, a table without RLS is readable (often writable)
@@ -99,7 +99,7 @@ def check_supabase_rls(root: Path, code_files: list[Path]) -> Finding:
     pkg = (_read(root / "package.json") + _read(root / "requirements.txt") + _read(root / "pyproject.toml")).lower()
     uses_supabase = any(m.lower() in pkg for m in _SUPABASE_MARKERS) or (root / "supabase").is_dir()
     if not uses_supabase:
-        for path in code_files[:400]:
+        for path in code_files:
             if any(m in _read(path) for m in _SUPABASE_MARKERS):
                 uses_supabase = True
                 break
@@ -138,6 +138,7 @@ def check_supabase_rls(root: Path, code_files: list[Path]) -> Finding:
             f"{len(missing)} table(s) created without ENABLE ROW LEVEL SECURITY: " + ", ".join(missing[:8]) + (" …" if len(missing) > 8 else ""),
             files=sorted({created[t].path for t in missing}),
             locations=[created[t] for t in missing],
+            framework="supabase",
         )
     if not created:
         return Finding("supabase-rls", "P0", "ok", "no CREATE TABLE statements found in migrations")

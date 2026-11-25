@@ -23,7 +23,7 @@ def write(root: Path, rel: str, content: str) -> Path:
     path = root / rel
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(content, encoding="utf-8")
-    vibecheck._READ_CACHE.pop(path, None)
+    engine.reset_caches()
     return path
 
 
@@ -63,10 +63,11 @@ class LocationTests(unittest.TestCase):
         self.assertNotIn(STRIPE_KEY, json.dumps(f.to_dict()))
         self.assertNotIn("AKIAABCDEFGHIJKLMNOP", json.dumps(f.to_dict()))
 
-    def test_unignored_env_is_a_file_level_location(self):
-        write(self.root, ".env", "SECRET=hello")
+    def test_unignored_env_secret_points_at_its_line(self):
+        write(self.root, ".env", f"PORT=3000\nSTRIPE_SECRET_KEY={STRIPE_KEY}\n")
         f = vibecheck.check_secrets(self.root, [])
-        self.assertEqual(lines_of(f), [(".env", None)])
+        self.assertEqual(lines_of(f), [(".env", 2)])
+        self.assertNotIn(STRIPE_KEY, json.dumps(f.to_dict()))
 
     def test_client_bundle_secret_lines_and_redaction(self):
         write(self.root, ".env.local", "A=1\nNEXT_PUBLIC_STRIPE_SECRET_KEY=supersecretvalue1234\n")
@@ -83,9 +84,12 @@ class LocationTests(unittest.TestCase):
         self.assertIn("SELECT", f.locations[0].snippet)
 
     def test_unsafe_deserialization_lines(self):
-        p = write(self.root, "load.py", "import pickle\nimport yaml\n\na = pickle.loads(b)\nc = yaml.load(d)\n")
+        p = write(self.root, "load.py", "import pickle\nimport yaml\n\na = pickle.loads(request.data)\nc = yaml.load(d)\ne = pickle.load(fh)\n")
         f = vibecheck.check_unsafe_deserialization(self.root, [p])
         self.assertEqual(lines_of(f), [("load.py", 4), ("load.py", 5)])
+        blocking, warned = vibecheck.rules.deserialization_findings(self.root, [p])
+        self.assertEqual((blocking.status, warned.status), ("fail", "warn"))
+        self.assertEqual(lines_of(warned), [("load.py", 6)])
 
     def test_cors_debug_ssl_lines(self):
         p = write(self.root, "main.py", 'app = FastAPI()\napp.add_middleware(C, allow_origins=["*"])\n\n\nDEBUG = True\nr = get(u, verify=False)\n')
@@ -116,16 +120,25 @@ class LocationTests(unittest.TestCase):
         self.assertEqual(f.files, [".git/config"])
 
     def test_webhook_findings_anchor_to_handler_line(self):
-        p = write(self.root, "app/api/webhooks/stripe/route.ts", "import x from 'y';\n\nexport async function POST(req) {\n  return ok();\n}\n")
+        p = write(
+            self.root, "app/api/webhooks/stripe/route.ts",
+            "import x from 'y';\n\nexport async function POST(req) {\n  const event = await req.json();\n"
+            "  if (event.type === 'invoice.paid') await db.insert(grants).values({ user: event.data.object.customer });\n  return ok();\n}\n",
+        )
         by_id = {f.check: f for f in vibecheck.check_webhooks(self.root, [p])}
         self.assertEqual(lines_of(by_id["webhook-signature"]), [("app/api/webhooks/stripe/route.ts", 3)])
         self.assertEqual(lines_of(by_id["webhook-idempotency"]), [("app/api/webhooks/stripe/route.ts", 3)])
+        self.assertEqual((by_id["webhook-signature"].severity, by_id["webhook-idempotency"].severity), ("P0", "P1"))
         self.assertIn("constructEvent", by_id["webhook-signature"].fix)
+        self.assertNotIn("FastAPI", by_id["webhook-signature"].fix)  # only the Next.js variant for a route.ts
 
     def test_password_reset_anchors_to_login_handler(self):
-        p = write(self.root, "app/routers/auth.py", "from x import LoginIn\n\n@router.post(\"/login\")\ndef login(body):\n    pass\n")
+        p = write(
+            self.root, "app/routers/auth.py",
+            "from x import LoginIn\n\n@router.post(\"/login\")\ndef login(body):\n    return verify_password(body.password, user.hash)\n",
+        )
         f = vibecheck.check_password_reset(self.root, [p])
-        self.assertEqual(lines_of(f), [("app/routers/auth.py", 3)])
+        self.assertEqual(lines_of(f), [("app/routers/auth.py", 5)])
 
     def test_rate_limit_and_monitoring_anchor_to_server_entry(self):
         write(self.root, "requirements.txt", "fastapi\n")
@@ -192,7 +205,7 @@ class SuppressionTests(unittest.TestCase):
         return out
 
     def test_same_line_with_reason_suppresses(self):
-        write(self.root, "db.py", 'q = f"SELECT {c} FROM t"  # mmu-ignore[sql-fstring]: c comes from a hardcoded allowlist\n')
+        write(self.root, "db.py", 'q = f"SELECT * FROM t WHERE id = {c}"  # mmu-ignore[sql-fstring]: c comes from a hardcoded allowlist\n')
         found = self._sql()
         self.assertEqual(list(found), ["suppressed"])
         self.assertEqual(found["suppressed"][0].suppress_reason, "c comes from a hardcoded allowlist")
@@ -200,31 +213,31 @@ class SuppressionTests(unittest.TestCase):
                          {"reason": "c comes from a hardcoded allowlist", "source": "inline"})
 
     def test_line_above_and_other_comment_syntaxes(self):
-        write(self.root, "db.py", '# mmu-ignore[sql-fstring, debug-mode]: reviewed\nq = f"SELECT {c} FROM t"\n')
+        write(self.root, "db.py", '# mmu-ignore[sql-fstring, debug-mode]: reviewed\nq = f"SELECT * FROM t WHERE id = {c}"\n')
         self.assertEqual(list(self._sql()), ["suppressed"])
         write(self.root, "src/a.ts", "/* mmu-ignore[jwt-localstorage]: demo only */\nlocalStorage.setItem('token', t);\n")
         f = next(f for f in vibecheck.run_vibecheck(self.root) if f.check == "jwt-localstorage")
         self.assertEqual((f.status, f.suppress_reason), ("suppressed", "demo only"))
 
     def test_without_reason_does_not_suppress(self):
-        write(self.root, "db.py", 'q = f"SELECT {c} FROM t"  # mmu-ignore[sql-fstring]\n')
+        write(self.root, "db.py", 'q = f"SELECT * FROM t WHERE id = {c}"  # mmu-ignore[sql-fstring]\n')
         found = self._sql()
         self.assertEqual(list(found), ["fail"])
         self.assertIn("has no reason", found["fail"][0].notes[0])
 
     def test_wrong_rule_id_or_distant_line_does_not_suppress(self):
-        write(self.root, "db.py", '# mmu-ignore[sql-fstring]: too far\n\nq = f"SELECT {c} FROM t"  # mmu-ignore[secrets]: other rule\n')
+        write(self.root, "db.py", '# mmu-ignore[sql-fstring]: too far\n\nq = f"SELECT * FROM t WHERE id = {c}"  # mmu-ignore[secrets]: other rule\n')
         self.assertEqual(list(self._sql()), ["fail"])
 
     def test_partial_suppression_splits_the_finding(self):
-        write(self.root, "db.py", 'q = f"SELECT {c} FROM t"  # mmu-ignore[sql-fstring]: allowlisted\nr = f"DELETE FROM t WHERE id = {i}"\n')
+        write(self.root, "db.py", 'q = f"SELECT * FROM t WHERE id = {c}"  # mmu-ignore[sql-fstring]: allowlisted\nr = f"DELETE FROM t WHERE id = {i}"\n')
         found = self._sql()
         self.assertEqual(lines_of(found["fail"][0]), [("db.py", 2)])
         self.assertEqual(lines_of(found["suppressed"][0]), [("db.py", 1)])
 
     def test_config_ignore_rule_and_glob(self):
-        write(self.root, "db.py", 'q = f"SELECT {c} FROM t"\n')
-        write(self.root, "legacy/old/db.py", 'q = f"SELECT {c} FROM t"\n')
+        write(self.root, "db.py", 'q = f"SELECT * FROM t WHERE id = {c}"\n')
+        write(self.root, "legacy/old/db.py", 'q = f"SELECT * FROM t WHERE id = {c}"\n')
         write(self.root, "app.py", "DEBUG = True\n")
         write(self.root, ".mmu/config.toml", '[vibecheck]\nignore = ["debug-mode", "legacy/**:sql-fstring"]\n')
         result = vibecheck.scan(self.root)
@@ -236,7 +249,7 @@ class SuppressionTests(unittest.TestCase):
         self.assertEqual(result.exit_code(), 1)
 
     def test_fully_suppressed_scan_exits_zero(self):
-        write(self.root, "db.py", 'q = f"SELECT {c} FROM t"\n')
+        write(self.root, "db.py", 'q = f"SELECT * FROM t WHERE id = {c}"\n')
         write(self.root, ".mmu/config.toml", '[vibecheck]\nignore = ["**/*.py:sql-fstring", "error-monitoring"]\n')
         result = vibecheck.scan(self.root)
         self.assertEqual(result.summary()["blocking"], 0)
@@ -253,7 +266,7 @@ class ScopeTests(unittest.TestCase):
         self.root = Path(self._tmp.name)
         self.addCleanup(self._tmp.cleanup)
         git(self.root, "init", "-q")
-        write(self.root, "old.py", 'q = f"SELECT {c} FROM t"\n')
+        write(self.root, "old.py", 'q = f"SELECT * FROM t WHERE id = {c}"\n')
         write(self.root, "clean.py", "x = 1\n")
         git(self.root, "add", "-A")
         git(self.root, "commit", "-q", "-m", "init")
@@ -299,7 +312,7 @@ class ScopeTests(unittest.TestCase):
 
     def test_scoped_scan_outside_git_is_exit_2(self):
         with tempfile.TemporaryDirectory() as tmp:
-            write(Path(tmp), "db.py", 'q = f"SELECT {c} FROM t"\n')
+            write(Path(tmp), "db.py", 'q = f"SELECT * FROM t WHERE id = {c}"\n')
             env = {"GIT_CEILING_DIRECTORIES": str(Path(tmp).resolve().parent)}
             with mock.patch.dict("os.environ", env):
                 code, out, err = run_cli("vibecheck", "--root", tmp, "--changed")
@@ -323,7 +336,7 @@ class OutputTests(unittest.TestCase):
         self.root = Path(self._tmp.name)
         self.addCleanup(self._tmp.cleanup)
         write(self.root, "src/pay.py", f'KEY = "{STRIPE_KEY}"\n')
-        write(self.root, "db.py", 'q = f"SELECT {c} FROM t"  # mmu-ignore[sql-fstring]: allowlisted column\n')
+        write(self.root, "db.py", 'q = f"SELECT * FROM t WHERE id = {c}"  # mmu-ignore[sql-fstring]: allowlisted column\n')
         write(self.root, "settings.py", "DEBUG = True\n")
 
     def test_json_v1_document(self):
@@ -335,7 +348,7 @@ class OutputTests(unittest.TestCase):
         self.assertEqual(doc["tool"]["name"], "mmu")
         self.assertTrue(doc["tool"]["version"])
         self.assertEqual(doc["scope"], {"mode": "all"})
-        self.assertEqual(set(doc["summary"]), {"blocking", "warnings", "passed", "skipped", "suppressed"})
+        self.assertEqual(set(doc["summary"]), {"blocking", "warnings", "passed", "skipped", "suppressed", "baselined"})
         self.assertEqual((doc["summary"]["blocking"], doc["summary"]["suppressed"]), (1, 1))
         self.assertEqual({f["status"] for f in doc["findings"]}, {"fail", "warn", "suppressed"})
         for f in doc["findings"]:
@@ -469,7 +482,7 @@ class ExitCodeTests(unittest.TestCase):
     def test_0_clean_1_blocking(self):
         write(self.root, "lib.py", "def add(a, b): return a + b\n")
         self.assertEqual(run_cli("vibecheck", "--root", str(self.root))[0], 0)
-        write(self.root, "db.py", 'q = f"SELECT {c} FROM t"\n')
+        write(self.root, "db.py", 'q = f"SELECT * FROM t WHERE id = {c}"\n')
         self.assertEqual(run_cli("vibecheck", "--root", str(self.root))[0], 1)
 
     def test_fail_on(self):
@@ -477,7 +490,7 @@ class ExitCodeTests(unittest.TestCase):
         self.assertEqual(run_cli("vibecheck", "--root", str(self.root))[0], 0)
         self.assertEqual(run_cli("vibecheck", "--root", str(self.root), "--fail-on", "P1")[0], 1)
         self.assertEqual(run_cli("vibecheck", "--root", str(self.root), "--fail-on", "p1")[0], 1)
-        write(self.root, "db.py", 'q = f"SELECT {c} FROM t"\n')
+        write(self.root, "db.py", 'q = f"SELECT * FROM t WHERE id = {c}"\n')
         self.assertEqual(run_cli("vibecheck", "--root", str(self.root), "--fail-on", "never")[0], 0)
         self.assertEqual(run_cli("vibecheck", "--root", str(self.root), "--fail-on", "bogus")[0], 2)
 
