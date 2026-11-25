@@ -1,6 +1,6 @@
 ---
 name: mmu-startup
-description: Use this skill when the user is brainstorming a SaaS or AI product idea, validating a startup idea, drafting a launch checklist, preparing for Product Hunt, or asking which blueprint applies to their stack. Provides the Make Me Unicorn (MMU) launch operating system — 15 core blueprints (frontend, backend, billing, security, etc.), industry-specific blueprints (AI products, marketplaces), and a Product Hunt launch kit.
+description: Use when the user is planning a SaaS or AI product, validating a startup idea, choosing a launch blueprint for one area (billing, auth, SEO, legal), or preparing a Product Hunt launch. Planning only; to check code before a commit or a "done", use mmu-vibecheck.
 ---
 
 # MMU Startup Skill

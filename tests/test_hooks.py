@@ -1,0 +1,446 @@
+"""Tests for `mmu hook` (src/mmu_cli/hooks.py) and the plugin wrapper hooks/vibecheck_gate.py."""
+
+import io
+import json
+import os
+import subprocess
+import sys
+import tempfile
+import time
+import unittest
+from contextlib import redirect_stderr, redirect_stdout
+from pathlib import Path
+from unittest import mock
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(REPO_ROOT / "src"))
+
+from mmu_cli import hooks  # noqa: E402
+
+FAKE_KEY = "sk_live_" + "a1b2c3d4e5" * 3  # assembled at runtime; not a real credential
+
+FAIL_DOC = {
+    "schema": "mmu.vibecheck/v1",
+    "summary": {"blocking": 1},
+    "findings": [{
+        "rule_id": "secrets", "severity": "P0", "status": "fail", "message": "possible hardcoded secrets",
+        "locations": [{"path": "app/pay.py", "line": 7}, {"path": "app/other.py", "line": 2}],
+        "fix": "Replace the literal\nwith an env lookup", "ref": "https://example.test/why",
+    }],
+}
+CLEAN_DOC = {"schema": "mmu.vibecheck/v1", "summary": {"blocking": 0}, "findings": []}
+
+
+def _git(root: Path, *args: str) -> None:
+    subprocess.run(
+        ["git", "-c", "user.name=t", "-c", "user.email=t@example.test", "-c", "commit.gpgsign=false",
+         "-c", "core.hooksPath=/dev/null", *args],
+        cwd=str(root), check=True, capture_output=True,
+    )
+
+
+def _repo(tmp: str) -> Path:
+    root = Path(tmp).resolve()
+    _git(root, "init", "-q", "-b", "main")
+    (root / "README.md").write_text("x\n", encoding="utf-8")
+    _git(root, "add", "-A")
+    _git(root, "commit", "-q", "-m", "init")
+    return root
+
+
+def _call(payload, host=None, event=None, env=None):
+    """Run hooks.run on a payload; return (exit code, parsed stdout or None, stderr)."""
+    out, err = io.StringIO(), io.StringIO()
+    stdin = io.StringIO(payload if isinstance(payload, str) else json.dumps(payload))
+    with mock.patch.dict(os.environ, env or {}, clear=False), redirect_stdout(out), redirect_stderr(err):
+        code = hooks.run(host, event, stdin=stdin)
+    text = out.getvalue().strip()
+    return code, (json.loads(text) if text else None), err.getvalue()
+
+
+class ShouldGateTests(unittest.TestCase):
+    def test_gates_commit_and_push_variants(self):
+        for cmd in [
+            "git commit -m x", "git add -A && git commit -m 'y'", "cd app; git push origin main",
+            "git -C /tmp/x commit -am z", "LANG=C git push", "cd app\ngit commit -m newline-separated",
+            "git -c user.name=x commit -m y", "git --git-dir=/r/.git --work-tree=/r commit -m y",
+            "git --no-pager push --force-with-lease", "(git commit -m x)", "echo $(git push)",
+            "git add . &&\n  git commit -m 'multi'", "git commit -n -m x", "git commit --no-verify -m x",
+        ]:
+            with self.subTest(cmd=cmd):
+                self.assertTrue(hooks.should_gate(cmd))
+
+    def test_ignores_other_git_and_non_git(self):
+        for cmd in [
+            "git status", "git log --oneline", "ls -la", "gitk", "git commit-tree HEAD^{tree}", "git pushx",
+            "legit commit", "./git commit", "git commit --dry-run", "git push --dry-run origin main",
+            "git commit --help",
+        ]:
+            with self.subTest(cmd=cmd):
+                self.assertFalse(hooks.should_gate(cmd))
+
+    def test_per_command_disable_prefix_is_honoured_explicitly(self):
+        self.assertFalse(hooks.should_gate("MMU_HOOK_DISABLE=1 git commit -m x"))
+        self.assertFalse(hooks.should_gate("cd app && MMU_HOOK_DISABLE=1 git push"))
+        self.assertTrue(hooks.should_gate("MMU_HOOK_DISABLE=0 git commit -m x"))
+        self.assertTrue(hooks.should_gate("OTHER_MMU_HOOK_DISABLE=1 git commit -m x"))
+
+    def test_env_switches(self):
+        with mock.patch.dict(os.environ, {"MMU_HOOK_DISABLE": "1"}):
+            self.assertFalse(hooks.should_gate("git push"))
+        with mock.patch.dict(os.environ, {"MMU_HOOK_ON_PUSH_ONLY": "1"}):
+            self.assertFalse(hooks.should_gate("git commit -m x"))
+            self.assertTrue(hooks.should_gate("git push"))
+
+    def test_honours_git_dash_c_path(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp).resolve()
+            (root / "proj").mkdir()
+            _git(root / "proj", "init", "-q")
+            deadline = time.monotonic() + 30
+            for cmd in ("git -C proj commit -m x", "git -C 'proj' push"):
+                m = hooks.gated_match(cmd)
+                self.assertEqual(hooks.repo_root(str(root), m, deadline).resolve(), root / "proj")
+
+
+class ScopeTests(unittest.TestCase):
+    def _scope(self, command: str, root: Path = Path(".")) -> list[str]:
+        match = hooks.gated_match(command)
+        self.assertIsNotNone(match, command)
+        return hooks.scope_for(command, match, root, time.monotonic() + 30)
+
+    def test_plain_commit_scans_staged(self):
+        for cmd in ["git commit -m x", "git commit -m 'fix -a flag handling'", "git commit -m -a",
+                    "git commit --amend --no-edit", "git commit -q -m x", "git commit -mfoo",
+                    "git commit --message 'a b' -S", "git commit -F msg.txt"]:
+            with self.subTest(cmd=cmd):
+                self.assertEqual(self._scope(cmd), ["--staged"])
+
+    def test_commit_that_takes_working_tree_scans_changed(self):
+        for cmd in ["git commit -a -m x", "git commit -am x", "git commit --all -m x", "git commit -qam x",
+                    "git add -A && git commit -m x", "git add . &&\n git commit -m x",
+                    "git commit -m x app/pay.py", "git commit -m x -- app/pay.py", "git commit --include a.py -m x",
+                    "git commit -m 'unterminated"]:
+            with self.subTest(cmd=cmd):
+                self.assertEqual(self._scope(cmd), ["--changed"])
+
+    def test_push_uses_upstream_when_present(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = _repo(tmp)
+            self.assertEqual(self._scope("git push", root), [])
+            self.assertEqual(self._scope("git push -u origin main", root), [])
+            bare = root / "remote.git"
+            _git(root, "init", "-q", "--bare", str(bare))
+            _git(root, "remote", "add", "origin", str(bare))
+            _git(root, "push", "-q", "-u", "origin", "main")
+            self.assertEqual(self._scope("git push", root), ["--since", "@{u}"])
+
+
+class DetectionTests(unittest.TestCase):
+    def test_detect_host(self):
+        cases = [
+            ({"hook_event_name": "PreToolUse", "tool_name": "Bash", "permission_mode": "default"}, "claude"),
+            ({"hook_event_name": "Stop", "stop_hook_active": False, "last_assistant_message": "done"}, "claude"),
+            ({"hook_event_name": "PreToolUse", "tool_name": "Bash", "turn_id": "t1"}, "codex"),
+            ({"hook_event_name": "PostToolUse", "tool_name": "apply_patch"}, "codex"),
+            ({"hook_event_name": "Stop", "transcript_path": "/home/u/.codex/sessions/x.jsonl"}, "codex"),
+            ({"hook_event_name": "beforeShellExecution", "command": "ls", "conversation_id": "c"}, "cursor"),
+            ({"hook_event_name": "stop", "status": "completed", "loop_count": 0}, "cursor"),
+            ({"command": "ls", "workspace_roots": ["/w"]}, "cursor"),
+            ({"hook_event_name": "BeforeTool", "tool_name": "run_shell_command"}, "gemini"),
+            ({"hook_event_name": "AfterAgent"}, "gemini"),
+        ]
+        for payload, host in cases:
+            with self.subTest(payload=payload):
+                self.assertEqual(hooks.detect_host(payload), host)
+
+    def test_detect_event(self):
+        cases = [
+            ({"hook_event_name": "PreToolUse"}, "pre-shell"), ({"hook_event_name": "BeforeTool"}, "pre-shell"),
+            ({"hook_event_name": "beforeShellExecution"}, "pre-shell"), ({"hook_event_name": "Stop"}, "stop"),
+            ({"hook_event_name": "stop"}, "stop"), ({"hook_event_name": "AfterAgent"}, "stop"),
+            ({"hook_event_name": "PostToolUse"}, "post-edit"), ({"stop_hook_active": False}, "stop"),
+            ({"tool_input": {"command": "ls"}}, "pre-shell"), ({"unrelated": 1}, None),
+        ]
+        for payload, event in cases:
+            with self.subTest(payload=payload):
+                self.assertEqual(hooks.detect_event(payload), event)
+
+    def test_shell_command_per_host(self):
+        self.assertEqual(hooks.shell_command({"tool_name": "Bash", "tool_input": {"command": "git push"}}, "claude"), "git push")
+        self.assertEqual(hooks.shell_command({"tool_name": "Edit", "tool_input": {"command": "git push"}}, "claude"), "")
+        self.assertEqual(hooks.shell_command({"tool_name": "Bash", "tool_input": None}, "codex"), "")
+        self.assertEqual(hooks.shell_command({"command": "git push", "cwd": "/w"}, "cursor"), "git push")
+        self.assertEqual(
+            hooks.shell_command({"tool_name": "run_shell_command", "tool_input": {"command": "git push"}}, "gemini"),
+            "git push",
+        )
+        # Gemini's field name is not documented: fall back to every string in tool_input.
+        fallback = hooks.shell_command(
+            {"tool_name": "run_shell_command", "tool_input": {"cmd": "git commit -m x", "dir": "."}}, "gemini")
+        self.assertTrue(hooks.should_gate(fallback))
+        self.assertEqual(hooks.shell_command({"tool_name": "write_file", "tool_input": {"command": "git push"}}, "gemini"), "")
+
+    def test_edited_files(self):
+        self.assertEqual(hooks.edited_files({"tool_input": {"file_path": "/w/a.ts"}}), ["/w/a.ts"])
+        patch = "*** Begin Patch\n*** Update File: app/a.py\n@@\n-x\n+y\n*** Add File: app/b.py\n+z\n*** End Patch"
+        self.assertEqual(hooks.edited_files({"tool_input": {"command": patch}}), ["app/a.py", "app/b.py"])
+
+
+class PreShellOutputTests(unittest.TestCase):
+    """Each host's block / allow / fail-open shape, with the scanner mocked."""
+
+    def _run(self, payload, host, doc, env=None):
+        with mock.patch.object(hooks, "run_scan", return_value=doc), \
+                mock.patch.object(hooks, "_run", return_value="skip agent rendering"):
+            return _call(payload, host=host, env=env)
+
+    def test_claude_block_is_exit_2_with_reason_on_stderr(self):
+        payload = {"hook_event_name": "PreToolUse", "tool_name": "Bash", "tool_input": {"command": "git commit -m x"}, "cwd": "."}
+        code, out, err = self._run(payload, None, FAIL_DOC)
+        self.assertEqual(code, 2)
+        self.assertIsNone(out)
+        self.assertIn("commit blocked", err)
+        self.assertIn("P0 secrets app/pay.py:7", err)
+        self.assertIn("app/other.py:2", err)
+        self.assertIn("fix: Replace the literal with an env lookup", err)
+        self.assertIn("mmu-ignore[secrets]: <reason>", err)
+        self.assertIn("MMU_HOOK_DISABLE=1", err)
+
+    def test_codex_block_matches_claude_contract(self):
+        payload = {"hook_event_name": "PreToolUse", "tool_name": "Bash", "turn_id": "t", "tool_input": {"command": "git push"}, "cwd": "."}
+        code, out, err = self._run(payload, None, FAIL_DOC)
+        self.assertEqual((code, out), (2, None))
+        self.assertIn("push blocked", err)
+
+    def test_cursor_block_is_permission_deny_json(self):
+        payload = {"hook_event_name": "beforeShellExecution", "command": "git commit -m x", "cwd": ".", "conversation_id": "c"}
+        code, out, err = self._run(payload, None, FAIL_DOC)
+        self.assertEqual(code, 0)
+        self.assertEqual(out["permission"], "deny")
+        self.assertIn("P0 secrets app/pay.py:7", out["agent_message"])
+        self.assertNotIn("\n", out["user_message"])
+        self.assertEqual(err, "")
+
+    def test_gemini_block_is_decision_deny_json(self):
+        payload = {"hook_event_name": "BeforeTool", "tool_name": "run_shell_command", "tool_input": {"command": "git commit -m x"}, "cwd": "."}
+        code, out, err = self._run(payload, None, FAIL_DOC)
+        self.assertEqual(code, 0)
+        self.assertEqual(out["decision"], "deny")
+        self.assertIn("P0 secrets app/pay.py:7", out["reason"])
+        self.assertEqual(err, "")
+
+    def test_allow_shapes(self):
+        for host, payload, expected in [
+            ("claude", {"tool_name": "Bash", "tool_input": {"command": "git commit -m x"}}, None),
+            ("codex", {"tool_name": "Bash", "tool_input": {"command": "git commit -m x"}}, None),
+            ("cursor", {"command": "git commit -m x"}, {"permission": "allow"}),
+            ("gemini", {"tool_name": "run_shell_command", "tool_input": {"command": "git commit -m x"}}, {}),
+        ]:
+            with self.subTest(host=host):
+                code, out, err = self._run(payload, host, CLEAN_DOC)
+                self.assertEqual((code, out, err), (0, expected, ""))
+
+    def test_non_gated_commands_never_scan(self):
+        with mock.patch.object(hooks, "run_scan", side_effect=AssertionError("must not scan")):
+            self.assertEqual(_call({"tool_name": "Bash", "tool_input": {"command": "ls"}}, host="claude")[:2], (0, None))
+            self.assertEqual(_call({"tool_name": "Write", "tool_input": {"command": "git push"}}, host="claude")[0], 0)
+            self.assertEqual(_call({"command": "npm test"}, host="cursor")[1], {"permission": "allow"})
+            self.assertEqual(_call({"tool_name": "Bash", "tool_input": None}, host="claude")[0], 0)
+            code, out, _ = _call({"tool_name": "Bash", "tool_input": {"command": "git commit -m x"}}, host="claude",
+                                 env={"MMU_HOOK_DISABLE": "1"})
+            self.assertEqual((code, out), (0, None))
+
+    def test_scanner_failure_fails_open_with_one_visible_line(self):
+        for host, payload, key in [
+            ("claude", {"tool_name": "Bash", "tool_input": {"command": "git commit -m x"}}, "systemMessage"),
+            ("codex", {"tool_name": "Bash", "tool_input": {"command": "git commit -m x"}}, "systemMessage"),
+            ("cursor", {"command": "git commit -m x"}, "user_message"),
+            ("gemini", {"tool_name": "run_shell_command", "tool_input": {"command": "git commit -m x"}}, "systemMessage"),
+        ]:
+            with self.subTest(host=host):
+                code, out, _ = self._run(payload, host, "scan exceeded 45s")
+                self.assertEqual(code, 0)
+                self.assertIn("did not run (scan exceeded 45s)", out[key])
+                self.assertIn("allowed unchecked", out[key])
+                if host == "cursor":
+                    self.assertEqual(out["permission"], "allow")
+
+    def test_malformed_stdin_and_crashes_allow(self):
+        self.assertEqual(_call("not json")[0], 0)
+        self.assertEqual(_call("[1, 2]")[0], 0)
+        self.assertEqual(_call("not json", host="cursor", event="pre-shell")[1], {"permission": "allow"})
+        with mock.patch.object(hooks, "run_scan", side_effect=RuntimeError("boom")):
+            code, out, _ = _call({"tool_name": "Bash", "tool_input": {"command": "git commit -m x"}}, host="claude")
+        self.assertEqual(code, 0)
+        self.assertIn("mmu hook crashed (RuntimeError: boom)", out["systemMessage"])
+
+    def test_scope_flags_reach_the_scanner(self):
+        seen = []
+
+        def fake(root, scope, deadline):
+            seen.append(scope)
+            return CLEAN_DOC
+
+        with mock.patch.object(hooks, "run_scan", side_effect=fake):
+            _call({"tool_name": "Bash", "tool_input": {"command": "git commit -m x"}}, host="claude")
+            _call({"tool_name": "Bash", "tool_input": {"command": "git commit -am x"}}, host="claude")
+            _call({"command": "git add -A && git commit -m x"}, host="cursor")
+        self.assertEqual(seen, [["--staged"], ["--changed"], ["--changed"]])
+
+
+class RunScanTests(unittest.TestCase):
+    def test_error_object_and_bad_output_become_reasons(self):
+        def proc(stdout, code):
+            return subprocess.CompletedProcess([], code, stdout=stdout, stderr="")
+
+        deadline = time.monotonic() + 30
+        err = json.dumps({"schema": "mmu.vibecheck/v1", "error": {"code": "not-a-git-repo", "message": "x is not a git repository"}})
+        with mock.patch.object(hooks.subprocess, "run", return_value=proc(err, 2)):
+            self.assertIn("scanner error: x is not a git repository", hooks.run_scan(Path("."), [], deadline))
+        with mock.patch.object(hooks.subprocess, "run", return_value=proc("Traceback…", 1)):
+            self.assertIn("no JSON", hooks.run_scan(Path("."), [], deadline))
+        with mock.patch.object(hooks.subprocess, "run", side_effect=subprocess.TimeoutExpired("mmu", 1)):
+            self.assertIn("scan exceeded", hooks.run_scan(Path("."), [], deadline))
+        self.assertIn("no time left", hooks.run_scan(Path("."), [], time.monotonic()))
+
+
+class RealRepoTests(unittest.TestCase):
+    """Real scanner, real git repo, no mocks."""
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.root = _repo(self._tmp.name)
+        self.addCleanup(self._tmp.cleanup)
+
+    def _write_secret(self, rel="app/pay.py"):
+        path = self.root / rel
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(f'KEY = "{FAKE_KEY}"\n', encoding="utf-8")
+        return path
+
+    def test_commit_gate_blocks_staged_secret_and_ignores_unstaged(self):
+        self._write_secret()
+        payload = {"hook_event_name": "PreToolUse", "tool_name": "Bash", "cwd": str(self.root),
+                   "tool_input": {"command": "git commit -m x"}}
+        self.assertEqual(_call(payload)[0], 0, "nothing staged: plain commit is not blocked by untracked files")
+        code, _, err = _call({**payload, "tool_input": {"command": "git add -A && git commit -m x"}})
+        self.assertEqual(code, 2)
+        self.assertIn("P0 secrets app/pay.py:1", err)
+        self.assertIn("scope: changed", err)
+        self.assertNotIn(FAKE_KEY, err)
+        _git(self.root, "add", "-A")
+        code, _, err = _call(payload)
+        self.assertEqual(code, 2)
+        self.assertIn("scope: staged", err)
+
+    def test_stop_gate_blocks_then_respects_guards(self):
+        self._write_secret()
+        payload = {"hook_event_name": "Stop", "session_id": "s1", "cwd": str(self.root), "stop_hook_active": False}
+        code, out, _ = _call(payload)
+        self.assertEqual(code, 0)
+        self.assertEqual(out["decision"], "block")
+        self.assertIn("not done yet", out["reason"])
+        self.assertIn("P0 secrets app/pay.py:1", out["reason"])
+        # host loop guard
+        self.assertEqual(_call({**payload, "stop_hook_active": True})[1], None)
+        # our own cap: default 3 blocks per session, state under the git dir
+        self.assertEqual(_call(payload)[1]["decision"], "block")
+        self.assertEqual(_call(payload)[1]["decision"], "block")
+        code, out, _ = _call(payload)
+        self.assertEqual(code, 0)
+        self.assertNotIn("decision", out)
+        self.assertIn("letting go", out["systemMessage"])
+        self.assertEqual(len(list((self.root / ".git" / "mmu").glob("stop-*.json"))), 1)
+        self.assertEqual(subprocess.run(["git", "status", "--porcelain"], cwd=str(self.root), capture_output=True,
+                                        text=True).stdout.strip(), "?? app/")
+        # another session has its own budget; MMU_STOP_MAX / disable switches are honoured
+        self.assertEqual(_call({**payload, "session_id": "s2"})[1]["decision"], "block")
+        self.assertIsNone(_call({**payload, "session_id": "s3"}, env={"MMU_STOP_MAX": "0"})[1])
+        self.assertIsNone(_call({**payload, "session_id": "s3"}, env={"MMU_STOP_DISABLE": "1"})[1])
+        # a clean scan resets the counter
+        (self.root / "app" / "pay.py").write_text('import os\nKEY = os.environ["STRIPE_KEY"]\n', encoding="utf-8")
+        self.assertIsNone(_call(payload)[1])
+        self.assertEqual(list((self.root / ".git" / "mmu").glob("stop-*.json")).__len__(), 1)  # only s2 remains
+
+    def test_stop_gate_dialects(self):
+        self._write_secret()
+        code, out, _ = _call({"hook_event_name": "stop", "status": "completed", "loop_count": 0,
+                              "conversation_id": "c1", "workspace_roots": [str(self.root)]})
+        self.assertEqual(code, 0)
+        self.assertEqual(list(out), ["followup_message"])
+        self.assertIn("P0 secrets app/pay.py:1", out["followup_message"])
+        self.assertEqual(_call({"hook_event_name": "stop", "status": "completed", "loop_count": 3,
+                                "conversation_id": "c2", "workspace_roots": [str(self.root)]})[1], {})
+        code, out, _ = _call({"hook_event_name": "AfterAgent", "session_id": "g1", "cwd": str(self.root),
+                              "stop_hook_active": False})
+        self.assertEqual((code, out["decision"]), (0, "deny"))
+        code, out, _ = _call({"hook_event_name": "Stop", "session_id": "x1", "turn_id": "t", "cwd": str(self.root)})
+        self.assertEqual(out["decision"], "block")
+
+    def test_stop_gate_is_silent_outside_git_and_when_clean(self):
+        self.assertIsNone(_call({"hook_event_name": "Stop", "session_id": "s", "cwd": str(self.root)})[1])
+        with tempfile.TemporaryDirectory() as plain:
+            (Path(plain) / "pay.py").write_text(f'KEY = "{FAKE_KEY}"\n', encoding="utf-8")
+            self.assertEqual(_call({"hook_event_name": "Stop", "session_id": "s", "cwd": plain}), (0, None, ""))
+
+    def test_post_edit_feedback_only_for_the_edited_file(self):
+        bad = self._write_secret()
+        self._write_secret("app/other.py")
+        payload = {"hook_event_name": "PostToolUse", "tool_name": "Write", "cwd": str(self.root),
+                   "tool_input": {"file_path": str(bad)}, "tool_response": {}}
+        code, out, _ = _call(payload)
+        self.assertEqual(code, 0)
+        hso = out["hookSpecificOutput"]
+        self.assertEqual(hso["hookEventName"], "PostToolUse")
+        self.assertIn("P0 secrets app/pay.py:1", hso["additionalContext"])
+        self.assertNotIn("other.py", hso["additionalContext"])
+        # Codex apply_patch payload, relative path
+        patch = "*** Begin Patch\n*** Update File: app/pay.py\n@@\n*** End Patch"
+        code, out, _ = _call({"hook_event_name": "PostToolUse", "tool_name": "apply_patch", "cwd": str(self.root),
+                              "tool_input": {"command": patch}})
+        self.assertIn("app/pay.py:1", out["hookSpecificOutput"]["additionalContext"])
+        # clean file, non-code file: nothing, and no scan for the latter
+        (self.root / "ok.py").write_text("x = 1\n", encoding="utf-8")
+        self.assertIsNone(_call({**payload, "tool_input": {"file_path": str(self.root / "ok.py")}})[1])
+        with mock.patch.object(hooks, "run_scan", side_effect=AssertionError("must not scan")):
+            self.assertIsNone(_call({**payload, "tool_input": {"file_path": str(self.root / "notes.md")}})[1])
+
+
+class WrapperTests(unittest.TestCase):
+    """hooks/vibecheck_gate.py runs the bundled source without `mmu` on PATH."""
+
+    def test_plugin_wrapper_blocks_real_secret_from_bundled_source(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = _repo(tmp)
+            (root / "pay.py").write_text(f'KEY = "{FAKE_KEY}"\n', encoding="utf-8")
+            payload = {"hook_event_name": "PreToolUse", "tool_name": "Bash", "cwd": str(root),
+                       "tool_input": {"command": "git commit -am x"}}
+            git_dir = str(Path(subprocess.run(["which", "git"], capture_output=True, text=True).stdout.strip()).parent)
+            for var in ("CLAUDE_PLUGIN_ROOT", "PLUGIN_ROOT"):
+                env = {k: v for k, v in os.environ.items() if k not in ("PYTHONPATH", "CLAUDE_PLUGIN_ROOT", "PLUGIN_ROOT")}
+                env.update({var: str(REPO_ROOT), "PATH": git_dir})
+                proc = subprocess.run(
+                    [sys.executable, str(REPO_ROOT / "hooks" / "vibecheck_gate.py"), "--event", "pre-shell"],
+                    input=json.dumps(payload), capture_output=True, text=True, env=env, cwd=tmp, timeout=60,
+                )
+                with self.subTest(var=var):
+                    self.assertEqual(proc.returncode, 2, proc.stderr)
+                    self.assertIn("P0 secrets pay.py:1", proc.stderr)
+                    self.assertNotIn(FAKE_KEY, proc.stderr)
+
+    def test_hooks_json_shape(self):
+        data = json.loads((REPO_ROOT / "hooks" / "hooks.json").read_text(encoding="utf-8"))
+        self.assertEqual(set(data["hooks"]), {"PreToolUse", "Stop", "PostToolUse"})
+        self.assertEqual(data["hooks"]["PreToolUse"][0]["matcher"], "Bash")
+        self.assertEqual(data["hooks"]["PostToolUse"][0]["matcher"], "Edit|Write|MultiEdit")
+        for event, groups in data["hooks"].items():
+            handler = groups[0]["hooks"][0]
+            self.assertEqual(handler["type"], "command")
+            self.assertIn("${CLAUDE_PLUGIN_ROOT}/hooks/vibecheck_gate.py", handler["command"])
+            self.assertLessEqual(handler["timeout"], 60)
+            self.assertGreater(handler["timeout"], hooks.POST_EDIT_DEADLINE_SECONDS if event == "PostToolUse" else hooks.DEADLINE_SECONDS)
+
+
+if __name__ == "__main__":
+    unittest.main()

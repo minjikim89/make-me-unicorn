@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "make-me-unicorn": {
+      "command": "uvx",
+      "args": [
+        "--from",
+        "make-me-unicorn[mcp]",
+        "mmu",
+        "serve-mcp"
+      ]
+    }
+  }
+}

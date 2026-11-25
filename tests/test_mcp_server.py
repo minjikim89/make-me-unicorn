@@ -1,4 +1,9 @@
+import asyncio
+import json
+import os
+import subprocess
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -109,66 +114,157 @@ class MCPDataLayerTests(unittest.TestCase):
             mcp_server._resolve_repo_root(path)
         self.assertIn(str(path), str(ctx.exception))
 
-    def test_build_server_exposes_vibecheck_first(self):
-        try:
-            import mcp.server.fastmcp  # noqa: F401
-        except ImportError:
-            self.skipTest("mcp SDK not installed (install via [mcp] extra)")
-        import asyncio
-        server = mcp_server.build_server(REPO_ROOT)
-        tools = asyncio.run(server.list_tools())
-        names = [t.name for t in tools]
-        self.assertIn("mmu_vibecheck", names)
-        self.assertEqual(len(names), 5)
-        for t in tools:
-            self.assertIn("Use when", t.description or "", f"{t.name} description must say when to use it")
-
-    def test_mmu_vibecheck_tool_rejects_missing_root(self):
-        try:
-            import mcp.server.fastmcp  # noqa: F401
-        except ImportError:
-            self.skipTest("mcp SDK not installed (install via [mcp] extra)")
-        import asyncio
-        server = mcp_server.build_server(REPO_ROOT)
-        with self.assertRaises(Exception) as ctx:
-            asyncio.run(server.call_tool("mmu_vibecheck", {"project_root": "/nonexistent/mmu/project"}))
-        self.assertIn("not a directory", str(ctx.exception))
-
-    def test_mmu_vibecheck_tool_returns_v1_document(self):
-        try:
-            import mcp.server.fastmcp  # noqa: F401
-        except ImportError:
-            self.skipTest("mcp SDK not installed (install via [mcp] extra)")
-        import asyncio
-        import json
-        import tempfile
-        server = mcp_server.build_server(REPO_ROOT)
-        with tempfile.TemporaryDirectory() as tmp:
-            (Path(tmp) / "db.py").write_text('q = f"SELECT * FROM t WHERE id = {i}"\n', encoding="utf-8")
-            out = asyncio.run(server.call_tool("mmu_vibecheck", {"project_root": tmp}))
-            payload = json.dumps(out, default=lambda o: getattr(o, "text", str(o)))
-            self.assertIn("mmu.vibecheck/v1", payload)
-            self.assertIn("sql-fstring", payload)
-            with self.assertRaises(Exception) as ctx:
-                asyncio.run(server.call_tool("mmu_vibecheck", {"project_root": tmp, "scope": "changed"}))
-            self.assertIn("not-a-git-repo", str(ctx.exception))
-            with self.assertRaises(Exception) as ctx:
-                asyncio.run(server.call_tool("mmu_vibecheck", {"project_root": tmp, "scope": "bogus"}))
-            self.assertIn("scope must be", str(ctx.exception))
-
     def test_resolve_repo_root_uses_package_fallback_when_none(self):
         resolved = mcp_server._resolve_repo_root(None)
         self.assertEqual(resolved, REPO_ROOT)
 
+    def test_rule_helpers(self):
+        rules = mcp_server.list_rules()
+        ids = [r["id"] for r in rules]
+        self.assertIn("webhook-signature", ids)
+        self.assertEqual(set(rules[0]), {"id", "title", "severity", "summary", "tags"})
+        rule = mcp_server.explain_rule("secrets")
+        self.assertEqual(rule["id"], "secrets")
+        self.assertTrue(rule["fix"])
+        with self.assertRaises(ValueError) as ctx:
+            mcp_server.explain_rule("nope")
+        self.assertIn("webhook-signature", str(ctx.exception))
+
+    def test_vibecheck_tool_formats(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            (Path(tmp) / "db.py").write_text('q = f"SELECT * FROM t WHERE id = {i}"\n', encoding="utf-8")
+            doc, text = mcp_server.vibecheck_tool(tmp)
+            self.assertEqual(json.loads(text), doc)
+            doc2, agent = mcp_server.vibecheck_tool(tmp, format="agent")
+            self.assertEqual(doc2["summary"], doc["summary"])
+            self.assertIn("P0 sql-fstring db.py:1", agent)
+            for kwargs, needle in [({"scope": "changed"}, "not-a-git-repo"), ({"scope": "bogus"}, "scope must be"),
+                                   ({"format": "xml"}, "format must be")]:
+                with self.assertRaises(ValueError) as ctx:
+                    mcp_server.vibecheck_tool(tmp, **kwargs)
+                self.assertIn(needle, str(ctx.exception))
+        with self.assertRaises(ValueError) as ctx:
+            mcp_server.vibecheck_tool("/nonexistent/mmu/project")
+        self.assertIn("not a directory", str(ctx.exception))
+
+
+def _dump(obj):
+    """SDK objects (v1 and v2) to plain camelCase JSON data."""
+    if hasattr(obj, "model_dump"):
+        return obj.model_dump(by_alias=True, mode="json")
+    if isinstance(obj, (list, tuple)):
+        return [_dump(o) for o in obj]
+    return obj
+
+
+@unittest.skipIf(mcp_server.sdk_major() is None, "mcp SDK not installed (install via [mcp] extra)")
+class MCPServerTests(unittest.TestCase):
+    """Runs against whichever SDK major is installed; CI runs it under mcp 1.x and 2.x."""
+
+    def setUp(self):
+        self.server = mcp_server.build_server(REPO_ROOT)
+
+    def _call(self, name, args):
+        return asyncio.run(self.server.call_tool(name, args))
+
+    def test_sdk_major_matches_installed_package(self):
+        from importlib.metadata import version
+        self.assertEqual(mcp_server.sdk_major(), int(version("mcp").split(".")[0]))
+
+    def test_tools_descriptions_and_annotations(self):
+        tools = {t.name: _dump(t) for t in asyncio.run(self.server.list_tools())}
+        self.assertEqual(list(tools)[0], "mmu_vibecheck")
+        self.assertEqual(set(tools), {
+            "mmu_vibecheck", "mmu_explain_rule", "mmu_list_rules", "mmu_validate_idea",
+            "mmu_get_blueprint", "mmu_list_blueprints", "mmu_list_idea_templates",
+        })
+        for name, tool in tools.items():
+            self.assertIn("Use when", tool["description"], f"{name} description must say when to use it")
+            self.assertTrue(tool["title"], name)
+            self.assertIs(tool["annotations"]["readOnlyHint"], True, name)
+            self.assertIs(tool["annotations"]["openWorldHint"], name == "mmu_validate_idea", name)
+
+    def test_vibecheck_output_schema_is_the_v1_document(self):
+        tool = next(_dump(t) for t in asyncio.run(self.server.list_tools()) if t.name == "mmu_vibecheck")
+        schema = tool["outputSchema"]
+        self.assertEqual(set(schema["required"]), {"schema", "tool", "root", "scope", "summary", "findings"})
+        self.assertIn("blocking", json.dumps(schema))
+        self.assertIn("rule_id", json.dumps(schema))
+        props = tool["inputSchema"]["properties"]
+        self.assertEqual(set(props), {"project_root", "scope", "format"})
+
+    def test_vibecheck_call_returns_structured_document_and_text(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            (Path(tmp) / "db.py").write_text('q = f"SELECT * FROM t WHERE id = {i}"\n', encoding="utf-8")
+            for fmt in ("json", "agent"):
+                out = _dump(self._call("mmu_vibecheck", {"project_root": tmp, "format": fmt}))
+                doc = out["structuredContent"]
+                self.assertEqual(doc["schema"], "mmu.vibecheck/v1")
+                self.assertEqual(doc["summary"]["blocking"], 1)
+                finding = next(f for f in doc["findings"] if f["rule_id"] == "sql-fstring")
+                self.assertEqual(finding["locations"][0]["path"], "db.py")
+                self.assertEqual(finding["locations"][0]["line"], 1)
+                text = out["content"][0]["text"]
+                if fmt == "agent":
+                    self.assertIn("P0 sql-fstring db.py:1", text)
+                else:
+                    self.assertEqual(json.loads(text)["summary"], doc["summary"])
+
+    def test_vibecheck_call_errors(self):
+        for args, needle in [({"project_root": "/nonexistent/mmu/project"}, "not a directory"),
+                             ({"project_root": str(REPO_ROOT), "scope": "bogus"}, "scope must be"),
+                             ({"rule_id": "nope"}, "unknown rule id"), ({"name": "nope"}, "Blueprint not found")]:
+            tool = "mmu_explain_rule" if "rule_id" in args else "mmu_get_blueprint" if "name" in args else "mmu_vibecheck"
+            try:
+                out = _dump(self._call(tool, args))
+            except Exception as exc:  # v1 raises ToolError from call_tool
+                self.assertIn(needle, str(exc))
+            else:  # v2 returns an error result
+                self.assertTrue(out.get("isError"), out)
+                self.assertIn(needle, json.dumps(out))
+
+    def test_rule_tools(self):
+        self.assertIn("webhook-signature", json.dumps(_dump(self._call("mmu_list_rules", {}))))
+        self.assertIn("ROW LEVEL SECURITY", json.dumps(_dump(self._call("mmu_explain_rule", {"rule_id": "supabase-rls"}))).upper())
+
     def test_build_server_fails_fast_on_invalid_root(self):
-        try:
-            import mcp.server.fastmcp  # noqa: F401
-        except ImportError:
-            self.skipTest("mcp SDK not installed (install via [mcp] extra)")
         path = Path("/nonexistent/mmu/root")
         with self.assertRaises(FileNotFoundError) as ctx:
             mcp_server.build_server(path)
         self.assertIn(str(path), str(ctx.exception))
+
+    def test_stdio_handshake_reports_package_version_and_instructions(self):
+        """Real process, real stdio transport: initialize, then tools/list."""
+        from importlib.metadata import version
+        requests = [
+            {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {
+                "protocolVersion": "2025-06-18", "capabilities": {}, "clientInfo": {"name": "t", "version": "0"}}},
+            {"jsonrpc": "2.0", "method": "notifications/initialized"},
+            {"jsonrpc": "2.0", "id": 2, "method": "tools/list"},
+        ]
+        env = {**os.environ, "PYTHONPATH": str(REPO_ROOT / "src")}
+        proc = subprocess.Popen([sys.executable, "-m", "mmu_cli", "serve-mcp"], stdin=subprocess.PIPE,
+                                stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, env=env)
+        try:
+            replies = {}
+            for req in requests:
+                proc.stdin.write(json.dumps(req) + "\n")
+                proc.stdin.flush()
+                if "id" in req:
+                    msg = json.loads(proc.stdout.readline())
+                    replies[msg["id"]] = msg
+        finally:
+            proc.stdin.close()
+            proc.terminate()
+            proc.wait(timeout=10)
+            proc.stdout.close()
+            proc.stderr.close()
+        info = replies[1]["result"]
+        self.assertEqual(info["serverInfo"]["name"], "make-me-unicorn")
+        self.assertEqual(info["serverInfo"]["version"], version("make-me-unicorn"))
+        self.assertIn("mmu_vibecheck", info["instructions"])
+        self.assertIn("before you commit", info["instructions"])
+        self.assertEqual(len(replies[2]["result"]["tools"]), 7)
 
 
 if __name__ == "__main__":

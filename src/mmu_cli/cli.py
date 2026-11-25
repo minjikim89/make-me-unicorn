@@ -228,8 +228,31 @@ class Result(dict):
         return int(self.get("exit_code", 1))
 
 
-def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(prog="mmu", description="Make Me Unicorn CLI")
+def _package_version() -> str:
+    try:
+        from importlib.metadata import version
+
+        return version("make-me-unicorn")
+    except Exception:
+        return "0+unknown"
+
+
+def _force_utf8_output() -> None:
+    # Windows consoles default to cp1252 and crash on the box-drawing/emoji output.
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(encoding="utf-8", errors="replace")  # type: ignore[union-attr]
+        except (AttributeError, ValueError, OSError):
+            pass
+
+
+def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
+    prog = "make-me-unicorn" if Path(sys.argv[0]).stem == "make-me-unicorn" else "mmu"
+    parser = argparse.ArgumentParser(
+        prog=prog,
+        description="Make Me Unicorn CLI. With no command, runs `vibecheck` on the current project.",
+    )
+    parser.add_argument("--version", action="version", version=f"%(prog)s {_package_version()}")
     parser.add_argument("--root", default=".", help="Project root path")
     parser.add_argument("--json", action="store_true", help="Output structured JSON")
     sub = parser.add_subparsers(dest="command", required=False)
@@ -355,7 +378,28 @@ def parse_args() -> argparse.Namespace:
     p_validate.add_argument("--output", choices=["text", "markdown", "json"], default="text", help="Output format (default: text)")
     p_validate.add_argument("--no-save", action="store_true", help="Do not save markdown report to reports/validate/")
 
-    return parser.parse_args()
+    p_hook = sub.add_parser("hook", help="Agent hook entry point (Claude Code, Codex, Cursor, Gemini): reads the hook JSON on stdin")
+    from mmu_cli.hooks import add_arguments as add_hook_arguments
+
+    add_hook_arguments(p_hook)
+
+    p_install = sub.add_parser("install", help="Wire the vibecheck gate into agent hosts, git hooks, and AGENTS.md")
+    p_install.add_argument("--json", action="store_true", help="Output structured JSON")
+    p_install.add_argument("--root", default=".", help="Project root path")
+    from mmu_cli.install import add_arguments as add_install_arguments
+
+    add_install_arguments(p_install)
+
+    # `--root` / `--json` are accepted before or after the subcommand. A subparser default would
+    # overwrite the value parsed before the subcommand, so subparsers only set them when given.
+    for name, sp in sub.choices.items():
+        if name == "serve-mcp":
+            continue  # its --root means "content root" and defaults to the packaged data
+        for action in sp._actions:
+            if action.dest in ("root", "json"):
+                action.default = argparse.SUPPRESS
+
+    return parser.parse_args(argv)
 
 
 def utc_now() -> str:
@@ -1899,8 +1943,17 @@ def command_validate(
 
 
 def main() -> int:
+    _force_utf8_output()
     args = parse_args()
+    if not args.command:
+        # No subcommand: run the launch gate. `mmu status` is the dashboard.
+        args = parse_args([*sys.argv[1:], "vibecheck"])
     root = root_path(getattr(args, "root", "."))
+
+    if args.command == "hook":
+        from mmu_cli.hooks import run as run_hook
+
+        return run_hook(args.host, args.event)
 
     # serve-mcp validates its own --root (None means "use packaged data").
     # Every other command operates on the project directory, so a bad --root
@@ -1915,10 +1968,10 @@ def main() -> int:
         print(f"Error: --root {root} is not a directory.", file=sys.stderr)
         return 2
 
-    # Default: `mmu` with no subcommand shows status dashboard
-    if not args.command:
-        result = command_status(root)
-        return render_result(result, False)
+    if args.command == "install":
+        from mmu_cli.install import run as run_install
+
+        return run_install(args, root)
 
     if args.command == "init":
         if getattr(args, "interactive", False):

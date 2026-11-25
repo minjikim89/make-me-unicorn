@@ -18,7 +18,7 @@ inputs:
     default: "."
   version:
     description: >-
-      Version spec for make-me-unicorn, e.g. "==0.7.0". Empty installs the
+      Version spec for make-me-unicorn, e.g. "==0.9.0". Empty installs the
       latest release from PyPI.
     required: false
     default: ""
