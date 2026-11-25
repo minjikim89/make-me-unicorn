@@ -35,9 +35,10 @@ def search_hn(query: str, limit: int = 30) -> list[dict[str, Any]]:
         return []
     import requests  # type: ignore[import-untyped]
 
+    params: dict[str, str | int] = {"query": query, "tags": "story", "hitsPerPage": min(limit, 100)}
     response = requests.get(
         ALGOLIA_URL,
-        params={"query": query, "tags": "story", "hitsPerPage": min(limit, 100)},
+        params=params,
         headers={"User-Agent": USER_AGENT},
         timeout=15,
     )
