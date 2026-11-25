@@ -58,6 +58,7 @@ all = [
 
 [project.scripts]
 mmu = "mmu_cli.cli:main"
+make-me-unicorn = "mmu_cli.cli:main"
 
 [tool.setuptools]
 package-dir = {"" = "src"}
