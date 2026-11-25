@@ -29,7 +29,14 @@ SYNC_DIRS = [
     "docs/launch",
     "prompts",
     "examples/filled/tasknote/docs/core",
+    "skills/mmu-vibecheck",
 ]
+
+# Files mirrored elsewhere in the repo: canonical -> copy. `.agents/skills/` is where Codex and other
+# agentskills.io hosts look in a checkout; a real copy (not a symlink) survives Windows checkouts.
+MIRRORS = {
+    "skills/mmu-vibecheck/SKILL.md": ".agents/skills/mmu-vibecheck/SKILL.md",
+}
 
 
 def canonical_files() -> list[Path]:
@@ -51,6 +58,10 @@ def sync() -> int:
         dst = DATA_ROOT / rel
         dst.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(src, dst)
+    for src_rel, dst_rel in MIRRORS.items():
+        mirror = REPO_ROOT / dst_rel
+        mirror.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(REPO_ROOT / src_rel, mirror)
     print(f"Synced {len(files)} files into {DATA_ROOT.relative_to(REPO_ROOT)}")
     return 0
 
@@ -69,6 +80,12 @@ def check() -> int:
             rel = dst.relative_to(DATA_ROOT)
             if rel not in expected:
                 problems.append(f"orphan packaged file (no canonical source): {rel}")
+    for src_rel, dst_rel in MIRRORS.items():
+        mirror = REPO_ROOT / dst_rel
+        if not mirror.is_file():
+            problems.append(f"missing mirror: {dst_rel}")
+        elif not filecmp.cmp(REPO_ROOT / src_rel, mirror, shallow=False):
+            problems.append(f"stale mirror: {dst_rel}")
     if problems:
         for p in problems:
             print(f"  {p}", file=sys.stderr)
