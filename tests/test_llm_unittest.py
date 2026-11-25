@@ -152,6 +152,23 @@ class LLMClientMockTest(unittest.TestCase):
         finally:
             llm._HAS_ANTHROPIC = original
 
+    def test_default_model_and_env_override(self) -> None:
+        from mmu_cli import llm
+
+        original = llm._HAS_ANTHROPIC
+        try:
+            llm._HAS_ANTHROPIC = True
+            mock_mod = self._make_mock_anthropic()
+            with patch.object(llm, "anthropic", mock_mod, create=True):
+                env = {k: v for k, v in os.environ.items() if k != "MMU_MODEL"}
+                env["ANTHROPIC_API_KEY"] = "test-key"
+                with patch.dict(os.environ, env, clear=True):
+                    self.assertEqual(llm.LLMClient().model, "claude-sonnet-5-5")
+                with patch.dict(os.environ, {"ANTHROPIC_API_KEY": "test-key", "MMU_MODEL": "custom-model"}):
+                    self.assertEqual(llm.LLMClient().model, "custom-model")
+        finally:
+            llm._HAS_ANTHROPIC = original
+
     def test_log_usage_writes_file(self) -> None:
         tmp = tempfile.TemporaryDirectory()
         root = Path(tmp.name)

@@ -79,7 +79,7 @@ def get_api_key(root: Path | None = None) -> str:
 # LLM Client
 # ---------------------------------------------------------------------------
 
-_DEFAULT_MODEL = "claude-sonnet-4-20250514"
+_DEFAULT_MODEL = "claude-sonnet-5-5"
 
 
 class LLMClient:
