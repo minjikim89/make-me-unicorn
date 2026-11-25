@@ -184,6 +184,17 @@ class CLITestCase(unittest.TestCase):
         self.assertEqual(result.exit_code, 0)
         self.assertIn("snapshot-ok", "\n".join(result.get("messages", [])))
 
+    def test_snapshot_without_script_explains_repo_checkout_requirement(self) -> None:
+        from unittest import mock
+
+        elsewhere = self.root / "site-packages" / "mmu_cli" / "cli.py"
+        with mock.patch.object(cli, "__file__", str(elsewhere)):
+            result = cli.command_snapshot(self.root, target=".", output="SNAPSHOT.md", no_md=True)
+        self.assertEqual(result.exit_code, 2)
+        text = "\n".join(result["messages"])
+        self.assertIn("repo checkout", text)
+        self.assertIn("./snapshot", text)
+
     def test_gate_parses_flexible_heading_and_indented_checklist(self) -> None:
         self.write(
             "docs/checklists/from_scratch.md",

@@ -1463,10 +1463,11 @@ def command_snapshot(root: Path, target: str, output: str, no_md: bool) -> Resul
     script = next((p for p in candidates if p.is_file()), None)
     if script is None:
         return Result(
-            exit_code=1,
+            exit_code=2,
             messages=[
-                "Snapshot script not found.",
-                "Expected one of: snapshot or scripts/snapshot.sh",
+                "mmu snapshot is not available here: the snapshot script is not shipped in the PyPI package.",
+                "It only works from a make-me-unicorn repo checkout that contains ./snapshot",
+                f"(looked in {root}). Clone the repo and run it there, or pass --root <checkout>.",
             ],
         )
 
@@ -1831,6 +1832,17 @@ def command_validate(
             print("Aborted.")
             return 1
 
+    if limit > 0:
+        import importlib.util
+
+        missing = [mod for mod in ("requests", "vaderSentiment") if importlib.util.find_spec(mod) is None]
+        if missing:
+            sys.stderr.write(
+                f"\n  mmu validate needs optional dependencies that are not installed: {', '.join(missing)}\n"
+                "  Install them with: pip install 'make-me-unicorn[validate]'\n"
+            )
+            return 2
+
     hits, fetch_errors = fetch_threads(idea, limit=limit)
 
     for err in fetch_errors:
@@ -1858,19 +1870,20 @@ def command_validate(
             "sentiment": sentiment,
             "competitors": [{"name": n, "count": c} for n, c in competitors],
             "llm_report": llm_report,
+            "errors": fetch_errors,
         }
         print(json.dumps(payload, ensure_ascii=False, indent=2))
     elif output_format == "markdown":
-        print(format_markdown(idea, hits, sentiment, competitors, llm_report))
+        print(format_markdown(idea, hits, sentiment, competitors, llm_report, errors=fetch_errors))
     else:
-        print(format_text(idea, hits, sentiment, competitors, llm_report))
+        print(format_text(idea, hits, sentiment, competitors, llm_report, errors=fetch_errors))
 
     if save:
         reports_dir = root / "reports" / "validate"
         reports_dir.mkdir(parents=True, exist_ok=True)
         report_path = reports_dir / report_filename(idea)
         report_path.write_text(
-            format_markdown(idea, hits, sentiment, competitors, llm_report),
+            format_markdown(idea, hits, sentiment, competitors, llm_report, errors=fetch_errors),
             encoding="utf-8",
         )
         sys.stderr.write(f"\nSaved: {report_path}\n")
