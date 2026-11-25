@@ -756,6 +756,15 @@ class ReviewRegressionTests(unittest.TestCase):
             self.assertEqual(maps.status, "warn")
             self.assertEqual(maps.files, ["apps/web/next.config.mjs"])
 
+    def test_configured_skip_paths_apply_to_shallow_config_discovery(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            write(root, ".mmu/config.toml", '[vibecheck]\nskip_paths = ["bench/fixtures"]\n')
+            write(root, "bench/fixtures/leaky/vite.config.ts", "export default { build: { sourcemap: true } }")
+            write(root, "bench/fixtures/leaky/.env", "NEXT_PUBLIC_SUPABASE_SERVICE_ROLE_KEY=" + _service_role_jwt() + "\n")
+            self.assertEqual(vibecheck.check_sourcemaps(root, []).status, "ok")
+            self.assertNotEqual(vibecheck.check_client_bundle_secrets(root, []).status, "fail")
+
     def test_gather_code_files_prunes_nested_build_dirs_and_includes_mjs(self):
         from mmu_cli.cli import DEFAULT_SKIP_PATHS, gather_code_files
         with tempfile.TemporaryDirectory() as tmp:

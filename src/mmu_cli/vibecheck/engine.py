@@ -458,9 +458,10 @@ _TEST_FILE_RE = re.compile(r"^(?:test_.*\.py|.*_test\.(?:py|go)|.*_spec\.rb|.*\.
 
 
 def _walk_shallow(root: Path, depth: int) -> list[Path]:
-    """Directories from root down to `depth`, skipping pruned/skip dirs."""
-    from mmu_cli.cli import PRUNE_DIR_NAMES
+    """Directories from root down to `depth`, skipping pruned dirs and configured skip paths."""
+    from mmu_cli.cli import PRUNE_DIR_NAMES, should_skip_rel, vibecheck_skip_paths
 
+    skip_paths = vibecheck_skip_paths(root)
     out: list[Path] = [root]
     frontier = [root]
     for _ in range(depth):
@@ -468,7 +469,12 @@ def _walk_shallow(root: Path, depth: int) -> list[Path]:
         for d in frontier:
             try:
                 for child in d.iterdir():
-                    if child.is_dir() and child.name not in PRUNE_DIR_NAMES and not child.name.startswith("."):
+                    if (
+                        child.is_dir()
+                        and child.name not in PRUNE_DIR_NAMES
+                        and not child.name.startswith(".")
+                        and not should_skip_rel(child.relative_to(root).as_posix(), skip_paths)
+                    ):
                         nxt.append(child)
             except OSError:
                 continue

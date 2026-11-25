@@ -6,3 +6,7 @@
 # the scanner's own rule definitions and tests (full of the patterns it looks for),
 # deliberately flawed benchmark fixtures, and docs/examples/tooling.
 skip_paths = ["src/mmu_cli", "tests", "bench/fixtures", "docs", "examples", "scripts", "cli"]
+
+[vibecheck]
+# A CLI and stdio MCP server, not a hosted service: there is no server process to report errors from.
+ignore = ["pyproject.toml:error-monitoring"]
