@@ -117,6 +117,58 @@ class CLITestCase(unittest.TestCase):
         self.assertEqual(blueprint.read_text(encoding="utf-8").count("[x]"), 0)
         self.assertIn("i18n = false", config.read_text(encoding="utf-8"))
 
+    def test_check_requires_exact_blueprint_name(self) -> None:
+        cli.command_init(self.root, force=False)
+        blueprints = self.root / "docs/blueprints"
+        before = {p.name: p.read_text(encoding="utf-8") for p in blueprints.glob("*.md")}
+
+        for name in ("e", "latest", "fron", ""):
+            for state in ("check", "uncheck"):
+                result = cli.command_check(name, 1, self.root, force_state=state)
+                self.assertEqual(result.exit_code, 1, name)
+                self.assertIn("Unknown blueprint", result["messages"][0])
+        self.assertIn("frontend", cli.command_check("fron", 1, self.root, force_state="check")["messages"][1])
+        self.assertEqual(before, {p.name: p.read_text(encoding="utf-8") for p in blueprints.glob("*.md")})
+
+        for name in ("frontend", "Front", "seo-marketing", "SEO & Marketing", "a11y", "01-frontend"):
+            self.assertEqual(cli.command_check(name, 1, self.root, force_state="check").exit_code, 0, name)
+
+    def test_show_reports_ambiguous_blueprint_name(self) -> None:
+        cli.command_init(self.root, force=False)
+
+        ambiguous = cli.command_show("e", self.root)
+        self.assertEqual(ambiguous.exit_code, 1)
+        self.assertIn("Ambiguous blueprint", ambiguous["messages"][0])
+        self.assertIn("frontend", ambiguous["messages"][1])
+
+        self.assertEqual(cli.command_show("fron", self.root).get("blueprint"), "01-frontend.md")
+        self.assertEqual(cli.command_show("billing", self.root).get("blueprint"), "04-billing.md")
+        self.assertEqual(cli.command_show("zzz", self.root).exit_code, 1)
+
+    def test_badge_color_defined_for_every_stage(self) -> None:
+        from mmu_cli import display
+
+        for _threshold, stage, _art in display.UNICORN_STAGES:
+            self.assertIn(stage, display.STAGE_COLORS)
+        stage, _ = display.unicorn_art(0.65)
+        self.assertEqual(stage, "young")
+        self.assertIn("9c27b0", display.render_badge_markdown(65, stage))
+        self.assertIn("#9c27b0", display.render_badge_svg(65, stage))
+
+    def test_next_in_uninitialized_directory_points_to_init(self) -> None:
+        result = cli.command_next(self.root)
+        text = "\n".join(result["messages"])
+        self.assertEqual(result.exit_code, 0)
+        self.assertFalse(result["initialized"])
+        self.assertNotIn("you're done", text)
+        self.assertIn("mmu init", text)
+        self.assertIn("mmu vibecheck", text)
+
+        cli.command_init(self.root, force=False)
+        after = cli.command_next(self.root)
+        self.assertTrue(after["initialized"])
+        self.assertNotIn("isn't initialized", "\n".join(after["messages"]))
+
     @unittest.skipIf(sys.platform == "win32", "bash script execution is not supported on Windows")
     def test_snapshot_command_runs_local_script(self) -> None:
         script = self.root / "snapshot"

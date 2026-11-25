@@ -1490,11 +1490,21 @@ def command_snapshot(root: Path, target: str, output: str, no_md: bool) -> Resul
 def command_show(blueprint_name: str, root: Path) -> Result:
     from mmu_cli.display import (
         BLUEPRINT_NAMES,
+        match_blueprints,
         render_blueprint_detail,
-        resolve_blueprint,
     )
 
-    filename = resolve_blueprint(blueprint_name)
+    matches = match_blueprints(blueprint_name)
+    if len(matches) > 1:
+        candidates = ", ".join(BLUEPRINT_NAMES[m].lower() for m in matches)
+        return Result(
+            exit_code=1,
+            messages=[
+                f"Ambiguous blueprint: {blueprint_name}",
+                f"Matches: {candidates}",
+            ],
+        )
+    filename = matches[0] if matches else None
     if not filename:
         available = ", ".join(
             label.lower() for label in BLUEPRINT_NAMES.values()
@@ -1523,16 +1533,28 @@ def command_show(blueprint_name: str, root: Path) -> Result:
     return Result(exit_code=0, blueprint=filename, messages=[detail])
 
 
+def _blueprint_key(label: str) -> str:
+    return label.lower().replace(" & ", "-").replace(" ", "-")
+
+
 def command_check(blueprint_name: str, item_num: int, root: Path, *, force_state: str | None = None) -> Result:
     """Check/uncheck a blueprint item.
 
     force_state: "check" = always mark [x], "uncheck" = always mark [ ], None = toggle.
     """
-    from mmu_cli.display import BLUEPRINT_NAMES, resolve_blueprint
+    from mmu_cli.display import BLUEPRINT_NAMES, match_blueprints, resolve_blueprint
 
-    filename = resolve_blueprint(blueprint_name)
+    # Writing commands take an exact name or alias only: a partial match could
+    # silently modify a different blueprint.
+    filename = resolve_blueprint(blueprint_name, exact=True)
     if not filename:
-        return Result(exit_code=1, messages=[f"Unknown blueprint: {blueprint_name}"])
+        messages = [f"Unknown blueprint: {blueprint_name}"]
+        candidates = match_blueprints(blueprint_name)
+        if candidates:
+            messages.append("Did you mean: " + ", ".join(_blueprint_key(BLUEPRINT_NAMES[c]) for c in candidates) + "?")
+        else:
+            messages.append("Available: " + ", ".join(_blueprint_key(label) for label in BLUEPRINT_NAMES.values()))
+        return Result(exit_code=1, messages=messages)
 
     label = BLUEPRINT_NAMES[filename]
     bp_path = root / "docs" / "blueprints" / filename
@@ -1752,13 +1774,14 @@ def command_status(root: Path, why: bool = False) -> Result:
 
 
 def command_next(root: Path, count: int = 3) -> Result:
-    from mmu_cli.display import render_next_actions
+    from mmu_cli.display import has_blueprints, render_next_actions
 
     flags = load_feature_flags(root)
     output = render_next_actions(root, flags, count)
 
     return Result(
         exit_code=0,
+        initialized=has_blueprints(root),
         messages=[output],
     )
 
