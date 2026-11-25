@@ -1,0 +1,8 @@
+# Settings for running `mmu doctor` and `mmu vibecheck` on the MMU repository itself.
+# A user project needs none of this: by default only vendor and build directories are skipped.
+
+[doctor]
+# Root-anchored paths that are not product code of this repo:
+# the scanner's own rule definitions and tests (full of the patterns it looks for),
+# deliberately flawed benchmark fixtures, and docs/examples/tooling.
+skip_paths = ["src/mmu_cli", "tests", "bench/fixtures", "docs", "examples", "scripts", "cli"]

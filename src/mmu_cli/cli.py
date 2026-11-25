@@ -57,20 +57,13 @@ REQUIRED_FILES = [
     "prompts/adr.md",
 ]
 
+# Root-anchored paths skipped in every project. Only tool state lives here: a user's
+# `scripts/`, `tests/`, `docs/` or `examples/` is their code and must be scanned.
+# Project-specific excludes go in `.mmu/config.toml` (`[doctor] skip_paths`).
 DEFAULT_SKIP_PATHS = {
     ".git",
-    ".venv",
-    "node_modules",
-    "dist",
-    "build",
-    "docs",
     ".mmu",
     ".github",
-    "src/mmu_cli",
-    "scripts",
-    "examples",
-    "cli",
-    "tests",
 }
 
 CODE_EXTENSIONS = {".js", ".jsx", ".ts", ".tsx", ".mjs", ".mts", ".cjs", ".py", ".go", ".rb", ".java", ".cs"}
@@ -84,6 +77,9 @@ PRUNE_DIR_NAMES = {
     "node_modules", ".next", ".nuxt", ".svelte-kit", ".turbo", ".venv", "venv", ".tox",
     "site-packages", "__pycache__", ".git", ".mypy_cache", ".pytest_cache", ".ruff_cache", "coverage",
     "dist", "build", ".mmu",
+    "vendor", "target", "out", ".vercel", ".output", ".wrangler", ".open-next", ".netlify", ".serverless",
+    ".cache", ".parcel-cache", ".angular", ".expo", ".gradle", ".dart_tool", ".terraform", "bower_components",
+    "Pods", ".yarn", ".pnpm-store", "__generated__", ".idea", ".vscode", "htmlcov", ".nox", ".eggs",
 }
 NESTED_SKIP_DIRS = PRUNE_DIR_NAMES
 
@@ -570,6 +566,16 @@ def doctor_skip_paths(root: Path) -> set[str]:
     return merged
 
 
+def vibecheck_skip_paths(root: Path) -> set[str]:
+    """`doctor_skip_paths` plus `[vibecheck] skip_paths` from `.mmu/config.toml`."""
+    merged = doctor_skip_paths(root)
+    section = load_config(root).get("vibecheck")
+    extra = section.get("skip_paths") if isinstance(section, dict) else None
+    if isinstance(extra, list):
+        merged.update(item.strip() for item in extra if isinstance(item, str) and item.strip())
+    return merged
+
+
 def gather_code_files(root: Path, skip_paths: set[str]) -> list[Path]:
     files: list[Path] = []
     for dirpath, dirnames, filenames in os.walk(root):
@@ -592,7 +598,8 @@ def gather_code_files(root: Path, skip_paths: set[str]) -> list[Path]:
             path = root / rel_file
             if path.suffix.lower() in CODE_EXTENSIONS and path.is_file():
                 files.append(path)
-    return files
+    # os.walk order depends on the filesystem; results must not.
+    return sorted(files, key=lambda p: p.as_posix())
 
 
 def file_contains_any(path: Path, patterns: list[str], errors: list[str], max_bytes: int = 2_000_000) -> bool:

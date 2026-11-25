@@ -177,12 +177,20 @@ class NestedSkipDirTests(unittest.TestCase):
         for rel in ("packages/ui/dist/bundle.js", "services/api/build/out.js", "sub/.venv/lib/x.py"):
             self.assertTrue(cli.should_skip_rel(rel, self.skip), rel)
 
-    def test_nested_source_dirs_are_still_scanned(self) -> None:
-        # `scripts` and `tests` are root-anchored conventions, not vendor output:
-        # a nested one can hold first-party code worth scanning.
-        self.assertFalse(cli.should_skip_rel("apps/api/scripts/deploy.py", self.skip))
-        self.assertFalse(cli.should_skip_rel("apps/api/tests/test_x.py", self.skip))
-        self.assertTrue(cli.should_skip_rel("scripts/deploy.py", self.skip))
+    def test_source_dirs_are_scanned_by_default(self) -> None:
+        # `scripts`, `tests`, `docs`, `examples` are the user's code, not vendor output.
+        for rel in ("apps/api/scripts/deploy.py", "apps/api/tests/test_x.py", "scripts/deploy.py", "tests/test_x.py",
+                    "docs/conf.py", "examples/app.py", "cli/main.py"):
+            self.assertFalse(cli.should_skip_rel(rel, self.skip), rel)
+
+    def test_configured_skip_paths_are_root_anchored(self) -> None:
+        skip = self.skip | {"scripts"}
+        self.assertTrue(cli.should_skip_rel("scripts/deploy.py", skip))
+        self.assertFalse(cli.should_skip_rel("apps/api/scripts/deploy.py", skip))
+
+    def test_build_output_dirs_are_skipped_at_any_depth(self) -> None:
+        for rel in ("vendor/lib/x.rb", "apps/web/.vercel/output/x.js", "svc/target/debug/x.js", "web/.output/server/x.mjs"):
+            self.assertTrue(cli.should_skip_rel(rel, self.skip), rel)
 
     def test_a_name_containing_a_vendor_dir_is_not_skipped(self) -> None:
         self.assertFalse(cli.should_skip_rel("src/node_modules_helper.py", self.skip))
