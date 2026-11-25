@@ -13,8 +13,37 @@ The format is inspired by Keep a Changelog and follows semantic intent.
 - The `webhook-safety` skip finding is replaced by `webhook-signature` and `webhook-idempotency` skips, so every finding id is a registered rule.
 - `mmu_vibecheck` MCP tool returns the same v1 document (was `{findings, failures, exit_code}`).
 
+### Changed: `mmu vibecheck` rule accuracy
+
+Measured on 12 fixtures and 20 open-source apps (`docs/benchmark.md`): P0 findings judged wrong on review went from 11 of 16 to 0 of 10 on the real-world sweep; fixtures score 100% P0 precision and recall.
+
+- **Severity policy.** P0 = high confidence and launch-blocking. Heuristics about something being absent are P1. `webhook-idempotency` is now P1. A `.env` that git does not ignore is P0 only when it holds a known key signature; other credential-named values are the new P1 `env-not-ignored`; placeholder values are not reported. `pickle.load(s)` is P0 when the input visibly comes from outside the process and P1 otherwise (unsafe YAML loaders stay P0).
+- **Comments are not evidence.** A `// TODO: add sentry`, a "dedupe" comment or a commented-out `constructEvent` no longer satisfies a check; docstrings no longer trigger `debug-mode`.
+- `password-reset`: fires only when the app verifies passwords itself (`signInWithPassword`, bcrypt/argon2 verify, credentials providers, ...) and no forgot/reset flow exists anywhere in the project. No longer triggered by file names (`AuthorBio.tsx`), passwordless or OAuth-only apps, or projects on a managed auth product (Clerk, Auth0, Stytch, ...). Recognises `password_reset`, `password-reset`, `reset_password`.
+- `webhook-signature` / `webhook-idempotency`: judged per handler, with evidence taken from the handler and the first-party helpers it imports. Handlers are found by route and content (`event.type`, provider event names), not only by file name; UI components and webhook-settings endpoints are not handlers. Recognises FastAPI `Header()`, `stripe.Webhook.construct_event`, `x-hub-signature-256`, Svix, `verifyWebhook`, HMAC comparisons; idempotency recognises `on_conflict_do_nothing` / `onConflictDoNothing` and warns only for effects that are wrong when repeated.
+- `sql-fstring`: flags only strings shaped like a SQL statement with a value interpolated, reaching an execute-like call or written in upper-case SQL. `f"Update available: {v}"` is not SQL. Also covers `%` formatting, `.format()`, concatenation, and JS/TS template literals and concatenation passed to `query` / `execute` / `raw` / `$queryRawUnsafe`. Constant identifiers, generated placeholders and tagged templates are not flagged.
+- `secrets`: also scans `.json`, `.yaml`, `.toml`, `.ini`, `.properties`, `.tf`, `.mjs`, `.cjs`, `Dockerfile*` and dotenv variants (`.env.production`, `prod.env`) that git does not ignore; skips lockfiles, templates and documentation placeholders (`sk_live_xxxx...`). A Supabase `service_role` JWT hardcoded in any source file is P0. Adds Stripe restricted/webhook, SendGrid and GitLab key signatures.
+- `client-bundle-secrets`: server-only provider keys behind a public prefix (`NEXT_PUBLIC_OPENAI_API_KEY`).
+- `rate-limiting`: `lodash.throttle`, the word "upstash" and `express` inside "expression" no longer count; an installed but unused limiter still warns; Cloudflare rate limit bindings are recognised.
+- `cors-wildcard`: `cors()` with no options (Express, Hono, Fastify); the message says when a wildcard or reflected origin is combined with credentials.
+- `debug-mode`: `app.run(debug=True)`, `FastAPI(debug=True)`, and dev servers (`--reload`, `npm run dev`) in a production Dockerfile `CMD`.
+- `unsafe-deserialization`: `yaml.load(f, yaml.SafeLoader)` (positional loader) is safe.
+- `error-monitoring` is skipped for projects without a server framework.
+- `git-config-exec`: a `core.hooksPath` inside the repository or its git dir is not reported.
+- **Fix text follows the framework** of the flagged file (Next.js, Express, Hono, FastAPI, Flask, Django, Supabase) instead of listing every variant. `--list-rules --format json` exposes `fix_variants`.
+
+### Changed: what gets scanned
+
+- **Breaking for projects that relied on it:** root `scripts/`, `tests/`, `docs/`, `examples/`, `cli/` and `src/mmu_cli` are no longer skipped. Those were excludes for this repository and hid user code. Defaults now skip only vendor and build directories at any depth (adds `vendor`, `target`, `out`, `.vercel`, `.output`, `.wrangler`, ...). Project-specific excludes go in `.mmu/config.toml` (`[vibecheck] skip_paths` or `[doctor] skip_paths`); this repository ships its own.
+- Results no longer depend on directory order or project size: files are processed in path order and the 400-file caps are gone (files over 1 MB and minified bundles are skipped; a 20,000-file cut-off is reported in `scope.truncated`).
+- `.gitignore` is honoured the way git does it (`git check-ignore` inside a work tree, a pattern matcher elsewhere): `/.env`, `.env*`, `*.env`, nested ignore files and `!` negations.
+- Repo-level findings (`git-config-exec`, `env-not-ignored`, anything in a dotenv file) stay in the result under `--changed`, `--staged` and `--since`.
+
 ### Added
 
+- **New rules.** `code-injection` (P0: `eval`, `new Function`, `child_process.exec`, `os.system`, `subprocess(..., shell=True)` with a request value in the same expression), `jwt-secret-default` (P0: signing secret assigned a literal or given a literal fallback, e.g. `os.getenv("JWT_SECRET", "dev")`, `process.env.SESSION_SECRET || "changeme"`), `env-not-ignored` (P1), `llm-route-unthrottled` (P1: a route calling a paid LLM SDK with no auth and no rate limit in the file or in middleware), `admin-route-no-auth` (P1), `dangerous-html` (P1: `dangerouslySetInnerHTML`, `v-html`, `innerHTML` with a non-literal value and no sanitizer), `stack-trace-leak` (P1: `traceback.format_exc()` / `err.stack` in an HTTP response without an environment guard).
+- **Baseline for existing projects.** `mmu vibecheck --write-baseline [FILE]` records current findings (default `.mmu/vibecheck-baseline.json`); `--baseline [FILE]` reports them with status `baselined` (non-blocking, counted in `summary.baselined`) so only new findings block.
+- **Benchmark.** `bench/` (fixtures with ground truth, no credentials committed), `scripts/bench.py`, `docs/benchmark.md`, and a test that fails on any P0 false positive or a drop in recall.
 - **Vibecheck engine v2: an output contract built for coding agents.**
   - Every finding carries `locations` with `path`, `line` and a `snippet` (secret values redacted). Absence findings (no password reset, unverified webhook, no rate limiting, no error monitoring) anchor to the file that creates the obligation.
   - Rule registry: stable `rule_id`, title, summary, concrete `fix` instructions, `ref`, tags, confidence. `mmu vibecheck --list-rules` and `mmu vibecheck --explain <rule-id>`.
