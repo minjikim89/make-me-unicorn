@@ -305,6 +305,7 @@ def parse_args() -> argparse.Namespace:
     p_scan = sub.add_parser("scan", help="Auto-detect tech stack and pre-check blueprint items")
     p_scan.add_argument("--json", action="store_true", help="Output structured JSON")
     p_scan.add_argument("--root", default=".", help="Project root path")
+    p_scan.add_argument("--dry-run", action="store_true", help="Show what would be auto-checked without writing")
 
     p_generate = sub.add_parser("generate", help="Generate or update a doc using LLM")
     p_generate.add_argument("doc", help="Doc to generate (strategy, product, pricing, architecture, ux)")
@@ -1551,7 +1552,7 @@ def command_check(blueprint_name: str, item_num: int, root: Path, *, force_state
     return Result(exit_code=0, action=action, item=item_text, messages=[msg])
 
 
-def command_scan(root: Path) -> Result:
+def command_scan(root: Path, dry_run: bool = False) -> Result:
     from mmu_cli.display import (
         BLUEPRINT_NAMES,
         bold,
@@ -1567,9 +1568,10 @@ def command_scan(root: Path) -> Result:
     from mmu_cli.scan import run_scan
 
     flags = load_feature_flags(root)
-    result = run_scan(root, flags)
+    result = run_scan(root, flags, dry_run=dry_run)
     tech = result["tech_stack"]
     checked = result["checked_count"]
+    checked_items = result["checked_items"]
     total_new = result["total_newly_checked"]
 
     lines: list[str] = []
@@ -1592,7 +1594,15 @@ def command_scan(root: Path) -> Result:
 
     # Blueprint updates
     lines.append(dim("  ─" * 28))
-    if checked:
+    if checked and dry_run:
+        lines.append(bold(f"  📝  Dry run — would auto-check {total_new} items across {len(checked)} blueprints:"))
+        lines.append("")
+        for bp_file, count in sorted(checked.items()):
+            label = BLUEPRINT_NAMES.get(bp_file, bp_file)
+            lines.append(f"    {green('+')} {label}: {bold(str(count))} items")
+            for item in checked_items.get(bp_file, []):
+                lines.append(f"        {dim('- ' + item)}")
+    elif checked:
         lines.append(bold(f"  📝  Auto-checked {total_new} items across {len(checked)} blueprints:"))
         lines.append("")
         for bp_file, count in sorted(checked.items()):
@@ -1610,14 +1620,17 @@ def command_scan(root: Path) -> Result:
         lines.append("")
         lines.append(dim("  ─" * 28))
         skip_note = dim(f"  [{bp_skipped} skipped]") if bp_skipped > 0 else ""
-        lines.append(f"  {bold('Updated totals:')}  {progress_bar(bp_done, bp_total)}{skip_note}")
+        totals_label = "Current totals (unchanged):" if dry_run else "Updated totals:"
+        lines.append(f"  {bold(totals_label)}  {progress_bar(bp_done, bp_total)}{skip_note}")
         lines.append("")
         for label, d, t, _s in blueprints:
             lines.append(f"    {label:<18} {mini_bar(d, t)}")
         lines.append("")
 
     lines.append(dim("  ─" * 28))
-    if total_new > 0:
+    if total_new > 0 and dry_run:
+        lines.append(f"  {dim('Dry run: nothing was written. Run')} {cyan('mmu scan')} {dim('to apply.')}")
+    elif total_new > 0:
         lines.append(f"  {magenta('✨')} Scan complete! {bold(str(total_new))} items auto-checked")
         lines.append(f"  {dim('Review with:')} {cyan('mmu show <blueprint>')} {dim('— edit with:')} {cyan('mmu check/uncheck <blueprint> <#>')}")
     elif blueprints:
@@ -1633,6 +1646,8 @@ def command_scan(root: Path) -> Result:
         tech_stack=tech,
         newly_checked=total_new,
         checked_by_blueprint=checked,
+        checked_items=checked_items,
+        dry_run=dry_run,
         messages=[dashboard],
     )
 
@@ -1830,7 +1845,7 @@ def main() -> int:
         result = command_check(args.blueprint, args.item, root, force_state="uncheck")
         return render_result(result, args.json)
     if args.command == "scan":
-        result = command_scan(root)
+        result = command_scan(root, dry_run=getattr(args, "dry_run", False))
         return render_result(result, args.json)
     if args.command == "share":
         result = command_share(root, clipboard=getattr(args, "clipboard", False))

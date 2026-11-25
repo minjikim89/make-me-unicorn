@@ -82,10 +82,33 @@ def _file_contains(root: Path, rel: str, *patterns: str) -> bool:
     return any(p.lower() in text_lower for p in patterns)
 
 
+# Paths that never count as evidence: MMU's own scaffold (the blueprints mention
+# every feature by name) and dependency/build output.
+_EVIDENCE_SKIP_ROOT = {"docs", "prompts", ".mmu", "Unicorn.md", "current_sprint.md", "SNAPSHOT.md"}
+_EVIDENCE_SKIP_PREFIXES = (("reports", "validate"),)
+_EVIDENCE_SKIP_DIRS = {
+    "node_modules", "bower_components", "vendor", ".next", ".nuxt", ".svelte-kit", ".turbo",
+    ".venv", "venv", ".tox", "site-packages", "__pycache__", ".git", ".mypy_cache",
+    ".pytest_cache", ".ruff_cache", "coverage", "dist", "build", ".mmu",
+}
+
+
+def _is_evidence_path(root: Path, path: Path) -> bool:
+    try:
+        parts = path.relative_to(root).parts
+    except ValueError:
+        return False
+    if not parts or parts[0] in _EVIDENCE_SKIP_ROOT:
+        return False
+    if any(parts[: len(prefix)] == prefix for prefix in _EVIDENCE_SKIP_PREFIXES):
+        return False
+    return not any(part in _EVIDENCE_SKIP_DIRS for part in parts[:-1])
+
+
 def _any_file_contains(root: Path, globs: list[str], *patterns: str) -> bool:
     for g in globs:
         for path in root.glob(g):
-            if path.is_file():
+            if path.is_file() and _is_evidence_path(root, path):
                 text = _read(path)
                 if text and any(p.lower() in text.lower() for p in patterns):
                     return True
@@ -208,7 +231,7 @@ def _build_detectors(root: Path) -> dict[str, bool]:
     )
     signals["ga4"] = _any_file_contains(
         root, ["src/**/*.tsx", "src/**/*.jsx", "**/*.html", "**/*.ts", "**/*.js"],
-        "G-", "gtag", "google-analytics", "GoogleAnalytics",
+        "gtag", "google-analytics", "GoogleAnalytics", "googletagmanager",
     )
 
     # -- Security --
@@ -218,7 +241,7 @@ def _build_detectors(root: Path) -> dict[str, bool]:
     )
     signals["rate_limiting"] = _any_file_contains(
         root, ["**/*.py", "**/*.ts", "**/*.js"],
-        "rate_limit", "rateLimit", "throttle", "Limiter",
+        "rate_limit", "ratelimit", "rate-limit", "slowapi", "throttler",
     )
     signals["jwt"] = _any_file_contains(
         root, ["**/*.py", "**/*.ts", "**/*.js"],
@@ -226,7 +249,7 @@ def _build_detectors(root: Path) -> dict[str, bool]:
     )
     signals["https_ssl"] = _any_file_contains(
         root, ["**/*.py", "**/*.ts", "**/*.js", "**/*.toml", "**/*.yaml"],
-        "https://", "ssl", "tls", "certificate",
+        "ssl_context", "sslmode", "ssl_cert", "tls_", "certbot", "letsencrypt", "Strict-Transport-Security",
     )
 
     # -- Webhook --
@@ -252,7 +275,7 @@ def _build_detectors(root: Path) -> dict[str, bool]:
     # -- Logging --
     signals["structured_logging"] = _any_file_contains(
         root, ["**/*.py", "**/*.ts", "**/*.js"],
-        "structlog", "winston", "pino", "logging.getLogger", "logger",
+        "structlog", "winston", "pino", "python-json-logger", "pythonjsonlogger",
     )
 
     # -- Health check --
@@ -271,72 +294,56 @@ def _build_detectors(root: Path) -> dict[str, bool]:
 # it gets auto-checked.
 # ---------------------------------------------------------------------------
 
+# Substrings must be specific to the item a signal actually proves. A marker in
+# the code shows a tool is present, not that a flow is finished: nothing here
+# may tick items such as "Forgot password", a CORS allowlist, or webhook event
+# handling — `mmu vibecheck` is the check for those.
 SCAN_RULES: list[tuple[str, str, str]] = [
     # -- Frontend --
     ("react", "01-frontend.md", "Choose framework"),
-    ("react", "01-frontend.md", "framework"),
     ("typescript", "01-frontend.md", "TypeScript"),
     ("tailwind", "01-frontend.md", "CSS strategy"),
-    ("tailwind", "01-frontend.md", "CSS"),
     ("shadcn", "01-frontend.md", "component library"),
     ("radix", "01-frontend.md", "component library"),
     ("react_router", "01-frontend.md", "routing"),
     ("react_router", "01-frontend.md", "Routing"),
     ("react_router", "01-frontend.md", "route guards"),
-    ("tanstack_query", "01-frontend.md", "server state"),
-    ("tanstack_query", "01-frontend.md", "caching"),
+    ("tanstack_query", "01-frontend.md", "server state caching"),
     ("react_hook_form", "01-frontend.md", "form library"),
-    ("zod", "01-frontend.md", "validation"),
     ("zod", "01-frontend.md", "schema validation"),
     ("framer_motion", "01-frontend.md", "animation"),
 
     # -- Backend --
     ("fastapi", "02-backend.md", "API style"),
     ("fastapi", "02-backend.md", "framework"),
-    ("fastapi", "02-backend.md", "Choose"),
     ("django", "02-backend.md", "API style"),
     ("django", "02-backend.md", "framework"),
     ("express", "02-backend.md", "API style"),
-    ("pydantic", "02-backend.md", "validation"),
-    ("pydantic", "02-backend.md", "Validation"),
-    ("sqlalchemy", "02-backend.md", "ORM"),
-    ("prisma", "02-backend.md", "ORM"),
-    ("drizzle", "02-backend.md", "ORM"),
-    ("typeorm", "02-backend.md", "ORM"),
-    ("postgresql", "02-backend.md", "database"),
-    ("postgresql", "02-backend.md", "Database"),
+    ("pydantic", "02-backend.md", "schema validation"),
+    ("sqlalchemy", "02-backend.md", "ORM/query builder"),
+    ("prisma", "02-backend.md", "ORM/query builder"),
+    ("drizzle", "02-backend.md", "ORM/query builder"),
+    ("typeorm", "02-backend.md", "ORM/query builder"),
     ("postgresql", "02-backend.md", "Choose database"),
-    ("mongodb", "02-backend.md", "database"),
-    ("cors", "02-backend.md", "CORS"),
+    ("mongodb", "02-backend.md", "Choose database"),
     ("rate_limiting", "02-backend.md", "rate limit"),
-    ("structured_logging", "02-backend.md", "logging"),
-    ("structured_logging", "02-backend.md", "Logging"),
+    ("structured_logging", "02-backend.md", "structured logging"),
     ("health_check", "02-backend.md", "health"),
 
     # -- Auth --
-    ("supabase_auth", "03-auth.md", "auth provider"),
-    ("supabase_auth", "03-auth.md", "Choose"),
-    ("firebase_auth", "03-auth.md", "auth provider"),
-    ("auth0", "03-auth.md", "auth provider"),
-    ("clerk", "03-auth.md", "auth provider"),
+    ("supabase_auth", "03-auth.md", "Choose auth provider"),
+    ("firebase_auth", "03-auth.md", "Choose auth provider"),
+    ("auth0", "03-auth.md", "Choose auth provider"),
+    ("clerk", "03-auth.md", "Choose auth provider"),
     ("jwt", "03-auth.md", "JWT"),
-    ("jwt", "03-auth.md", "token"),
-    ("jwt", "03-auth.md", "session"),
 
     # -- Billing --
     ("stripe", "04-billing.md", "payment provider"),
-    ("stripe", "04-billing.md", "Choose"),
-    ("stripe", "04-billing.md", "Provider"),
     ("lemon_squeezy", "04-billing.md", "payment provider"),
-    ("lemon_squeezy", "04-billing.md", "Choose"),
-    ("lemon_squeezy", "04-billing.md", "Provider"),
     ("webhook_signature", "04-billing.md", "signature"),
-    ("webhook_signature", "04-billing.md", "Signature"),
-    ("webhook_handler", "04-billing.md", "webhook"),
 
     # -- DevOps --
-    ("docker", "05-devops.md", "Docker"),
-    ("docker", "05-devops.md", "container"),
+    ("docker", "05-devops.md", "`Dockerfile`"),
     ("vercel", "05-devops.md", "hosting"),
     ("railway", "05-devops.md", "hosting"),
     ("netlify", "05-devops.md", "hosting"),
@@ -346,7 +353,6 @@ SCAN_RULES: list[tuple[str, str, str]] = [
     ("health_check", "05-devops.md", "health"),
 
     # -- Security --
-    ("cors", "06-security.md", "CORS"),
     ("rate_limiting", "06-security.md", "rate limit"),
     ("rate_limiting", "06-security.md", "Rate limit"),
     ("jwt", "06-security.md", "authentication"),
@@ -358,20 +364,15 @@ SCAN_RULES: list[tuple[str, str, str]] = [
     # -- Monitoring --
     ("sentry", "07-monitoring.md", "error tracking"),
     ("sentry", "07-monitoring.md", "Sentry"),
-    ("structured_logging", "07-monitoring.md", "logging"),
-    ("structured_logging", "07-monitoring.md", "Logging"),
-    ("structured_logging", "07-monitoring.md", "structured"),
-    ("health_check", "07-monitoring.md", "health"),
+    ("structured_logging", "07-monitoring.md", "structured logging"),
 
     # -- SEO --
     ("og_meta", "08-seo-marketing.md", "og:"),
-    ("og_meta", "08-seo-marketing.md", "OG"),
     ("og_meta", "08-seo-marketing.md", "Open Graph"),
     ("robots_txt", "08-seo-marketing.md", "robots"),
     ("sitemap", "08-seo-marketing.md", "sitemap"),
     ("ga4", "08-seo-marketing.md", "analytics"),
     ("ga4", "08-seo-marketing.md", "Analytics"),
-    ("ga4", "08-seo-marketing.md", "tracking"),
 
     # -- Legal --
     ("privacy_policy", "09-legal-compliance.md", "privacy"),
@@ -400,17 +401,14 @@ SCAN_RULES: list[tuple[str, str, str]] = [
 
     # -- Email --
     ("resend", "13-email-notifications.md", "email provider"),
-    ("resend", "13-email-notifications.md", "Choose"),
     ("sendgrid", "13-email-notifications.md", "email provider"),
     ("postmark", "13-email-notifications.md", "email provider"),
     ("nodemailer", "13-email-notifications.md", "email provider"),
 
     # -- Analytics --
     ("ga4", "14-analytics.md", "analytics platform"),
-    ("ga4", "14-analytics.md", "Choose"),
     ("ga4", "14-analytics.md", "web analytics"),
     ("posthog", "14-analytics.md", "analytics platform"),
-    ("posthog", "14-analytics.md", "Choose"),
 
     # -- Accessibility --
     ("radix", "15-accessibility.md", "semantic"),
@@ -427,11 +425,13 @@ _CONDITION_IF = re.compile(r"^<!--\s*if:(\w+)\s*-->")
 _CONDITION_ENDIF = re.compile(r"^<!--\s*endif\s*-->")
 
 
-def run_scan(root: Path, flags: dict[str, bool] | None = None) -> dict:
+def run_scan(root: Path, flags: dict[str, bool] | None = None, *, dry_run: bool = False) -> dict:
     """Scan codebase and return detection results + auto-check counts.
 
     When *flags* is provided, items inside disabled ``<!-- if:flag -->``
     blocks are **not** auto-checked, preventing false-pass score inflation.
+    With *dry_run*, blueprint files are left untouched and the result reports
+    what would have been checked.
     """
     signals = _build_detectors(root)
     active = {k for k, v in signals.items() if v}
@@ -536,6 +536,7 @@ def run_scan(root: Path, flags: dict[str, bool] | None = None) -> dict:
     # --- Apply rules to blueprint files ---
     bp_dir = root / "docs" / "blueprints"
     checked_count: dict[str, int] = {}  # filename -> newly checked items
+    checked_items: dict[str, list[str]] = {}  # filename -> item texts
     total_newly_checked = 0
 
     _check_done_re = re.compile(r"^\s*-\s*\[x\]\s+", re.IGNORECASE)
@@ -555,6 +556,7 @@ def run_scan(root: Path, flags: dict[str, bool] | None = None) -> dict:
 
         lines = text.splitlines()
         newly_checked = 0
+        newly_checked_items: list[str] = []
         condition_stack: list[bool] = []
 
         for i, line in enumerate(lines):
@@ -590,14 +592,17 @@ def run_scan(root: Path, flags: dict[str, bool] | None = None) -> dict:
                 if sub.lower() in item_text:
                     lines[i] = f"{m.group(1)}[x]{m.group(2)}"
                     newly_checked += 1
+                    newly_checked_items.append(m.group(2).strip())
                     break  # Don't double-check same item
 
         if newly_checked > 0:
-            out_text = "\n".join(lines)
-            if text.endswith("\n"):
-                out_text += "\n"
-            bp_path.parent.mkdir(parents=True, exist_ok=True)
-            bp_path.write_text(out_text, encoding="utf-8")
+            if not dry_run:
+                out_text = "\n".join(lines)
+                if text.endswith("\n"):
+                    out_text += "\n"
+                bp_path.parent.mkdir(parents=True, exist_ok=True)
+                bp_path.write_text(out_text, encoding="utf-8")
+            checked_items[bp_file] = newly_checked_items
             checked_count[bp_file] = newly_checked
             total_newly_checked += newly_checked
 
@@ -605,5 +610,7 @@ def run_scan(root: Path, flags: dict[str, bool] | None = None) -> dict:
         "tech_stack": tech_stack,
         "active_signals": sorted(active),
         "checked_count": checked_count,
+        "checked_items": checked_items,
+        "dry_run": dry_run,
         "total_newly_checked": total_newly_checked,
     }

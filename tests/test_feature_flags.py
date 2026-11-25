@@ -762,3 +762,87 @@ class BadgeTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ScanEvidenceTest(unittest.TestCase):
+    """`mmu scan` must not count MMU's own scaffold or weak markers as evidence."""
+
+    def setUp(self) -> None:
+        self.tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self.tmp.name)
+
+    def tearDown(self) -> None:
+        self.tmp.cleanup()
+
+    def write(self, rel: str, content: str) -> None:
+        path = self.root / rel
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(content, encoding="utf-8")
+
+    def _checked(self, rel: str) -> list[str]:
+        text = (self.root / rel).read_text(encoding="utf-8")
+        return [line for line in text.splitlines() if "[x]" in line]
+
+    def test_scan_ignores_mmu_scaffold_and_weak_markers(self):
+        from mmu_cli.cli import command_init
+        from mmu_cli.scan import run_scan
+
+        command_init(self.root, force=False)
+        self.write("package.json", '{"name":"x","dependencies":{"react":"19.0.0"}}')
+        self.write("src/a.ts", 'export const cls = "bg-red-500 flag-icon"; // see https://example.com\n')
+        self.write("node_modules/pkg/index.js", "gtag('config'); const ssl_context = 1; // privacy policy\n")
+        self.write("prompts/extra.md", "privacy policy / terms of service\n")
+
+        result = run_scan(self.root, None)
+
+        self.assertEqual(result["active_signals"], ["react"])
+        self.assertEqual(result["checked_count"], {"01-frontend.md": 1})
+
+    def test_scan_does_not_tick_flows_from_presence_markers(self):
+        from mmu_cli.scan import run_scan
+
+        self.write("docs/blueprints/03-auth.md", (
+            "- [ ] Choose session strategy (JWT vs server-side sessions).\n"
+            '- [ ] Implement "Forgot password" with time-limited tokens.\n'
+            "- [ ] Add session revocation capability.\n"
+        ))
+        self.write("docs/blueprints/06-security.md", "- [ ] Add CORS allowlist for trusted origins only.\n")
+        self.write("docs/blueprints/04-billing.md", "- [ ] Handle `subscription.created` webhook event.\n")
+        self.write("docs/blueprints/02-backend.md", (
+            "- [ ] Handle CORS configuration for allowed origins.\n"
+            "- [ ] Define cache invalidation rules per resource.\n"
+            "- [ ] Implement structured logging (JSON format).\n"
+        ))
+        self.write("package.json", '{"dependencies": {"stripe": "1", "prisma": "1"}}')
+        self.write("requirements.txt", "fastapi\npydantic\n")
+        self.write("server.js", (
+            "const jwt = require('jsonwebtoken'); app.use(cors({origin: '*'}));\n"
+            "app.post('/webhook', handler); // Bearer\n"
+        ))
+
+        run_scan(self.root, None)
+
+        self.assertEqual(
+            self._checked("docs/blueprints/03-auth.md"),
+            ["- [x] Choose session strategy (JWT vs server-side sessions)."],
+        )
+        for rel in ("docs/blueprints/06-security.md", "docs/blueprints/04-billing.md", "docs/blueprints/02-backend.md"):
+            self.assertEqual(self._checked(rel), [], rel)
+
+    def test_scan_dry_run_reports_without_writing(self):
+        from mmu_cli.cli import command_scan
+
+        bp = "- [ ] Choose analytics platform (PostHog, Mixpanel, or Amplitude).\n"
+        self.write("docs/blueprints/14-analytics.md", bp)
+        self.write("package.json", '{"dependencies": {"posthog-js": "^1.0.0"}}')
+
+        result = command_scan(self.root, dry_run=True)
+
+        self.assertEqual((self.root / "docs/blueprints/14-analytics.md").read_text(encoding="utf-8"), bp)
+        self.assertTrue(result.get("dry_run"))
+        self.assertEqual(result.get("newly_checked"), 1)
+        self.assertIn("Choose analytics platform", "\n".join(result.get("messages", [])))
+        self.assertIn("would auto-check", "\n".join(result.get("messages", [])))
+
+        command_scan(self.root)
+        self.assertIn("[x]", (self.root / "docs/blueprints/14-analytics.md").read_text(encoding="utf-8"))
