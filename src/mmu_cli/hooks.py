@@ -503,7 +503,7 @@ def handle_stop(payload: dict[str, Any], reply: Reply) -> int:
         )
     _stop_record(state, count + 1)
     reason = build_reason(
-        f"mmu vibecheck: not done yet — {len(fails)} launch-blocking issue(s) in files changed this session ({root}).",
+        f"mmu vibecheck: not done yet — {len(fails)} launch-blocking issue(s) in uncommitted changes ({root}).",
         fails, root, ["--changed"], deadline,
         "Fix the P0 findings and re-run `mmu vibecheck --changed --format agent` until it reports 0 blocking "
         f"before telling the user the work is done. {_SILENCE}",
