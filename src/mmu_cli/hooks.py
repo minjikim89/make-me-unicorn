@@ -10,8 +10,11 @@ Events
              content: -a/--all, pathspecs, or a `git add` chained in the same command);
              push → `--since @{u}` when an upstream exists, else the whole project.
   stop       the agent is about to say "done". Scans `--changed`; blocking findings send
-             the agent back to work. Loop guards: the host's own flag (stop_hook_active /
-             loop_count) plus a per-session cap (MMU_STOP_MAX, default 3) kept in the git dir.
+             the agent back to work. On Claude Code and Codex only findings in files the
+             agent edited in this session count (recorded by post-edit); no recorded edits,
+             no block. Cursor and Gemini count every uncommitted change. Loop guards: the
+             host's own flag (stop_hook_active / loop_count) plus a per-session cap
+             (MMU_STOP_MAX, default 3) kept in the git dir.
   post-edit  after a file edit (Claude Code / Codex). Non-blocking: P0 findings located in
              the edited file are returned as additional context.
 
@@ -238,10 +241,10 @@ def _fallback_reason(fails: list[dict[str, Any]]) -> str:
 
 
 def build_reason(headline: str, fails: list[dict[str, Any]], root: Path, scope: list[str], deadline: float,
-                 footer: str) -> str:
+                 footer: str, use_agent_format: bool = True) -> str:
     """Headline + the scanner's own `--format agent` text (path:line, rule, fix, how to silence) + footer."""
     body = ""
-    proc = _run(["--format", "agent", *scope], root, deadline)
+    proc = _run(["--format", "agent", *scope], root, deadline) if use_agent_format else "filtered findings"
     if not isinstance(proc, str) and proc.returncode == 1 and proc.stdout.strip():
         body = proc.stdout.strip()
     if not body:
@@ -412,30 +415,72 @@ def _state_file(root: Path, session: str, deadline: float) -> Path | None:
     return Path(git_dir) / "mmu" / f"stop-{digest}.json"
 
 
-def _stop_count(state: Path | None) -> int:
+def _load_state(state: Path | None) -> dict[str, Any]:
+    """Per-session state: {"blocks": stop blocks so far, "edited": repo-relative paths the agent edited}."""
     if state is None:
-        return 0
+        return {}
     try:
-        return int(json.loads(state.read_text(encoding="utf-8")).get("blocks", 0))
-    except (OSError, ValueError, AttributeError):
+        data = json.loads(state.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def _stop_count(state: Path | None) -> int:
+    try:
+        return int(_load_state(state).get("blocks", 0))
+    except (TypeError, ValueError):
         return 0
 
 
-def _stop_record(state: Path | None, count: int) -> None:
+def _edited(state: Path | None) -> set[str]:
+    edited = _load_state(state).get("edited")
+    return {str(p) for p in edited} if isinstance(edited, list) else set()
+
+
+def _save_state(state: Path | None, blocks: int | None = None, add_edited: set[str] | None = None) -> None:
+    """Merge into the session state. `_clear_state` removes it."""
     if state is None:
         return
     try:
-        if count <= 0:
-            state.unlink(missing_ok=True)
-            return
+        data = _load_state(state)
+        if blocks is not None:
+            data["blocks"] = blocks
+        if add_edited:
+            data["edited"] = sorted(_edited(state) | add_edited)
+        data["updated"] = int(time.time())
         state.parent.mkdir(parents=True, exist_ok=True)
         cutoff = time.time() - 7 * 86400
         for old in state.parent.glob("stop-*.json"):
             if old != state and old.stat().st_mtime < cutoff:
                 old.unlink(missing_ok=True)
-        state.write_text(json.dumps({"blocks": count, "updated": int(time.time())}), encoding="utf-8")
+        tmp = state.with_suffix(f".{os.getpid()}.tmp")
+        tmp.write_text(json.dumps(data), encoding="utf-8")
+        os.replace(tmp, state)
     except OSError:
         pass
+
+
+def _clear_state(state: Path | None) -> None:
+    if state is not None:
+        try:
+            state.unlink(missing_ok=True)
+        except OSError:
+            pass
+
+
+def _session_id(payload: dict[str, Any]) -> str:
+    return str(payload.get("session_id") or payload.get("conversation_id") or "default")
+
+
+def _only_in(fails: list[dict[str, Any]], files: set[str]) -> list[dict[str, Any]]:
+    """Findings narrowed to locations in `files`. A finding with no location in them (or none at all) is dropped."""
+    out: list[dict[str, Any]] = []
+    for f in fails:
+        locs = [loc for loc in f.get("locations") or [] if isinstance(loc, dict) and loc.get("path") in files]
+        if locs:
+            out.append({**f, "locations": locs, "files": sorted({str(loc["path"]) for loc in locs})})
+    return out
 
 
 # --- event handlers ----------------------------------------------------------
@@ -483,30 +528,43 @@ def handle_stop(payload: dict[str, Any], reply: Reply) -> int:
         pass
     deadline = time.monotonic() + DEADLINE_SECONDS
     root = repo_root(payload_cwd(payload), None, deadline)
-    session = str(payload.get("session_id") or payload.get("conversation_id") or "default")
-    state = _state_file(root, session, deadline)
+    state = _state_file(root, _session_id(payload), deadline)
     if state is None:
         return reply.allow()  # not a git repository: nothing to scope the scan to, stay quiet
+    # Claude Code and Codex report every edit through the post-edit hook, so the gate only holds the
+    # agent to files it edited in this session; uncommitted work it never touched is not its problem.
+    # Cursor and Gemini have no such hook here: every uncommitted change counts.
+    tracks_edits = reply.host in ("claude", "codex")
+    edited = _edited(state)
+    if tracks_edits and not edited:
+        return reply.allow()
     result = run_scan(root, ["--changed"], deadline)
     if isinstance(result, str):
         return reply.allow(f"mmu vibecheck stop gate did not run ({result}).")
-    fails = blocking(result)
+    all_fails = blocking(result)
+    fails = _only_in(all_fails, edited) if tracks_edits else all_fails
+    where = "files edited in this session" if tracks_edits else "uncommitted changes"
     count = _stop_count(state)
     if not fails:
-        _stop_record(state, 0)
+        _clear_state(state)
         return reply.allow()
     if count >= limit:
         return reply.allow(
-            f"mmu vibecheck: {len(fails)} launch-blocking issue(s) remain in changed files; the stop gate has "
+            f"mmu vibecheck: {len(fails)} launch-blocking issue(s) remain in {where}; the stop gate has "
             f"already sent the agent back {count} time(s) this session (MMU_STOP_MAX={limit}), so it is letting go. "
             "Run `mmu vibecheck --changed` to see them."
         )
-    _stop_record(state, count + 1)
+    _save_state(state, blocks=count + 1)
     reason = build_reason(
-        f"mmu vibecheck: not done yet — {len(fails)} launch-blocking issue(s) in uncommitted changes ({root}).",
+        f"mmu vibecheck: not done yet — {len(fails)} launch-blocking issue(s) in {where} ({root}).",
         fails, root, ["--changed"], deadline,
-        "Fix the P0 findings and re-run `mmu vibecheck --changed --format agent` until it reports 0 blocking "
-        f"before telling the user the work is done. {_SILENCE}",
+        "Fix the P0 findings and re-run `mmu vibecheck --changed --format agent` until they are gone "
+        f"before telling the user the work is done. {_SILENCE} "
+        "If the user explicitly asked to defer this hardening, do not fix it: list these P0s in your final "
+        f"message and stop (the gate stops blocking after at most {limit} attempt(s)).",
+        use_agent_format=len(fails) == len(all_fails) and all(
+            len(f["locations"]) == len(o.get("locations") or []) for f, o in zip(fails, all_fails)
+        ),
     )
     return reply.block(reason)
 
@@ -514,7 +572,7 @@ def handle_stop(payload: dict[str, Any], reply: Reply) -> int:
 def handle_post_edit(payload: dict[str, Any], reply: Reply) -> int:
     if os.environ.get("MMU_HOOK_DISABLE") == "1" or reply.host == "cursor":
         return reply.allow()
-    files = [f for f in edited_files(payload) if Path(f).suffix.lower() in _CODE_SUFFIXES or Path(f).name.startswith(".env")]
+    files = edited_files(payload)
     if not files:
         return reply.allow()
     deadline = time.monotonic() + POST_EDIT_DEADLINE_SECONDS
@@ -525,21 +583,26 @@ def handle_post_edit(payload: dict[str, Any], reply: Reply) -> int:
     if not top:
         return reply.allow()
     root = Path(top)
-    wanted: set[str] = set()
+    touched: set[str] = set()
     for name in files:
         p = Path(name) if Path(name).is_absolute() else cwd / name
         try:
-            wanted.add(p.resolve().relative_to(root.resolve()).as_posix())
+            touched.add(p.resolve().relative_to(root.resolve()).as_posix())
         except ValueError:
             continue
+    if not touched:
+        return reply.allow()
+    # Remember what this session edited: the stop gate only holds the agent to these files.
+    _save_state(_state_file(root, _session_id(payload), deadline), add_edited=touched)
+    wanted = {rel for rel in touched if Path(rel).suffix.lower() in _CODE_SUFFIXES or Path(rel).name.startswith(".env")}
+    if not wanted:
+        return reply.allow()  # not a code or config file: no scan
     result = run_scan(root, ["--changed"], deadline)
-    if isinstance(result, str) or not wanted:
+    if isinstance(result, str):
         return reply.allow()  # feedback only; the commit and stop gates report scanner trouble
     lines: list[str] = []
-    for f in blocking(result):
-        locs = [loc for loc in f.get("locations") or [] if isinstance(loc, dict) and loc.get("path") in wanted]
-        if not locs:
-            continue
+    for f in _only_in(blocking(result), wanted):
+        locs = f["locations"]
         rule = f.get("rule_id") or f.get("check")
         where = ", ".join(f"{loc['path']}:{loc['line']}" if loc.get("line") else str(loc["path"]) for loc in locs[:4])
         lines.append(f"P0 {rule} {where}")
