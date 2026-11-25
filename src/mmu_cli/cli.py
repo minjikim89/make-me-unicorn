@@ -372,6 +372,11 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     p_validate.add_argument("--output", choices=["text", "markdown", "json"], default="text", help="Output format (default: text)")
     p_validate.add_argument("--no-save", action="store_true", help="Do not save markdown report to reports/validate/")
 
+    p_hook = sub.add_parser("hook", help="Agent hook entry point (Claude Code, Codex, Cursor, Gemini): reads the hook JSON on stdin")
+    from mmu_cli.hooks import add_arguments as add_hook_arguments
+
+    add_hook_arguments(p_hook)
+
     # `--root` / `--json` are accepted before or after the subcommand. A subparser default would
     # overwrite the value parsed before the subcommand, so subparsers only set them when given.
     for name, sp in sub.choices.items():
@@ -1808,6 +1813,14 @@ def main() -> int:
         args = parse_args([*sys.argv[1:], "vibecheck"])
     root = root_path(getattr(args, "root", "."))
 
+    if args.command == "hook":
+        from mmu_cli.hooks import run as run_hook
+
+        return run_hook(args.host, args.event)
+
+    # serve-mcp validates its own --root (None means "use packaged data").
+    # Every other command operates on the project directory, so a bad --root
+    # should fail here with one clear message instead of deep in file I/O.
     if args.command == "vibecheck":
         # Owns its error contract (exit 2, JSON error object with --format json), including a bad --root.
         from mmu_cli.vibecheck.command import run as run_vibecheck_command

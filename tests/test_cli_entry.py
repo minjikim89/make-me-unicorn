@@ -59,6 +59,13 @@ class CliEntryTests(unittest.TestCase):
             self.assertIn("✗", proc.stdout.decode("utf-8"))
             self.assertNotIn(b"UnicodeEncodeError", proc.stderr)
 
+    def test_hook_is_a_subcommand(self):
+        proc = subprocess.run([sys.executable, "-m", "mmu_cli", "hook", "--host", "cursor", "--event", "pre-shell"],
+                              input=b'{"command": "ls"}', capture_output=True,
+                              env={**os.environ, "PYTHONPATH": str(REPO_ROOT / "src")}, timeout=60)
+        self.assertEqual(proc.returncode, 0)
+        self.assertEqual(json.loads(proc.stdout), {"permission": "allow"})
+
 
 if __name__ == "__main__":
     unittest.main()

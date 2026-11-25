@@ -1,191 +1,57 @@
 #!/usr/bin/env python3
-"""Claude Code PreToolUse hook: run `mmu vibecheck` before `git commit` / `git push`.
+"""Plugin hook entry point: run `mmu hook` from the plugin's bundled source.
 
-Why a hook and not an MCP tool: agents reliably skip optional tools but cannot skip
-a hook. With auto mode on by default, this is the last point where a human-visible
-gate exists between "the agent wrote it" and "it is in the repo".
+The logic lives in src/mmu_cli/hooks.py. This wrapper only makes the plugin work
+without `pip install make-me-unicorn`: it puts the plugin's `src/` on sys.path
+(CLAUDE_PLUGIN_ROOT in Claude Code, PLUGIN_ROOT in Codex, else this file's parent)
+and calls the same code as `mmu hook`.
 
-Contract (Claude Code hooks):
-  stdin  — JSON with tool_name, tool_input.command, cwd
-  exit 0 — allow. A JSON object on stdout with "systemMessage" shows a warning
-           to the user (used when the scanner itself could not run).
-  exit 2 — block; stderr is shown to the agent as the reason.
+Fallbacks, in order: bundled source (Python >= 3.10) → an installed `mmu` on PATH →
+allow the action with one visible line. A broken gate never blocks the agent.
 
-Scanner contract (`mmu vibecheck --format json`, schema mmu.vibecheck/v1):
-  exit 0 — no blocking findings; exit 1 — blocking (P0) findings, listed in
-  `findings[]` with `locations[]` and `fix`; exit 2 — the scanner itself failed
-  (`{"error": {...}}`), which this hook treats as "allow, but tell the user".
-  A hook that exceeds its timeout is treated as "allow", so every subprocess
-  here shares one deadline well under the 60s configured in hooks.json.
-
-Zero dependencies. Uses the plugin's bundled `mmu_cli` (CLAUDE_PLUGIN_ROOT/src)
-when set, otherwise an installed `mmu`.
-
-Bypass:
-  MMU_HOOK_DISABLE=1 in the hook's environment (Claude Code's env) — disables
-  the gate for the session. The same assignment as a prefix on the command
-  itself (`MMU_HOOK_DISABLE=1 git commit …`) — skips the gate for that one
-  command; the hook recognises the prefix explicitly.
-  MMU_HOOK_ON_PUSH_ONLY=1 — gate only pushes.
+Arguments are passed through (`--host`, `--event`); without them the host and the
+event are detected from the JSON payload on stdin.
 """
-
-from __future__ import annotations
 
 import json
 import os
-import re
+import shutil
 import subprocess
 import sys
-import time
 from pathlib import Path
 
-DEADLINE_SECONDS = 45  # hooks.json timeout is 60; leave headroom so we fail closed-loudly, not by timeout
 
-# `git` as a word (not part of a path or another word), then any global options
-# (-C dir, -c k=v, --git-dir=…, --no-pager, …), then the subcommand as a whole word.
-# Env-var prefixes, subshells, `&&` chains and line continuations all still match;
-# the trailing lookahead keeps `git commit-tree` / `git pushx` out.
-_GIT_OPTS = r"(?:\s+(?:-[cC]\s+\S+|--[a-z-]+(?:=\S+)?|-\w+))*"
-_GIT_CMD = re.compile(
-    r"(?<![\w./-])git(?P<opts>" + _GIT_OPTS + r")\s+(?P<verb>commit|push)(?![\w-])(?P<rest>[^;&|\n]*)"
-)
-_GIT_C_PATH = re.compile(r"-C\s+(?:'([^']+)'|\"([^\"]+)\"|(\S+))")
-_PER_COMMAND_DISABLE = re.compile(r"(?<![\w-])MMU_HOOK_DISABLE=1(?=\s)")
-_NOOP_FLAGS = re.compile(r"(?<!\S)(?:--dry-run|--help|-h)(?!\S)")
+def _plugin_root() -> Path:
+    for var in ("CLAUDE_PLUGIN_ROOT", "PLUGIN_ROOT"):
+        value = os.environ.get(var)
+        if value and (Path(value) / "src" / "mmu_cli").is_dir():
+            return Path(value)
+    return Path(__file__).resolve().parent.parent
 
 
-def _gated_match(command: str) -> re.Match[str] | None:
-    """Return the first commit/push match that should be gated, or None."""
-    if os.environ.get("MMU_HOOK_DISABLE") == "1" or _PER_COMMAND_DISABLE.search(command):
-        return None
-    push_only = os.environ.get("MMU_HOOK_ON_PUSH_ONLY") == "1"
-    for m in _GIT_CMD.finditer(command):
-        if _NOOP_FLAGS.search(m.group("rest")):
-            continue
-        if m.group("verb") == "push" or not push_only:
-            return m
-    return None
-
-
-def _should_gate(command: str) -> bool:
-    return _gated_match(command) is not None
-
-
-def _repo_root(cwd: str, match: re.Match[str] | None, deadline: float) -> Path:
-    """Git toplevel for the command: honours `git -C <path>`, falls back to cwd."""
-    start = Path(cwd)
-    if match is not None:
-        c = _GIT_C_PATH.search(match.group("opts"))
-        if c:
-            start = (start / (c.group(1) or c.group(2) or c.group(3))).expanduser()
-    try:
-        out = subprocess.run(
-            ["git", "rev-parse", "--show-toplevel"],
-            cwd=str(start), capture_output=True, text=True, timeout=max(1.0, min(3.0, deadline - time.monotonic())),
-        )
-        if out.returncode == 0 and out.stdout.strip():
-            return Path(out.stdout.strip())
-    except (OSError, subprocess.SubprocessError):
-        pass
-    return start
-
-
-def _launcher() -> tuple[list[str], dict[str, str]]:
-    """One launcher, chosen up front: bundled source when the plugin root is known, else installed `mmu`."""
-    env = dict(os.environ)
-    plugin_root = env.get("CLAUDE_PLUGIN_ROOT")
-    if plugin_root and (Path(plugin_root) / "src" / "mmu_cli").is_dir():
-        env["PYTHONPATH"] = str(Path(plugin_root) / "src") + os.pathsep + env.get("PYTHONPATH", "")
-        return [sys.executable, "-m", "mmu_cli", "vibecheck", "--format", "json"], env
-    return ["mmu", "vibecheck", "--format", "json"], env
-
-
-def _run_vibecheck(root: Path, deadline: float) -> dict | str:
-    """Return the parsed JSON result, or a short string saying why it could not run."""
-    cmd, env = _launcher()
-    remaining = deadline - time.monotonic()
-    if remaining < 2:
-        return "no time left before the hook deadline"
-    try:
-        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=remaining, env=env, cwd=str(root))
-    except FileNotFoundError:
-        return "`mmu` is not installed and CLAUDE_PLUGIN_ROOT is not set"
-    except subprocess.TimeoutExpired:
-        return f"scan exceeded {int(remaining)}s on {root} (large tree? add build dirs to `doctor.skip_paths`)"
-    try:
-        result = json.loads(proc.stdout)
-    except json.JSONDecodeError:
-        tail = (proc.stderr or proc.stdout).strip().splitlines()[-1:] or ["no output"]
-        return f"scanner returned no JSON (exit {proc.returncode}): {tail[0][:120]}"
-    if not isinstance(result, dict):
-        return "scanner returned unexpected JSON"
-    error = result.get("error")
-    if isinstance(error, dict):
-        return f"scanner error: {str(error.get('message') or error.get('code') or 'unknown')[:160]}"
-    if proc.returncode not in (0, 1) and "summary" in result:
-        return f"scanner exited {proc.returncode}"
-    return result
-
-
-def _places(finding: dict) -> list[str]:
-    """`path:line` labels from v1 `locations`, falling back to the legacy `files` list."""
-    out: list[str] = []
-    for loc in finding.get("locations") or []:
-        if isinstance(loc, dict) and loc.get("path"):
-            out.append(f"{loc['path']}:{loc['line']}" if loc.get("line") else str(loc["path"]))
-    return out or [str(rel) for rel in finding.get("files") or []]
-
-
-def _format_block(fails: list[dict], root: Path) -> str:
-    lines = [f"mmu vibecheck: {len(fails)} launch-blocking issue(s) in {root} — commit blocked."]
-    for f in fails[:6]:
-        rule = f.get("rule_id") or f.get("check")
-        places = _places(f)
-        where = f" {places[0]}" if places else ""
-        more = f" (+{len(places) - 1}: {', '.join(places[1:4])})" if len(places) > 1 else ""
-        lines.append(f"{f.get('severity')} {rule}{where}{more}")
-        lines.append(f"  what: {f.get('message')}")
-        fix = f.get("fix") or f.get("hint")
-        if fix:
-            lines.append("  fix: " + " ".join(part.strip() for part in str(fix).splitlines()))
-        if f.get("ref"):
-            lines.append(f"  why: {f['ref']}")
-    if len(fails) > 6:
-        lines.append(f"… and {len(fails) - 6} more; run `mmu vibecheck --format agent` for all of them.")
-    lines.append(
-        "Fix the P0 findings and retry the commit (`mmu vibecheck --format agent` re-checks). If a finding is a "
-        "false positive, add a `mmu-ignore[<rule-id>]: <reason>` comment on the flagged line, or "
-        "prefix this one command with MMU_HOOK_DISABLE=1."
-    )
-    return "\n".join(lines)
+def _fail_open(why: str) -> int:
+    print(json.dumps({"systemMessage": "mmu vibecheck gate did not run (" + why + ") - action allowed unchecked."}))
+    return 0
 
 
 def main() -> int:
-    deadline = time.monotonic() + DEADLINE_SECONDS
-    try:
-        payload = json.load(sys.stdin)
-    except (json.JSONDecodeError, ValueError):
-        return 0
-    if not isinstance(payload, dict) or payload.get("tool_name") != "Bash":
-        return 0
-    tool_input = payload.get("tool_input") or {}
-    if not isinstance(tool_input, dict):
-        return 0
-    command = str(tool_input.get("command") or "")
-    match = _gated_match(command)
-    if match is None:
-        return 0
-    root = _repo_root(payload.get("cwd") or os.getcwd(), match, deadline)
-    result = _run_vibecheck(root, deadline)
-    if isinstance(result, str):
-        # Fail open, but visibly: a systemMessage on stdout is shown to the user with exit 0.
-        print(json.dumps({"systemMessage": f"mmu vibecheck gate did not run ({result}) — commit allowed unchecked."}))
-        return 0
-    fails = [f for f in result.get("findings", []) if f.get("status") == "fail"]
-    if fails:
-        print(_format_block(fails, root), file=sys.stderr)
-        return 2
-    return 0
+    src = _plugin_root() / "src"
+    if sys.version_info >= (3, 10) and (src / "mmu_cli" / "hooks.py").is_file():
+        sys.path.insert(0, str(src))
+        try:
+            from mmu_cli.hooks import main as hook_main
+        except Exception as exc:  # noqa: BLE001
+            return _fail_open("bundled mmu_cli failed to import: " + type(exc).__name__)
+        return hook_main(sys.argv[1:])
+    mmu = shutil.which("mmu")
+    if mmu:
+        try:
+            return subprocess.run([mmu, "hook", *sys.argv[1:]], timeout=55).returncode
+        except (OSError, subprocess.SubprocessError) as exc:
+            return _fail_open("installed mmu failed: " + type(exc).__name__)
+    return _fail_open(
+        "needs Python >= 3.10 as `python3` or `mmu` on PATH; found Python %d.%d" % sys.version_info[:2]
+    )
 
 
 if __name__ == "__main__":

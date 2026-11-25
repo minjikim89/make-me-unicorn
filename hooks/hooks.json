@@ -1,5 +1,5 @@
 {
-  "description": "Make Me Unicorn — runs `mmu vibecheck` before git commit/push so launch-blocking gaps in AI-generated code are caught while the agent is still in the loop.",
+  "description": "Make Me Unicorn launch gate: runs `mmu vibecheck` before git commit/push, when the agent is about to stop, and after edits, so launch-blocking gaps are fixed while the agent is still in the loop.",
   "hooks": {
     "PreToolUse": [
       {
@@ -7,8 +7,31 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/vibecheck_gate.py\"",
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/vibecheck_gate.py\" --event pre-shell",
             "timeout": 60
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/vibecheck_gate.py\" --event stop",
+            "timeout": 60
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/vibecheck_gate.py\" --event post-edit",
+            "timeout": 15
           }
         ]
       }
