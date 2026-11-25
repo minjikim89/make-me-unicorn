@@ -377,6 +377,13 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
     add_hook_arguments(p_hook)
 
+    p_install = sub.add_parser("install", help="Wire the vibecheck gate into agent hosts, git hooks, and AGENTS.md")
+    p_install.add_argument("--json", action="store_true", help="Output structured JSON")
+    p_install.add_argument("--root", default=".", help="Project root path")
+    from mmu_cli.install import add_arguments as add_install_arguments
+
+    add_install_arguments(p_install)
+
     # `--root` / `--json` are accepted before or after the subcommand. A subparser default would
     # overwrite the value parsed before the subcommand, so subparsers only set them when given.
     for name, sp in sub.choices.items():
@@ -1830,6 +1837,11 @@ def main() -> int:
     if args.command != "serve-mcp" and not root.is_dir():
         print(f"Error: --root {root} is not a directory.", file=sys.stderr)
         return 2
+
+    if args.command == "install":
+        from mmu_cli.install import run as run_install
+
+        return run_install(args, root)
 
     if args.command == "init":
         if getattr(args, "interactive", False):

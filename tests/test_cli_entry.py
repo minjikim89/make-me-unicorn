@@ -59,12 +59,18 @@ class CliEntryTests(unittest.TestCase):
             self.assertIn("✗", proc.stdout.decode("utf-8"))
             self.assertNotIn(b"UnicodeEncodeError", proc.stderr)
 
-    def test_hook_is_a_subcommand(self):
+    def test_hook_and_install_are_subcommands(self):
         proc = subprocess.run([sys.executable, "-m", "mmu_cli", "hook", "--host", "cursor", "--event", "pre-shell"],
                               input=b'{"command": "ls"}', capture_output=True,
                               env={**os.environ, "PYTHONPATH": str(REPO_ROOT / "src")}, timeout=60)
         self.assertEqual(proc.returncode, 0)
         self.assertEqual(json.loads(proc.stdout), {"permission": "allow"})
+        with tempfile.TemporaryDirectory() as tmp:
+            proc = _mmu("install", "--root", tmp, "--agents-md", "--dry-run", "--json")
+            self.assertEqual(proc.returncode, 0, proc.stderr)
+            plan = json.loads(proc.stdout)
+            self.assertEqual(plan["steps"][0]["action"], "create")
+            self.assertEqual(list(Path(tmp).iterdir()), [])
 
 
 if __name__ == "__main__":
