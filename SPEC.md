@@ -51,12 +51,13 @@ mmu init --root .
 
 Options:
 
-- `--force`: overwrite existing scaffold files.
+- `--force`: refresh existing checklist templates (`docs/blueprints/`, `docs/checklists/`). Checked items are carried over; other existing docs and `.mmu/config.toml` are kept.
+- `--reset`: overwrite everything, wiping checklist progress and regenerating `.mmu/config.toml`.
 
 Behavior:
 
 - Creates baseline docs/checklists/prompts used by `doctor`, `gate`, and mode sessions.
-- Skips existing files unless `--force` is provided.
+- Skips existing files unless `--force` or `--reset` is provided.
 
 ## Snapshot command
 

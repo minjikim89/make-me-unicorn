@@ -241,7 +241,16 @@ def parse_args() -> argparse.Namespace:
     p_init = sub.add_parser("init", help="Initialize baseline docs and checklists")
     p_init.add_argument("--json", action="store_true", help="Output structured JSON")
     p_init.add_argument("--root", default=".", help="Project root path")
-    p_init.add_argument("--force", action="store_true", help="Overwrite existing files")
+    p_init.add_argument(
+        "--force",
+        action="store_true",
+        help="Refresh existing checklist templates; checked items, your docs and .mmu/config.toml are kept",
+    )
+    p_init.add_argument(
+        "--reset",
+        action="store_true",
+        help="Overwrite everything, wiping checklist progress and regenerating .mmu/config.toml",
+    )
     p_init.add_argument("--interactive", action="store_true", help="LLM-guided project setup (requires anthropic SDK)")
 
     p_start = sub.add_parser("start", help="Start a focused mode session")
@@ -1019,7 +1028,7 @@ def _generate_stack_config(root: Path) -> str:
     lines = [
         "# MMU Feature Config — controls which checklist sections apply to your project.",
         "# Set to false to skip sections that don't apply. This makes your score accurate.",
-        "# Regenerate with: mmu init --force",
+        "# Regenerate with: delete this file and run mmu init (or mmu init --reset to start over)",
         "",
         "[features]",
         f"billing = true{_hint(billing_hint, 'detected')}",
@@ -1052,26 +1061,98 @@ def _hint(detected: bool, label: str) -> str:
     return f"  # {label}" if detected else ""
 
 
-def command_init(root: Path, force: bool) -> Result:
+_CHECKED_ITEM_RE = re.compile(r"^\s*-\s*\[x\]\s+(.+)$", re.IGNORECASE)
+_TODO_ITEM_RE = re.compile(r"^(\s*-\s*)\[\s\](\s+)(.+)$")
+_ITEM_PRIORITY_RE = re.compile(r"^\[P[012]\]\s*", re.IGNORECASE)
+
+
+_CHECKLIST_PREFIXES = ("docs/blueprints/", "docs/checklists/")
+
+
+def _item_key(text: str) -> str:
+    return _ITEM_PRIORITY_RE.sub("", text.strip()).strip()
+
+
+def _carry_over_checked(existing: str, template: str) -> tuple[str | None, int]:
+    """Return (*template* with the items checked in *existing* re-checked, count).
+
+    The text is None when *existing* has a checked item the template lacks,
+    which means overwriting would lose progress.
+    """
+    checked: set[str] = set()
+    for line in existing.splitlines():
+        m = _CHECKED_ITEM_RE.match(line)
+        if m:
+            checked.add(_item_key(m.group(1)))
+    if not checked:
+        return template, 0
+
+    carried: set[str] = set()
+    out: list[str] = []
+    for line in template.splitlines():
+        m = _TODO_ITEM_RE.match(line)
+        if m and _item_key(m.group(3)) in checked:
+            carried.add(_item_key(m.group(3)))
+            line = f"{m.group(1)}[x]{m.group(2)}{m.group(3)}"
+        else:
+            done = _CHECKED_ITEM_RE.match(line)
+            if done:
+                carried.add(_item_key(done.group(1)))
+        out.append(line)
+    if checked - carried:
+        return None, 0
+    merged = "\n".join(out)
+    if template.endswith("\n"):
+        merged += "\n"
+    return merged, len(checked)
+
+
+def command_init(root: Path, force: bool, reset: bool = False) -> Result:
+    """Create the scaffold.
+
+    force: refresh existing checklist templates, carrying checked items over;
+        other existing docs and .mmu/config.toml are kept.
+    reset: overwrite everything, including checked items and .mmu/config.toml.
+    """
+    force = force or reset
     created: list[str] = []
     skipped: list[str] = []
     overwritten: list[str] = []
     messages = [f"Init workspace: {root}"]
 
-    for rel, content in INIT_TEMPLATES.items():
-        path = root / rel
+    def place(rel: str, path: Path, content: str) -> None:
         existed_before = path.exists()
         if existed_before and not force:
             skipped.append(rel)
             messages.append(f"  [skip] {rel} (already exists)")
-            continue
+            return
+        note = ""
+        if existed_before and not reset:
+            existing = read_text(path) or ""
+            if not rel.startswith(_CHECKLIST_PREFIXES):
+                # Free-form docs hold the user's own writing; never replace an edited one.
+                skipped.append(rel)
+                state = "unchanged" if existing == content else "edited; --reset overwrites"
+                messages.append(f"  [keep] {rel} ({state})")
+                return
+            merged, kept = _carry_over_checked(existing, content)
+            if merged is None:
+                skipped.append(rel)
+                messages.append(f"  [keep] {rel} (has checked items not in the template; --reset overwrites)")
+                return
+            content = merged
+            if kept:
+                note = f" (kept {kept} checked item{'s' if kept != 1 else ''})"
         write_text(path, content)
-        if existed_before and force:
+        if existed_before:
             overwritten.append(rel)
-            messages.append(f"  [overwrite] {rel}")
+            messages.append(f"  [overwrite] {rel}{note}")
         else:
             created.append(rel)
             messages.append(f"  [create] {rel}")
+
+    for rel, content in INIT_TEMPLATES.items():
+        place(rel, root / rel, content)
 
     # Copy blueprint files from MMU package
     mmu_root = _find_mmu_root()
@@ -1079,36 +1160,27 @@ def command_init(root: Path, force: bool) -> Result:
         bp_src = mmu_root / "docs" / "blueprints"
         bp_dst = root / "docs" / "blueprints"
         for bp_file in sorted(bp_src.glob("*.md")):
-            rel = f"docs/blueprints/{bp_file.name}"
-            dst = bp_dst / bp_file.name
-            existed_before = dst.exists()
-            if existed_before and not force:
-                skipped.append(rel)
-                messages.append(f"  [skip] {rel} (already exists)")
-                continue
-            dst.parent.mkdir(parents=True, exist_ok=True)
-            dst.write_text(bp_file.read_text(encoding="utf-8"), encoding="utf-8")
-            if existed_before and force:
-                overwritten.append(rel)
-                messages.append(f"  [overwrite] {rel}")
-            else:
-                created.append(rel)
-                messages.append(f"  [create] {rel}")
+            place(f"docs/blueprints/{bp_file.name}", bp_dst / bp_file.name, bp_file.read_text(encoding="utf-8"))
     else:
         messages.append("  [warn] Blueprint source not found — run from MMU repo or install from PyPI")
 
-    # Generate feature config if it doesn't exist (or force)
+    # Generate feature config if it doesn't exist; user edits survive --force.
     config_path = root / ".mmu" / "config.toml"
-    if not config_path.exists() or force:
+    rel = ".mmu/config.toml"
+    config_existed = config_path.exists()
+    if not config_existed or reset:
         config_content = _generate_stack_config(root)
         config_path.parent.mkdir(parents=True, exist_ok=True)
         config_path.write_text(config_content, encoding="utf-8")
-        rel = ".mmu/config.toml"
-        if config_path.exists() and not force:
-            pass  # already counted
+        if config_existed:
+            overwritten.append(rel)
+            messages.append(f"  [overwrite] {rel}")
         else:
             created.append(rel)
             messages.append(f"  [create] {rel}")
+    elif force:
+        skipped.append(rel)
+        messages.append(f"  [keep] {rel} (--reset regenerates it)")
 
     if created or overwritten:
         messages.append("Init result: workspace scaffold ready")
@@ -1809,7 +1881,7 @@ def main() -> int:
         if getattr(args, "interactive", False):
             result = command_init_interactive(root)
         else:
-            result = command_init(root, args.force)
+            result = command_init(root, args.force, reset=getattr(args, "reset", False))
         return render_result(result, args.json)
     if args.command == "start":
         result = command_start(args.mode, root, args.emit, args.output, args.clipboard, agent=getattr(args, "agent", False))

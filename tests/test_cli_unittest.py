@@ -66,6 +66,57 @@ class CLITestCase(unittest.TestCase):
         self.assertIn("README.md", result.get("skipped", []))
         self.assertEqual((self.root / "README.md").read_text(encoding="utf-8"), "custom-readme\n")
 
+    def _check_some_items(self) -> tuple[Path, Path]:
+        cli.command_init(self.root, force=False)
+        for num in (1, 2, 3):
+            self.assertEqual(cli.command_check("frontend", num, self.root, force_state="check").exit_code, 0)
+        gates = self.root / "docs/checklists/from_scratch.md"
+        gates.write_text(gates.read_text(encoding="utf-8").replace("- [ ]", "- [x]", 1), encoding="utf-8")
+        config = self.root / ".mmu/config.toml"
+        config.write_text(config.read_text(encoding="utf-8").replace("i18n = false", "i18n = true"), encoding="utf-8")
+        return self.root / "docs/blueprints/01-frontend.md", config
+
+    def test_init_force_keeps_checked_items_and_config(self) -> None:
+        blueprint, config = self._check_some_items()
+        config_before = config.read_text(encoding="utf-8")
+
+        result = cli.command_init(self.root, force=True)
+
+        self.assertEqual(result.exit_code, 0)
+        self.assertEqual(blueprint.read_text(encoding="utf-8").count("[x]"), 3)
+        self.assertEqual((self.root / "docs/checklists/from_scratch.md").read_text(encoding="utf-8").count("[x]"), 1)
+        self.assertEqual(config.read_text(encoding="utf-8"), config_before)
+        self.assertIn(".mmu/config.toml", result.get("skipped", []))
+
+    def test_init_force_keeps_edited_docs(self) -> None:
+        cli.command_init(self.root, force=False)
+        self.write("README.md", "my project\n")
+        self.write("docs/core/product.md", "# Product\nreal notes\n")
+
+        cli.command_init(self.root, force=True)
+
+        self.assertEqual((self.root / "README.md").read_text(encoding="utf-8"), "my project\n")
+        self.assertEqual((self.root / "docs/core/product.md").read_text(encoding="utf-8"), "# Product\nreal notes\n")
+
+    def test_init_force_keeps_file_with_checked_custom_item(self) -> None:
+        blueprint, _ = self._check_some_items()
+        custom = blueprint.read_text(encoding="utf-8") + "- [x] My own launch item\n"
+        blueprint.write_text(custom, encoding="utf-8")
+
+        result = cli.command_init(self.root, force=True)
+
+        self.assertEqual(blueprint.read_text(encoding="utf-8"), custom)
+        self.assertIn("docs/blueprints/01-frontend.md", result.get("skipped", []))
+
+    def test_init_reset_wipes_progress_and_config(self) -> None:
+        blueprint, config = self._check_some_items()
+
+        result = cli.command_init(self.root, force=False, reset=True)
+
+        self.assertEqual(result.exit_code, 0)
+        self.assertEqual(blueprint.read_text(encoding="utf-8").count("[x]"), 0)
+        self.assertIn("i18n = false", config.read_text(encoding="utf-8"))
+
     @unittest.skipIf(sys.platform == "win32", "bash script execution is not supported on Windows")
     def test_snapshot_command_runs_local_script(self) -> None:
         script = self.root / "snapshot"
