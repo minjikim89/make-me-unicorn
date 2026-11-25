@@ -193,7 +193,7 @@ mmu vibecheck
   # 선택:
   # with:
   #   root: "apps/web"        # 스캔할 하위 폴더
-  #   version: "==0.7.0"      # 릴리스 버전 고정
+  #   version: "==0.9.0"      # 릴리스 버전 고정
 ```
 
 ## 이런 분들을 위해 만들었습니다

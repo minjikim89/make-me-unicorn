@@ -52,7 +52,7 @@ finding with `status: "suppressed"`.
 ```json
 {
   "schema": "mmu.vibecheck/v1",
-  "tool": {"name": "mmu", "version": "0.7.0"},
+  "tool": {"name": "mmu", "version": "0.9.0"},
   "root": "/work/app",
   "scope": {"mode": "changed", "files": 3},
   "summary": {"blocking": 1, "warnings": 0, "passed": 9, "skipped": 4, "suppressed": 1},

@@ -199,7 +199,7 @@ One step in any workflow — launch-blocking findings fail the build:
   # optional:
   # with:
   #   root: "apps/web"        # subfolder to scan
-  #   version: "==0.7.0"      # pin a release
+  #   version: "==0.9.0"      # pin a release
 ```
 
 ## Personalize Your Checklist
