@@ -53,10 +53,11 @@ other pickle loads).
 ## Severity policy
 
 `P0` means high confidence and launch-blocking: an exact pattern (a key signature, interpolated
-SQL at a query call, request data in `eval`) or an absence backed by strong evidence (the app
-verifies passwords itself and has no reset flow anywhere). Heuristics about something being
-absent (rate limiting, error monitoring, webhook idempotency, auth on an LLM or admin route) are
-`P1`. Comments never count as evidence that a safeguard exists.
+SQL at a query call, request data in `eval`, a webhook handler that trusts an unverified event).
+Findings about something being absent from the project (password reset flow, rate limiting,
+error monitoring, webhook idempotency, auth on an LLM or admin route) are `P1`: they describe a
+gap, not an incident, and must not block every commit in a project that has not built the
+feature yet. Comments never count as evidence that a safeguard exists.
 
 Measured precision and recall: [benchmark.md](benchmark.md).
 

@@ -33,7 +33,7 @@ from mmu_cli.vibecheck.engine import (
 register(Rule(
     id="password-reset",
     title="Password login without a reset flow",
-    severity="P0",
+    severity="P1",
     summary="Users sign in with a password but nothing lets them recover a forgotten one, which locks real users out from day one.",
     fix=(
         "Add a forgot-password flow next to the login code: a request endpoint that emails a single-use, expiring "
@@ -220,12 +220,12 @@ def check_password_reset(root: Path, code_files: list[Path], config_files: list[
         if m:
             evidence.append((path, m.start()))
     if not evidence:
-        return Finding("password-reset", "P0", "skip", "no password-based login detected")
+        return Finding("password-reset", "P1", "skip", "no password-based login detected")
     if has_reset:
-        return Finding("password-reset", "P0", "ok", "password login and a reset flow were both found")
+        return Finding("password-reset", "P1", "ok", "password login and a reset flow were both found")
     managed = _managed_auth(root)
     if managed:
-        return Finding("password-reset", "P0", "skip", f"auth is handled by {managed}, which provides password recovery")
+        return Finding("password-reset", "P1", "skip", f"auth is handled by {managed}, which provides password recovery")
     locations: list[Location] = []
     for path, pos in evidence[:5]:
         locations.append(loc_at(path, root, code(path), pos))
@@ -235,8 +235,8 @@ def check_password_reset(root: Path, code_files: list[Path], config_files: list[
         framework = "supabase"
     return Finding(
         "password-reset",
-        "P0",
-        "fail",
+        "P1",
+        "warn",
         f"password login in {len(evidence)} file(s) but no forgot/reset-password flow anywhere in the project",
         locations=locations,
         framework=framework,

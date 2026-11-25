@@ -47,13 +47,13 @@ severity = "P0"
 id = "B7"
 rule = "password-reset"
 path = "app/routers/auth.py"
-severity = "P0"
+severity = "P1"
 
 [[expect]]  # second anchor of the same finding: where the password is verified
 id = "B7"
 rule = "password-reset"
 path = "app/security.py"
-severity = "P0"
+severity = "P1"
 
 [[expect]]
 id = "B9"

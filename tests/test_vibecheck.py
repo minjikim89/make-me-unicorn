@@ -67,12 +67,14 @@ class SecretCheckTests(unittest.TestCase):
 class PasswordResetTests(unittest.TestCase):
     LOGIN = "export async function login(e, p) {\n  return supabase.auth.signInWithPassword({ email: e, password: p });\n}\n"
 
-    def test_fails_when_password_login_without_reset(self):
+    def test_warns_when_password_login_without_reset(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             write(root, "src/auth/login.ts", self.LOGIN)
             finding = vibecheck.check_password_reset(root, [root / "src/auth/login.ts"])
-            self.assertEqual(finding.status, "fail")
+            # a missing feature, not an incident: it must never block a commit
+            self.assertEqual((finding.severity, finding.status), ("P1", "warn"))
+            self.assertEqual(vibecheck.get_rule("password-reset").severity, "P1")
             self.assertEqual([(loc.path, loc.line) for loc in finding.locations], [("src/auth/login.ts", 2)])
 
     def test_ok_when_reset_present_anywhere(self):
@@ -94,7 +96,7 @@ class PasswordResetTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             write(root, "src/auth/login.ts", "// TODO: forgot password flow\n" + self.LOGIN)
-            self.assertEqual(vibecheck.check_password_reset(root, [root / "src/auth/login.ts"]).status, "fail")
+            self.assertEqual(vibecheck.check_password_reset(root, [root / "src/auth/login.ts"]).status, "warn")
 
     def test_skips_auth_named_files_without_password_login(self):
         with tempfile.TemporaryDirectory() as tmp:

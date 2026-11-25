@@ -73,7 +73,7 @@ severity = "P1"
 rule = "password-reset"
 path = "app/login/page.tsx"
 line = 13
-severity = "P0"
+severity = "P1"
 
 [[expect]]
 rule = "error-monitoring"

@@ -22,10 +22,10 @@ Scoring is strict:
 
 | Metric | Value |
 |--------|-------|
-| P0 precision | 100% (29 true positives, 0 false positives) |
-| P0 recall | 100% (29 of 29 expected P0 findings) |
-| P1 precision | 97% (33 true positives, 1 false positives) |
-| P1 recall | 100% (33 of 33 expected P1 findings) |
+| P0 precision | 100% (26 true positives, 0 false positives) |
+| P0 recall | 100% (26 of 26 expected P0 findings) |
+| P1 precision | 97% (36 true positives, 1 false positives) |
+| P1 recall | 100% (36 of 36 expected P1 findings) |
 | Planted issues detected | 52 of 55 (95%), including issues no rule targets |
 | `must_not` entries reported | 0 |
 
@@ -119,10 +119,10 @@ Triage was done by one reviewer reading the code each P0 points at. A match is c
 
 | Result | Before | After |
 |--------|--------|-------|
-| Repositories with at least one P0 | 14 of 20 | 8 of 20 |
-| P0 findings | 16 | 10 |
+| Repositories with at least one P0 | 14 of 20 | 4 of 20 |
+| P0 findings | 16 | 4 |
 | P0 findings judged wrong on review | 11 | 0 |
-| P0 findings where the code matches the rule | 5 | 10 |
+| P0 findings where the code matches the rule | 5 | 4 |
 
 | Repository | Commit | Files scanned | P0 before → after | P1 before → after | Scan time |
 |------------|--------|---------------|-------------------|-------------------|-----------|
@@ -131,19 +131,19 @@ Triage was done by one reviewer reading the code each P0 points at. A match is c
 | `expressjs/express` | `43fca52d28` | 152 | 0 → 1 | 3 → 0 | 80 ms |
 | `fastapi-users/fastapi-users` | `e9c57ff7ff` | 93 | 1 → 0 | 2 → 3 | 100 ms |
 | `fastapi/full-stack-fastapi-template` | `77e550a73b` | 187 | 1 → 0 | 2 → 2 | 130 ms |
-| `gothinkster/node-express-realworld-example-app` | `30b68e1e88` | 52 | 1 → 2 | 2 → 3 | 19 ms |
+| `gothinkster/node-express-realworld-example-app` | `30b68e1e88` | 52 | 1 → 1 | 2 → 4 | 19 ms |
 | `hagopj13/node-express-boilerplate` | `179ae84efe` | 62 | 0 → 0 | 1 → 2 | 26 ms |
 | `honojs/examples` | `3b0b62875a` | 76 | 1 → 0 | 1 → 2 | 191 ms |
 | `ixartz/SaaS-Boilerplate` | `e3952a7ed5` | 107 | 2 → 0 | 1 → 0 | 60 ms |
 | `KolbySisk/next-supabase-stripe-starter` | `9839fd47d2` | 62 | 1 → 0 | 2 → 2 | 36 ms |
 | `mckaywrigley/chatbot-ui` | `81328b61d2` | 271 | 0 → 0 | 1 → 1 | 170 ms |
 | `miguelgrinberg/microblog` | `a975ef6486` | 58 | 0 → 1 | 2 → 2 | 37 ms |
-| `nextjs/saas-starter` | `6e33e58b1e` | 47 | 2 → 1 | 2 → 2 | 38 ms |
-| `nsidnev/fastapi-realworld-example-app` | `029eb7781c` | 102 | 1 → 1 | 2 → 2 | 50 ms |
-| `pallets/flask` | `49943b5a94` | 114 | 1 → 2 | 3 → 2 | 251 ms |
+| `nextjs/saas-starter` | `6e33e58b1e` | 47 | 2 → 0 | 2 → 3 | 38 ms |
+| `nsidnev/fastapi-realworld-example-app` | `029eb7781c` | 102 | 1 → 0 | 2 → 3 | 50 ms |
+| `pallets/flask` | `49943b5a94` | 114 | 1 → 1 | 3 → 3 | 251 ms |
 | `sahat/hackathon-starter` | `42fb2beaa5` | 88 | 1 → 0 | 1 → 1 | 154 ms |
-| `umami-software/umami` | `dbb8d606fb` | 1699 | 1 → 1 | 2 → 1 | 1089 ms |
-| `vercel/ai-chatbot` | `a8989b522f` | 163 | 1 → 1 | 0 → 1 | 99 ms |
+| `umami-software/umami` | `dbb8d606fb` | 1699 | 1 → 0 | 2 → 2 | 1089 ms |
+| `vercel/ai-chatbot` | `a8989b522f` | 163 | 1 → 0 | 0 → 2 | 99 ms |
 | `vercel/nextjs-subscription-payments` | `bdd0813206` | 63 | 0 → 0 | 2 → 2 | 37 ms |
 | `w3cj/hono-open-api-starter` | `0d5f3bf523` | 24 | 0 → 0 | 2 → 2 | 37 ms |
 
@@ -152,19 +152,17 @@ Triage was done by one reviewer reading the code each P0 points at. A match is c
 | Repository | Finding |
 |------------|---------|
 | `expressjs/express` | matched rule `jwt-secret-default` at `examples/auth/index.js:22`, `examples/mvc/index.js:40`, `examples/session/index.js:16`, `examples/session/redis.js:20` (note 1) |
-| `gothinkster/node-express-realworld-example-app` | matched rule `password-reset` at `src/app/routes/auth/auth.service.ts:111` (note 2) |
-| `gothinkster/node-express-realworld-example-app` | 1 finding withheld pending maintainer contact |
-| `miguelgrinberg/microblog` | 1 finding withheld pending maintainer contact |
-| `nextjs/saas-starter` | matched rule `password-reset` at `app/(login)/actions.ts:76` (note 2) |
-| `nsidnev/fastapi-realworld-example-app` | matched rule `password-reset` at `app/api/routes/authentication.py:38` (note 2) |
 | `pallets/flask` | matched rule `jwt-secret-default` at `examples/tutorial/flaskr/__init__.py:11` (note 1) |
-| `pallets/flask` | matched rule `password-reset` at `examples/tutorial/flaskr/auth.py:98` (note 2) |
-| `umami-software/umami` | matched rule `password-reset` at `src/app/api/auth/login/route.ts:27` (note 2) |
-| `vercel/ai-chatbot` | matched rule `password-reset` at `app/(auth)/auth.ts:59` (note 2) |
+| `gothinkster/node-express-realworld-example-app` | 1 finding withheld |
+| `miguelgrinberg/microblog` | 1 finding withheld |
 
-Note 1: example applications shipped inside a framework repository. The session secret is a literal placeholder in sample code, which is what the rule looks for; it says nothing about the framework itself.
+Note 1: example applications shipped inside a framework repository. The session secret is a literal placeholder in intentional sample code, which is what the rule looks for; it says nothing about the framework itself.
 
-Note 2: the repository verifies passwords itself and contains no forgot/reset-password flow. For a starter, a tutorial, a spec implementation or a self-hosted tool without outbound email that is a scope decision; the rule reports it because an app built on top inherits the gap.
+### `password-reset` (P1)
+
+`password-reset` is a warning, not a blocker: a missing recovery flow is a missing feature, and a project-wide absence finding at P0 would stop every commit in a starter until the feature exists. In the "before" column it was P0.
+
+It matched in 6 of the 20 repositories: `gothinkster/node-express-realworld-example-app` (`src/app/routes/auth/auth.service.ts:111`), `nextjs/saas-starter` (`app/(login)/actions.ts:76`), `nsidnev/fastapi-realworld-example-app` (`app/api/routes/authentication.py:38`), `pallets/flask` (`examples/tutorial/flaskr/auth.py:98`), `umami-software/umami` (`src/app/api/auth/login/route.ts:27`), `vercel/ai-chatbot` (`app/(auth)/auth.ts:59`). In each the repository verifies passwords itself and contains no forgot/reset-password flow. For a starter, a tutorial, a spec implementation or a self-hosted tool without outbound email that is a scope decision; the rule reports it because an app built on top inherits the gap.
 
 ### What changed between the two columns
 
@@ -172,11 +170,11 @@ The 11 P0 findings that review judged wrong all came from three causes, each fix
 
 | Cause (before) | Findings | Rule now |
 |----------------|----------|----------|
-| `password-reset` fired on file names containing `auth`, `session`, `login` or `account` (passwordless apps, managed auth, a session model, a framework's session module, projects that do have a reset flow) | 7 | fires only when the code verifies a password itself and no reset flow exists anywhere; skips when a managed auth product owns recovery |
+| `password-reset` fired on file names containing `auth`, `session`, `login` or `account` (passwordless apps, managed auth, a session model, a framework's session module, projects that do have a reset flow) | 7 | P1; warns only when the code verifies a password itself and no reset flow exists anywhere; skips when a managed auth product owns recovery |
 | `secrets` fired on any `.env` not listed literally in `.gitignore`, whatever it held (placeholder and public values) | 2 | P0 only for a known key signature or a `service_role` JWT in a file git does not ignore; other credential-named values are a P1 (`env-not-ignored`) |
 | `webhook-idempotency` was P0 and fired on UI components in a `webhook/` folder and on handlers whose only effect is a status update | 2 | P1; handlers are routes that receive provider events; warns only for effects that are wrong when repeated |
 
-New P0 matches in the "after" column come from rules that did not exist before (`jwt-secret-default`) and from `password-reset` now pointing at the line that verifies the password instead of at file names.
+The P0 matches in the "after" column all come from a rule that did not exist before (`jwt-secret-default`). The 5 "before" P0 findings that matched their rule were `password-reset` findings, which are now P1.
 
 ### Performance
 
