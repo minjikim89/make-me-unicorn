@@ -319,6 +319,14 @@ class RealRepoTests(unittest.TestCase):
         path.write_text(f'KEY = "{FAKE_KEY}"\n', encoding="utf-8")
         return path
 
+    def _edit(self, session: str, path: Path, **extra):
+        """Tell the gate the agent edited `path` (what Claude Code sends after Edit/Write)."""
+        return _call({"hook_event_name": "PostToolUse", "tool_name": "Write", "session_id": session,
+                      "cwd": str(self.root), "tool_input": {"file_path": str(path)}, "tool_response": {}, **extra})
+
+    def _state(self) -> list[dict]:
+        return [json.loads(p.read_text(encoding="utf-8")) for p in sorted((self.root / ".git" / "mmu").glob("stop-*.json"))]
+
     def test_commit_gate_blocks_staged_secret_and_ignores_unstaged(self):
         self._write_secret()
         payload = {"hook_event_name": "PreToolUse", "tool_name": "Bash", "cwd": str(self.root),
@@ -335,7 +343,9 @@ class RealRepoTests(unittest.TestCase):
         self.assertIn("scope: staged", err)
 
     def test_stop_gate_blocks_then_respects_guards(self):
-        self._write_secret()
+        bad = self._write_secret()
+        for session in ("s1", "s2", "s3"):
+            self._edit(session, bad)
         payload = {"hook_event_name": "Stop", "session_id": "s1", "cwd": str(self.root), "stop_hook_active": False}
         code, out, _ = _call(payload)
         self.assertEqual(code, 0)
@@ -351,7 +361,7 @@ class RealRepoTests(unittest.TestCase):
         self.assertEqual(code, 0)
         self.assertNotIn("decision", out)
         self.assertIn("letting go", out["systemMessage"])
-        self.assertEqual(len(list((self.root / ".git" / "mmu").glob("stop-*.json"))), 1)
+        self.assertEqual(len(list((self.root / ".git" / "mmu").glob("stop-*.json"))), 3)
         self.assertEqual(subprocess.run(["git", "status", "--porcelain"], cwd=str(self.root), capture_output=True,
                                         text=True).stdout.strip(), "?? app/")
         # another session has its own budget; MMU_STOP_MAX / disable switches are honoured
@@ -361,7 +371,57 @@ class RealRepoTests(unittest.TestCase):
         # a clean scan resets the counter
         (self.root / "app" / "pay.py").write_text('import os\nKEY = os.environ["STRIPE_KEY"]\n', encoding="utf-8")
         self.assertIsNone(_call(payload)[1])
-        self.assertEqual(list((self.root / ".git" / "mmu").glob("stop-*.json")).__len__(), 1)  # only s2 remains
+        self.assertEqual(len(self._state()), 2)  # s1 cleared; s2 and s3 remain
+
+    def test_stop_gate_ignores_preexisting_files_the_agent_never_touched(self):
+        self._write_secret("app/legacy.py")  # uncommitted before the session, never edited by the agent
+        payload = {"hook_event_name": "Stop", "session_id": "s1", "cwd": str(self.root), "stop_hook_active": False}
+        with mock.patch.object(hooks, "run_scan", side_effect=AssertionError("no recorded edits: must not scan")):
+            self.assertEqual(_call(payload), (0, None, ""))
+        # the agent edits an unrelated, clean file: still allowed, and the state is cleared
+        (self.root / "README.md").write_text("x\nmore\n", encoding="utf-8")
+        self._edit("s1", self.root / "README.md")
+        self.assertEqual(self._state()[0]["edited"], ["README.md"])
+        self.assertEqual(_call(payload), (0, None, ""))
+        self.assertEqual(self._state(), [])
+        # Codex follows the same rule
+        self.assertEqual(_call({**payload, "session_id": "c1", "turn_id": "t"}), (0, None, ""))
+
+    def test_stop_gate_blocks_only_on_edited_files_and_clears_when_fixed(self):
+        self._write_secret("app/legacy.py")
+        bad = self._write_secret("app/pay.py")
+        self._edit("s1", bad)
+        self.assertEqual(self._state()[0]["edited"], ["app/pay.py"])
+        payload = {"hook_event_name": "Stop", "session_id": "s1", "cwd": str(self.root), "stop_hook_active": False}
+        code, out, _ = _call(payload)
+        self.assertEqual((code, out["decision"]), (0, "block"))
+        self.assertIn("1 launch-blocking issue(s) in files edited in this session", out["reason"])
+        self.assertIn("P0 secrets app/pay.py:1", out["reason"])
+        self.assertNotIn("legacy.py", out["reason"])
+        self.assertIn("mmu-ignore[secrets]: <reason>", out["reason"])
+        self.assertIn("explicitly asked to defer", out["reason"])
+        self.assertIn("list these P0s in your final message and stop", out["reason"])
+        self.assertNotIn(FAKE_KEY, out["reason"])
+        self.assertEqual(self._state()[0]["blocks"], 1)
+        # fixed: allowed, state cleared, and the untouched legacy file never blocks
+        bad.write_text('import os\nKEY = os.environ["STRIPE_KEY"]\n', encoding="utf-8")
+        self._edit("s1", bad)
+        self.assertEqual(self._state()[0]["blocks"], 1, "recording an edit keeps the block counter")
+        self.assertEqual(_call(payload), (0, None, ""))
+        self.assertEqual(self._state(), [])
+        self.assertEqual(_call(payload), (0, None, ""))
+
+    def test_edits_are_recorded_for_non_code_files_and_apply_patch(self):
+        (self.root / "notes.md").write_text("n\n", encoding="utf-8")
+        with mock.patch.object(hooks, "run_scan", side_effect=AssertionError("must not scan")):
+            self._edit("s1", self.root / "notes.md")
+        patch = "*** Begin Patch\n*** Add File: app/new.py\n+x = 1\n*** End Patch"
+        _call({"hook_event_name": "PostToolUse", "tool_name": "apply_patch", "session_id": "s1", "cwd": str(self.root),
+               "tool_input": {"command": patch}})
+        self.assertEqual(self._state()[0]["edited"], ["app/new.py", "notes.md"])
+        outside = Path(tempfile.gettempdir()) / "mmu-outside.py"
+        self._edit("s2", outside)
+        self.assertEqual(len(self._state()), 1)
 
     def test_stop_gate_dialects(self):
         self._write_secret()
@@ -375,6 +435,9 @@ class RealRepoTests(unittest.TestCase):
         code, out, _ = _call({"hook_event_name": "AfterAgent", "session_id": "g1", "cwd": str(self.root),
                               "stop_hook_active": False})
         self.assertEqual((code, out["decision"]), (0, "deny"))
+        # Cursor and Gemini have no edit tracking: every uncommitted change counts
+        self.assertIn("in uncommitted changes", out["reason"])
+        self._edit("x1", self.root / "app" / "pay.py", turn_id="t")
         code, out, _ = _call({"hook_event_name": "Stop", "session_id": "x1", "turn_id": "t", "cwd": str(self.root)})
         self.assertEqual(out["decision"], "block")
 
