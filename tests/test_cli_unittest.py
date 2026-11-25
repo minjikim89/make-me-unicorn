@@ -66,6 +66,109 @@ class CLITestCase(unittest.TestCase):
         self.assertIn("README.md", result.get("skipped", []))
         self.assertEqual((self.root / "README.md").read_text(encoding="utf-8"), "custom-readme\n")
 
+    def _check_some_items(self) -> tuple[Path, Path]:
+        cli.command_init(self.root, force=False)
+        for num in (1, 2, 3):
+            self.assertEqual(cli.command_check("frontend", num, self.root, force_state="check").exit_code, 0)
+        gates = self.root / "docs/checklists/from_scratch.md"
+        gates.write_text(gates.read_text(encoding="utf-8").replace("- [ ]", "- [x]", 1), encoding="utf-8")
+        config = self.root / ".mmu/config.toml"
+        config.write_text(config.read_text(encoding="utf-8").replace("i18n = false", "i18n = true"), encoding="utf-8")
+        return self.root / "docs/blueprints/01-frontend.md", config
+
+    def test_init_force_keeps_checked_items_and_config(self) -> None:
+        blueprint, config = self._check_some_items()
+        config_before = config.read_text(encoding="utf-8")
+
+        result = cli.command_init(self.root, force=True)
+
+        self.assertEqual(result.exit_code, 0)
+        self.assertEqual(blueprint.read_text(encoding="utf-8").count("[x]"), 3)
+        self.assertEqual((self.root / "docs/checklists/from_scratch.md").read_text(encoding="utf-8").count("[x]"), 1)
+        self.assertEqual(config.read_text(encoding="utf-8"), config_before)
+        self.assertIn(".mmu/config.toml", result.get("skipped", []))
+
+    def test_init_force_keeps_edited_docs(self) -> None:
+        cli.command_init(self.root, force=False)
+        self.write("README.md", "my project\n")
+        self.write("docs/core/product.md", "# Product\nreal notes\n")
+
+        cli.command_init(self.root, force=True)
+
+        self.assertEqual((self.root / "README.md").read_text(encoding="utf-8"), "my project\n")
+        self.assertEqual((self.root / "docs/core/product.md").read_text(encoding="utf-8"), "# Product\nreal notes\n")
+
+    def test_init_force_keeps_file_with_checked_custom_item(self) -> None:
+        blueprint, _ = self._check_some_items()
+        custom = blueprint.read_text(encoding="utf-8") + "- [x] My own launch item\n"
+        blueprint.write_text(custom, encoding="utf-8")
+
+        result = cli.command_init(self.root, force=True)
+
+        self.assertEqual(blueprint.read_text(encoding="utf-8"), custom)
+        self.assertIn("docs/blueprints/01-frontend.md", result.get("skipped", []))
+
+    def test_init_reset_wipes_progress_and_config(self) -> None:
+        blueprint, config = self._check_some_items()
+
+        result = cli.command_init(self.root, force=False, reset=True)
+
+        self.assertEqual(result.exit_code, 0)
+        self.assertEqual(blueprint.read_text(encoding="utf-8").count("[x]"), 0)
+        self.assertIn("i18n = false", config.read_text(encoding="utf-8"))
+
+    def test_check_requires_exact_blueprint_name(self) -> None:
+        cli.command_init(self.root, force=False)
+        blueprints = self.root / "docs/blueprints"
+        before = {p.name: p.read_text(encoding="utf-8") for p in blueprints.glob("*.md")}
+
+        for name in ("e", "latest", "fron", ""):
+            for state in ("check", "uncheck"):
+                result = cli.command_check(name, 1, self.root, force_state=state)
+                self.assertEqual(result.exit_code, 1, name)
+                self.assertIn("Unknown blueprint", result["messages"][0])
+        self.assertIn("frontend", cli.command_check("fron", 1, self.root, force_state="check")["messages"][1])
+        self.assertEqual(before, {p.name: p.read_text(encoding="utf-8") for p in blueprints.glob("*.md")})
+
+        for name in ("frontend", "Front", "seo-marketing", "SEO & Marketing", "a11y", "01-frontend"):
+            self.assertEqual(cli.command_check(name, 1, self.root, force_state="check").exit_code, 0, name)
+
+    def test_show_reports_ambiguous_blueprint_name(self) -> None:
+        cli.command_init(self.root, force=False)
+
+        ambiguous = cli.command_show("e", self.root)
+        self.assertEqual(ambiguous.exit_code, 1)
+        self.assertIn("Ambiguous blueprint", ambiguous["messages"][0])
+        self.assertIn("frontend", ambiguous["messages"][1])
+
+        self.assertEqual(cli.command_show("fron", self.root).get("blueprint"), "01-frontend.md")
+        self.assertEqual(cli.command_show("billing", self.root).get("blueprint"), "04-billing.md")
+        self.assertEqual(cli.command_show("zzz", self.root).exit_code, 1)
+
+    def test_badge_color_defined_for_every_stage(self) -> None:
+        from mmu_cli import display
+
+        for _threshold, stage, _art in display.UNICORN_STAGES:
+            self.assertIn(stage, display.STAGE_COLORS)
+        stage, _ = display.unicorn_art(0.65)
+        self.assertEqual(stage, "young")
+        self.assertIn("9c27b0", display.render_badge_markdown(65, stage))
+        self.assertIn("#9c27b0", display.render_badge_svg(65, stage))
+
+    def test_next_in_uninitialized_directory_points_to_init(self) -> None:
+        result = cli.command_next(self.root)
+        text = "\n".join(result["messages"])
+        self.assertEqual(result.exit_code, 0)
+        self.assertFalse(result["initialized"])
+        self.assertNotIn("you're done", text)
+        self.assertIn("mmu init", text)
+        self.assertIn("mmu vibecheck", text)
+
+        cli.command_init(self.root, force=False)
+        after = cli.command_next(self.root)
+        self.assertTrue(after["initialized"])
+        self.assertNotIn("isn't initialized", "\n".join(after["messages"]))
+
     @unittest.skipIf(sys.platform == "win32", "bash script execution is not supported on Windows")
     def test_snapshot_command_runs_local_script(self) -> None:
         script = self.root / "snapshot"
@@ -80,6 +183,17 @@ class CLITestCase(unittest.TestCase):
         result = cli.command_snapshot(self.root, target=".", output="SNAPSHOT.md", no_md=True)
         self.assertEqual(result.exit_code, 0)
         self.assertIn("snapshot-ok", "\n".join(result.get("messages", [])))
+
+    def test_snapshot_without_script_explains_repo_checkout_requirement(self) -> None:
+        from unittest import mock
+
+        elsewhere = self.root / "site-packages" / "mmu_cli" / "cli.py"
+        with mock.patch.object(cli, "__file__", str(elsewhere)):
+            result = cli.command_snapshot(self.root, target=".", output="SNAPSHOT.md", no_md=True)
+        self.assertEqual(result.exit_code, 2)
+        text = "\n".join(result["messages"])
+        self.assertIn("repo checkout", text)
+        self.assertIn("./snapshot", text)
 
     def test_gate_parses_flexible_heading_and_indented_checklist(self) -> None:
         self.write(

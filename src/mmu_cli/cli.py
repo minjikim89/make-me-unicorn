@@ -237,7 +237,16 @@ def parse_args() -> argparse.Namespace:
     p_init = sub.add_parser("init", help="Initialize baseline docs and checklists")
     p_init.add_argument("--json", action="store_true", help="Output structured JSON")
     p_init.add_argument("--root", default=".", help="Project root path")
-    p_init.add_argument("--force", action="store_true", help="Overwrite existing files")
+    p_init.add_argument(
+        "--force",
+        action="store_true",
+        help="Refresh existing checklist templates; checked items, your docs and .mmu/config.toml are kept",
+    )
+    p_init.add_argument(
+        "--reset",
+        action="store_true",
+        help="Overwrite everything, wiping checklist progress and regenerating .mmu/config.toml",
+    )
     p_init.add_argument("--interactive", action="store_true", help="LLM-guided project setup (requires anthropic SDK)")
 
     p_start = sub.add_parser("start", help="Start a focused mode session")
@@ -301,6 +310,7 @@ def parse_args() -> argparse.Namespace:
     p_scan = sub.add_parser("scan", help="Auto-detect tech stack and pre-check blueprint items")
     p_scan.add_argument("--json", action="store_true", help="Output structured JSON")
     p_scan.add_argument("--root", default=".", help="Project root path")
+    p_scan.add_argument("--dry-run", action="store_true", help="Show what would be auto-checked without writing")
 
     p_generate = sub.add_parser("generate", help="Generate or update a doc using LLM")
     p_generate.add_argument("doc", help="Doc to generate (strategy, product, pricing, architecture, ux)")
@@ -1025,7 +1035,7 @@ def _generate_stack_config(root: Path) -> str:
     lines = [
         "# MMU Feature Config — controls which checklist sections apply to your project.",
         "# Set to false to skip sections that don't apply. This makes your score accurate.",
-        "# Regenerate with: mmu init --force",
+        "# Regenerate with: delete this file and run mmu init (or mmu init --reset to start over)",
         "",
         "[features]",
         f"billing = true{_hint(billing_hint, 'detected')}",
@@ -1058,26 +1068,98 @@ def _hint(detected: bool, label: str) -> str:
     return f"  # {label}" if detected else ""
 
 
-def command_init(root: Path, force: bool) -> Result:
+_CHECKED_ITEM_RE = re.compile(r"^\s*-\s*\[x\]\s+(.+)$", re.IGNORECASE)
+_TODO_ITEM_RE = re.compile(r"^(\s*-\s*)\[\s\](\s+)(.+)$")
+_ITEM_PRIORITY_RE = re.compile(r"^\[P[012]\]\s*", re.IGNORECASE)
+
+
+_CHECKLIST_PREFIXES = ("docs/blueprints/", "docs/checklists/")
+
+
+def _item_key(text: str) -> str:
+    return _ITEM_PRIORITY_RE.sub("", text.strip()).strip()
+
+
+def _carry_over_checked(existing: str, template: str) -> tuple[str | None, int]:
+    """Return (*template* with the items checked in *existing* re-checked, count).
+
+    The text is None when *existing* has a checked item the template lacks,
+    which means overwriting would lose progress.
+    """
+    checked: set[str] = set()
+    for line in existing.splitlines():
+        m = _CHECKED_ITEM_RE.match(line)
+        if m:
+            checked.add(_item_key(m.group(1)))
+    if not checked:
+        return template, 0
+
+    carried: set[str] = set()
+    out: list[str] = []
+    for line in template.splitlines():
+        m = _TODO_ITEM_RE.match(line)
+        if m and _item_key(m.group(3)) in checked:
+            carried.add(_item_key(m.group(3)))
+            line = f"{m.group(1)}[x]{m.group(2)}{m.group(3)}"
+        else:
+            done = _CHECKED_ITEM_RE.match(line)
+            if done:
+                carried.add(_item_key(done.group(1)))
+        out.append(line)
+    if checked - carried:
+        return None, 0
+    merged = "\n".join(out)
+    if template.endswith("\n"):
+        merged += "\n"
+    return merged, len(checked)
+
+
+def command_init(root: Path, force: bool, reset: bool = False) -> Result:
+    """Create the scaffold.
+
+    force: refresh existing checklist templates, carrying checked items over;
+        other existing docs and .mmu/config.toml are kept.
+    reset: overwrite everything, including checked items and .mmu/config.toml.
+    """
+    force = force or reset
     created: list[str] = []
     skipped: list[str] = []
     overwritten: list[str] = []
     messages = [f"Init workspace: {root}"]
 
-    for rel, content in INIT_TEMPLATES.items():
-        path = root / rel
+    def place(rel: str, path: Path, content: str) -> None:
         existed_before = path.exists()
         if existed_before and not force:
             skipped.append(rel)
             messages.append(f"  [skip] {rel} (already exists)")
-            continue
+            return
+        note = ""
+        if existed_before and not reset:
+            existing = read_text(path) or ""
+            if not rel.startswith(_CHECKLIST_PREFIXES):
+                # Free-form docs hold the user's own writing; never replace an edited one.
+                skipped.append(rel)
+                state = "unchanged" if existing == content else "edited; --reset overwrites"
+                messages.append(f"  [keep] {rel} ({state})")
+                return
+            merged, kept = _carry_over_checked(existing, content)
+            if merged is None:
+                skipped.append(rel)
+                messages.append(f"  [keep] {rel} (has checked items not in the template; --reset overwrites)")
+                return
+            content = merged
+            if kept:
+                note = f" (kept {kept} checked item{'s' if kept != 1 else ''})"
         write_text(path, content)
-        if existed_before and force:
+        if existed_before:
             overwritten.append(rel)
-            messages.append(f"  [overwrite] {rel}")
+            messages.append(f"  [overwrite] {rel}{note}")
         else:
             created.append(rel)
             messages.append(f"  [create] {rel}")
+
+    for rel, content in INIT_TEMPLATES.items():
+        place(rel, root / rel, content)
 
     # Copy blueprint files from MMU package
     mmu_root = _find_mmu_root()
@@ -1085,36 +1167,27 @@ def command_init(root: Path, force: bool) -> Result:
         bp_src = mmu_root / "docs" / "blueprints"
         bp_dst = root / "docs" / "blueprints"
         for bp_file in sorted(bp_src.glob("*.md")):
-            rel = f"docs/blueprints/{bp_file.name}"
-            dst = bp_dst / bp_file.name
-            existed_before = dst.exists()
-            if existed_before and not force:
-                skipped.append(rel)
-                messages.append(f"  [skip] {rel} (already exists)")
-                continue
-            dst.parent.mkdir(parents=True, exist_ok=True)
-            dst.write_text(bp_file.read_text(encoding="utf-8"), encoding="utf-8")
-            if existed_before and force:
-                overwritten.append(rel)
-                messages.append(f"  [overwrite] {rel}")
-            else:
-                created.append(rel)
-                messages.append(f"  [create] {rel}")
+            place(f"docs/blueprints/{bp_file.name}", bp_dst / bp_file.name, bp_file.read_text(encoding="utf-8"))
     else:
         messages.append("  [warn] Blueprint source not found — run from MMU repo or install from PyPI")
 
-    # Generate feature config if it doesn't exist (or force)
+    # Generate feature config if it doesn't exist; user edits survive --force.
     config_path = root / ".mmu" / "config.toml"
-    if not config_path.exists() or force:
+    rel = ".mmu/config.toml"
+    config_existed = config_path.exists()
+    if not config_existed or reset:
         config_content = _generate_stack_config(root)
         config_path.parent.mkdir(parents=True, exist_ok=True)
         config_path.write_text(config_content, encoding="utf-8")
-        rel = ".mmu/config.toml"
-        if config_path.exists() and not force:
-            pass  # already counted
+        if config_existed:
+            overwritten.append(rel)
+            messages.append(f"  [overwrite] {rel}")
         else:
             created.append(rel)
             messages.append(f"  [create] {rel}")
+    elif force:
+        skipped.append(rel)
+        messages.append(f"  [keep] {rel} (--reset regenerates it)")
 
     if created or overwritten:
         messages.append("Init result: workspace scaffold ready")
@@ -1397,10 +1470,11 @@ def command_snapshot(root: Path, target: str, output: str, no_md: bool) -> Resul
     script = next((p for p in candidates if p.is_file()), None)
     if script is None:
         return Result(
-            exit_code=1,
+            exit_code=2,
             messages=[
-                "Snapshot script not found.",
-                "Expected one of: snapshot or scripts/snapshot.sh",
+                "mmu snapshot is not available here: the snapshot script is not shipped in the PyPI package.",
+                "It only works from a make-me-unicorn repo checkout that contains ./snapshot",
+                f"(looked in {root}). Clone the repo and run it there, or pass --root <checkout>.",
             ],
         )
 
@@ -1424,11 +1498,21 @@ def command_snapshot(root: Path, target: str, output: str, no_md: bool) -> Resul
 def command_show(blueprint_name: str, root: Path) -> Result:
     from mmu_cli.display import (
         BLUEPRINT_NAMES,
+        match_blueprints,
         render_blueprint_detail,
-        resolve_blueprint,
     )
 
-    filename = resolve_blueprint(blueprint_name)
+    matches = match_blueprints(blueprint_name)
+    if len(matches) > 1:
+        candidates = ", ".join(BLUEPRINT_NAMES[m].lower() for m in matches)
+        return Result(
+            exit_code=1,
+            messages=[
+                f"Ambiguous blueprint: {blueprint_name}",
+                f"Matches: {candidates}",
+            ],
+        )
+    filename = matches[0] if matches else None
     if not filename:
         available = ", ".join(
             label.lower() for label in BLUEPRINT_NAMES.values()
@@ -1457,16 +1541,28 @@ def command_show(blueprint_name: str, root: Path) -> Result:
     return Result(exit_code=0, blueprint=filename, messages=[detail])
 
 
+def _blueprint_key(label: str) -> str:
+    return label.lower().replace(" & ", "-").replace(" ", "-")
+
+
 def command_check(blueprint_name: str, item_num: int, root: Path, *, force_state: str | None = None) -> Result:
     """Check/uncheck a blueprint item.
 
     force_state: "check" = always mark [x], "uncheck" = always mark [ ], None = toggle.
     """
-    from mmu_cli.display import BLUEPRINT_NAMES, resolve_blueprint
+    from mmu_cli.display import BLUEPRINT_NAMES, match_blueprints, resolve_blueprint
 
-    filename = resolve_blueprint(blueprint_name)
+    # Writing commands take an exact name or alias only: a partial match could
+    # silently modify a different blueprint.
+    filename = resolve_blueprint(blueprint_name, exact=True)
     if not filename:
-        return Result(exit_code=1, messages=[f"Unknown blueprint: {blueprint_name}"])
+        messages = [f"Unknown blueprint: {blueprint_name}"]
+        candidates = match_blueprints(blueprint_name)
+        if candidates:
+            messages.append("Did you mean: " + ", ".join(_blueprint_key(BLUEPRINT_NAMES[c]) for c in candidates) + "?")
+        else:
+            messages.append("Available: " + ", ".join(_blueprint_key(label) for label in BLUEPRINT_NAMES.values()))
+        return Result(exit_code=1, messages=messages)
 
     label = BLUEPRINT_NAMES[filename]
     bp_path = root / "docs" / "blueprints" / filename
@@ -1558,7 +1654,7 @@ def command_check(blueprint_name: str, item_num: int, root: Path, *, force_state
     return Result(exit_code=0, action=action, item=item_text, messages=[msg])
 
 
-def command_scan(root: Path) -> Result:
+def command_scan(root: Path, dry_run: bool = False) -> Result:
     from mmu_cli.display import (
         BLUEPRINT_NAMES,
         bold,
@@ -1574,9 +1670,10 @@ def command_scan(root: Path) -> Result:
     from mmu_cli.scan import run_scan
 
     flags = load_feature_flags(root)
-    result = run_scan(root, flags)
+    result = run_scan(root, flags, dry_run=dry_run)
     tech = result["tech_stack"]
     checked = result["checked_count"]
+    checked_items = result["checked_items"]
     total_new = result["total_newly_checked"]
 
     lines: list[str] = []
@@ -1599,7 +1696,15 @@ def command_scan(root: Path) -> Result:
 
     # Blueprint updates
     lines.append(dim("  ─" * 28))
-    if checked:
+    if checked and dry_run:
+        lines.append(bold(f"  📝  Dry run — would auto-check {total_new} items across {len(checked)} blueprints:"))
+        lines.append("")
+        for bp_file, count in sorted(checked.items()):
+            label = BLUEPRINT_NAMES.get(bp_file, bp_file)
+            lines.append(f"    {green('+')} {label}: {bold(str(count))} items")
+            for item in checked_items.get(bp_file, []):
+                lines.append(f"        {dim('- ' + item)}")
+    elif checked:
         lines.append(bold(f"  📝  Auto-checked {total_new} items across {len(checked)} blueprints:"))
         lines.append("")
         for bp_file, count in sorted(checked.items()):
@@ -1617,14 +1722,17 @@ def command_scan(root: Path) -> Result:
         lines.append("")
         lines.append(dim("  ─" * 28))
         skip_note = dim(f"  [{bp_skipped} skipped]") if bp_skipped > 0 else ""
-        lines.append(f"  {bold('Updated totals:')}  {progress_bar(bp_done, bp_total)}{skip_note}")
+        totals_label = "Current totals (unchanged):" if dry_run else "Updated totals:"
+        lines.append(f"  {bold(totals_label)}  {progress_bar(bp_done, bp_total)}{skip_note}")
         lines.append("")
         for label, d, t, _s in blueprints:
             lines.append(f"    {label:<18} {mini_bar(d, t)}")
         lines.append("")
 
     lines.append(dim("  ─" * 28))
-    if total_new > 0:
+    if total_new > 0 and dry_run:
+        lines.append(f"  {dim('Dry run: nothing was written. Run')} {cyan('mmu scan')} {dim('to apply.')}")
+    elif total_new > 0:
         lines.append(f"  {magenta('✨')} Scan complete! {bold(str(total_new))} items auto-checked")
         lines.append(f"  {dim('Review with:')} {cyan('mmu show <blueprint>')} {dim('— edit with:')} {cyan('mmu check/uncheck <blueprint> <#>')}")
     elif blueprints:
@@ -1640,6 +1748,8 @@ def command_scan(root: Path) -> Result:
         tech_stack=tech,
         newly_checked=total_new,
         checked_by_blueprint=checked,
+        checked_items=checked_items,
+        dry_run=dry_run,
         messages=[dashboard],
     )
 
@@ -1672,13 +1782,14 @@ def command_status(root: Path, why: bool = False) -> Result:
 
 
 def command_next(root: Path, count: int = 3) -> Result:
-    from mmu_cli.display import render_next_actions
+    from mmu_cli.display import has_blueprints, render_next_actions
 
     flags = load_feature_flags(root)
     output = render_next_actions(root, flags, count)
 
     return Result(
         exit_code=0,
+        initialized=has_blueprints(root),
         messages=[output],
     )
 
@@ -1728,6 +1839,17 @@ def command_validate(
             print("Aborted.")
             return 1
 
+    if limit > 0:
+        import importlib.util
+
+        missing = [mod for mod in ("requests", "vaderSentiment") if importlib.util.find_spec(mod) is None]
+        if missing:
+            sys.stderr.write(
+                f"\n  mmu validate needs optional dependencies that are not installed: {', '.join(missing)}\n"
+                "  Install them with: pip install 'make-me-unicorn[validate]'\n"
+            )
+            return 2
+
     hits, fetch_errors = fetch_threads(idea, limit=limit)
 
     for err in fetch_errors:
@@ -1755,19 +1877,20 @@ def command_validate(
             "sentiment": sentiment,
             "competitors": [{"name": n, "count": c} for n, c in competitors],
             "llm_report": llm_report,
+            "errors": fetch_errors,
         }
         print(json.dumps(payload, ensure_ascii=False, indent=2))
     elif output_format == "markdown":
-        print(format_markdown(idea, hits, sentiment, competitors, llm_report))
+        print(format_markdown(idea, hits, sentiment, competitors, llm_report, errors=fetch_errors))
     else:
-        print(format_text(idea, hits, sentiment, competitors, llm_report))
+        print(format_text(idea, hits, sentiment, competitors, llm_report, errors=fetch_errors))
 
     if save:
         reports_dir = root / "reports" / "validate"
         reports_dir.mkdir(parents=True, exist_ok=True)
         report_path = reports_dir / report_filename(idea)
         report_path.write_text(
-            format_markdown(idea, hits, sentiment, competitors, llm_report),
+            format_markdown(idea, hits, sentiment, competitors, llm_report, errors=fetch_errors),
             encoding="utf-8",
         )
         sys.stderr.write(f"\nSaved: {report_path}\n")
@@ -1801,7 +1924,7 @@ def main() -> int:
         if getattr(args, "interactive", False):
             result = command_init_interactive(root)
         else:
-            result = command_init(root, args.force)
+            result = command_init(root, args.force, reset=getattr(args, "reset", False))
         return render_result(result, args.json)
     if args.command == "start":
         result = command_start(args.mode, root, args.emit, args.output, args.clipboard, agent=getattr(args, "agent", False))
@@ -1837,7 +1960,7 @@ def main() -> int:
         result = command_check(args.blueprint, args.item, root, force_state="uncheck")
         return render_result(result, args.json)
     if args.command == "scan":
-        result = command_scan(root)
+        result = command_scan(root, dry_run=getattr(args, "dry_run", False))
         return render_result(result, args.json)
     if args.command == "share":
         result = command_share(root, clipboard=getattr(args, "clipboard", False))

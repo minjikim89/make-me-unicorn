@@ -194,20 +194,53 @@ BLUEPRINT_ALIASES.update({
 })
 
 
-def resolve_blueprint(name: str) -> str | None:
-    """Resolve a user-provided name to a blueprint filename, or None."""
-    key = name.lower().strip()
+def _exact_blueprint(key: str) -> str | None:
     if key in BLUEPRINT_ALIASES:
         return BLUEPRINT_ALIASES[key]
-    # Try partial match
-    for alias, fname in BLUEPRINT_ALIASES.items():
-        if key in alias or alias in key:
-            return fname
-    # Try matching against BLUEPRINT_NAMES values
     for fname, label in BLUEPRINT_NAMES.items():
-        if key in label.lower():
+        if key in (label.lower(), fname, fname[: -len(".md")]):
             return fname
     return None
+
+
+def match_blueprints(name: str) -> list[str]:
+    """Return every blueprint filename a user-provided name could mean.
+
+    An exact name/alias yields exactly one result; otherwise all partial
+    matches are returned in blueprint order.
+    """
+    key = name.lower().strip()
+    if not key:
+        return []
+    exact = _exact_blueprint(key)
+    if exact:
+        return [exact]
+    found: set[str] = set()
+    for alias, fname in BLUEPRINT_ALIASES.items():
+        if key in alias or alias in key:
+            found.add(fname)
+    for fname, label in BLUEPRINT_NAMES.items():
+        if key in label.lower():
+            found.add(fname)
+    return [fname for fname in BLUEPRINT_NAMES if fname in found]
+
+
+def has_blueprints(root: Path) -> bool:
+    """True when the project has at least one blueprint checklist (i.e. `mmu init` ran)."""
+    bp_dir = root / "docs" / "blueprints"
+    return any((bp_dir / fname).is_file() for fname in BLUEPRINT_NAMES)
+
+
+def resolve_blueprint(name: str, *, exact: bool = False) -> str | None:
+    """Resolve a user-provided name to a blueprint filename, or None.
+
+    With *exact*, only a full name or alias resolves (for commands that write).
+    Otherwise a partial match resolves when it is unambiguous.
+    """
+    if exact:
+        return _exact_blueprint(name.lower().strip())
+    matches = match_blueprints(name)
+    return matches[0] if len(matches) == 1 else None
 
 
 _PRIORITY_RE = re.compile(r"^\[P([012])\]\s*", re.IGNORECASE)
@@ -782,6 +815,12 @@ def render_next_actions(
     lines.append(dim("  ─" * 28))
     lines.append("")
 
+    if not top and not has_blueprints(root):
+        lines.append(f"  {yellow('⚠')} This project isn't initialized — there is no checklist to pick from.")
+        lines.append(f"    Run {cyan('mmu init')} to create it, or {cyan('mmu vibecheck')} (needs no init).")
+        lines.append("")
+        return "\n".join(lines)
+
     if not top:
         lines.append(f"  {green('✨')} No unchecked items — you're done!")
         lines.append("")
@@ -944,7 +983,7 @@ STAGE_COLORS = {
     "egg": "#9e9e9e",
     "hatching": "#ff9800",
     "foal": "#2196f3",
-    "young unicorn": "#9c27b0",
+    "young": "#9c27b0",
     "unicorn": "#e91e63",
     "legendary": "#ffd700",
 }

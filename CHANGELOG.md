@@ -67,6 +67,17 @@ Measured on 12 fixtures and 20 open-source apps (`docs/benchmark.md`): P0 findin
 - Plugin manifest category `productivity` → `security`; description leads with the commit gate. FAQ, Product Hunt kit, `server.json`, and the four translated READMEs updated to match.
 - CI lint and type-check now cover `hooks/`.
 
+### Fixed
+
+- `mmu init --force` no longer wipes progress: checklist templates are refreshed with checked items carried over, and edited docs and `.mmu/config.toml` are kept. Use the new `mmu init --reset` to overwrite everything.
+- `mmu check` / `mmu uncheck` accept only an exact blueprint name or alias. Partial names (`e`, `latest`) used to modify an unrelated blueprint; they now fail with a suggestion. `mmu show` still accepts an unambiguous partial name and reports ambiguous ones.
+- `mmu scan` no longer inflates the score: MMU's own scaffold (`docs/`, `prompts/`, `.mmu/`, `Unicorn.md`, `current_sprint.md`) and dependency/build directories are not evidence, markers that match almost any codebase (`G-`, `https://`, `ssl`, `logger`, `throttle`) are gone, and rules no longer tick items a marker cannot prove (forgot-password flow, CORS allowlist, webhook events). New `mmu scan --dry-run` lists what would be checked without writing.
+- Badges for the 55–75% `young` stage render purple instead of gray.
+- `mmu next` in a directory without blueprints says the project is not initialized instead of "you're done".
+- `mmu validate` without the `[validate]` extra prints the install command instead of "Check your internet connection"; when one source fails, the report, markdown and JSON output (`errors`) say the results are partial.
+- `mmu snapshot` exits `2` with an explanation when the snapshot script is absent (it is not shipped in the PyPI package).
+- Default LLM model is `claude-sonnet-5-5` (override with `MMU_MODEL`).
+
 ## [0.7.0] - 2026-06-10
 
 ### Added
