@@ -1,12 +1,15 @@
-"""MCP server exposing MMU blueprints and idea templates as agent tools.
+"""MCP server: the vibecheck launch gate, rule lookup, blueprints, and idea validation as agent tools.
 
 Imports `mcp` lazily so the package stays installable without the optional
 extra. Install with `pip install make-me-unicorn[mcp]`.
+
+Works with both majors of the MCP Python SDK: v2 (`mcp.server.MCPServer`) and
+v1 (`mcp.server.fastmcp.FastMCP`, >= 1.27). `_load_sdk` hides the difference.
 """
 
-from __future__ import annotations
-
+import json
 from pathlib import Path
+from typing import Annotated, Any
 
 
 def _resolve_repo_root(root: Path | None) -> Path:
@@ -165,33 +168,191 @@ def validate_idea(idea: str, limit: int = 20) -> dict:
     }
 
 
-def build_server(root: Path | None = None):
+INSTRUCTIONS = (
+    "Make Me Unicorn is a deterministic launch gate for code written by AI agents (no LLM, no network, no account). "
+    "Call `mmu_vibecheck` with the project's absolute path and scope=\"changed\" after you write or change webhook "
+    "handlers, auth/login/password code, payment code, Supabase migrations or RLS, CORS or rate limits, env vars or "
+    "API keys, and always before you commit, open a PR, deploy, or tell the user the work is done. "
+    "`summary.blocking` > 0 means not done: fix each P0 finding at its `locations` using its `fix`, then call the "
+    "tool again until blocking is 0. Use `mmu_explain_rule` when a finding is unclear. Do not silence a finding to "
+    "pass the gate; a real false positive takes a `mmu-ignore[<rule-id>]: <reason>` comment on the flagged line. "
+    "The blueprint and idea-validation tools are for planning, not for gating."
+)
+
+
+def package_version() -> str:
+    try:
+        from importlib.metadata import version
+
+        return version("make-me-unicorn")
+    except Exception:
+        return "0+unknown"
+
+
+def _load_sdk() -> tuple[Any, int, type[Exception]]:
+    """Return (server class, SDK major, ToolError). v2 renamed FastMCP to MCPServer and removed `mcp.server.fastmcp`."""
+    try:
+        from mcp.server import MCPServer  # type: ignore[attr-defined]
+        from mcp.server.mcpserver.exceptions import ToolError as ToolErrorV2  # type: ignore[import-not-found]
+
+        return MCPServer, 2, ToolErrorV2
+    except ImportError:
+        pass
     try:
         from mcp.server.fastmcp import FastMCP
+        from mcp.server.fastmcp.exceptions import ToolError
+
+        return FastMCP, 1, ToolError
     except ImportError as exc:
         raise ImportError(
             "MCP server requires the optional extra. Install with "
             "`pip install make-me-unicorn[mcp]`."
         ) from exc
 
+
+def sdk_major() -> int | None:
+    """Major version of the installed MCP SDK, or None when it is not installed."""
+    try:
+        return _load_sdk()[1]
+    except ImportError:
+        return None
+
+
+def _output_models() -> Any:
+    """Pydantic models for the `mmu.vibecheck/v1` document; they become the tool's output schema.
+
+    Built lazily because pydantic arrives with the `mcp` extra. Unknown keys are allowed: v1 only
+    ever adds fields, and a newer scanner must not fail validation in an older server.
+    """
+    from pydantic import BaseModel, ConfigDict, Field
+
+    class _Open(BaseModel):
+        model_config = ConfigDict(extra="allow", populate_by_name=True)
+
+    class Location(_Open):
+        path: str
+        line: int | None = None
+        end_line: int | None = None
+        snippet: str | None = None
+
+    class Finding(_Open):
+        rule_id: str
+        severity: str = Field(description="P0 blocks, P1 warns")
+        status: str = Field(description="fail (blocking), warn, suppressed, ok, skip")
+        title: str = ""
+        message: str = ""
+        locations: list[Location] = Field(default_factory=list)
+        files: list[str] = Field(default_factory=list)
+        fix: str = Field(default="", description="Concrete instructions for fixing this finding")
+        ref: str = ""
+        confidence: str = ""
+        suppression: dict[str, Any] | None = None
+        notes: list[str] = Field(default_factory=list)
+        fingerprint: str = ""
+
+    class Summary(_Open):
+        blocking: int = Field(description="P0 findings; > 0 means do not ship yet")
+        warnings: int = 0
+        passed: int = 0
+        skipped: int = 0
+        suppressed: int = 0
+
+    class VibecheckDocument(_Open):
+        schema_id: str = Field(alias="schema", description="Always mmu.vibecheck/v1")
+        tool: dict[str, Any]
+        root: str
+        scope: dict[str, Any]
+        summary: Summary
+        findings: list[Finding]
+
+    return VibecheckDocument
+
+
+def vibecheck_tool(project_root: str, scope: str = "all", format: str = "json") -> tuple[dict[str, Any], str]:
+    """Run the scan for the MCP tool. Returns (v1 document, text for the model in `format`)."""
+    from mmu_cli.vibecheck.engine import ScanError, scan
+    from mmu_cli.vibecheck.output import render_agent, to_json
+
+    target = Path(project_root).expanduser()
+    if not target.is_dir():
+        raise ValueError(f"project_root is not a directory: {project_root}")
+    if scope not in {"all", "changed", "staged"}:
+        raise ValueError(f"scope must be all, changed, or staged (got {scope!r})")
+    if format not in {"json", "agent"}:
+        raise ValueError(f"format must be json or agent (got {format!r})")
+    try:
+        result = scan(target, scope=scope)
+    except ScanError as exc:
+        raise ValueError(f"{exc.code}: {exc.message}") from None
+    document = to_json(result)
+    text = render_agent(result) if format == "agent" else json.dumps(document, ensure_ascii=False)
+    return document, text
+
+
+def explain_rule(rule_id: str) -> dict[str, Any]:
+    from mmu_cli.vibecheck.engine import ScanError, all_rules, get_rule
+
+    try:
+        return get_rule(rule_id).to_dict()
+    except ScanError:
+        known = ", ".join(rule.id for rule in all_rules())
+        raise ValueError(f"unknown rule id {rule_id!r}. Known rules: {known}") from None
+
+
+def list_rules() -> list[dict[str, Any]]:
+    from mmu_cli.vibecheck.engine import all_rules
+
+    return [
+        {"id": r.id, "title": r.title, "severity": r.severity, "summary": r.summary, "tags": list(r.tags)}
+        for r in all_rules()
+    ]
+
+
+def build_server(root: Path | None = None) -> Any:
+    server_cls, major, tool_error = _load_sdk()
+    from mcp.types import CallToolResult, TextContent, ToolAnnotations
+
+    def user_error(fn: Any, *args: Any, **kwargs: Any) -> Any:
+        # SDK v2 hides the text of unexpected exceptions from the model; a ToolError is passed through.
+        try:
+            return fn(*args, **kwargs)
+        except ValueError as exc:
+            raise tool_error(str(exc)) from None
+
     # Fail fast at startup if root is unusable, instead of letting every
     # tool call surface the same error after the client is already wired up.
     _resolve_repo_root(root)
 
-    mcp = FastMCP("make-me-unicorn")
+    version = package_version()
+    if major >= 2:
+        mcp = server_cls("make-me-unicorn", instructions=INSTRUCTIONS, version=version)
+    else:
+        mcp = server_cls("make-me-unicorn", instructions=INSTRUCTIONS)
+        # FastMCP (v1) has no version argument; without this serverInfo reports the SDK's version.
+        lowlevel = getattr(mcp, "_mcp_server", None)
+        if lowlevel is not None:
+            lowlevel.version = version
 
-    @mcp.tool()
-    def mmu_vibecheck(project_root: str, scope: str = "all") -> dict:
+    # camelCase works in both majors (v2 keeps it as the wire alias).
+    local_read_only = ToolAnnotations(readOnlyHint=True, idempotentHint=True, openWorldHint=False)
+    web_read_only = ToolAnnotations(readOnlyHint=True, openWorldHint=True)
+    document_model = _output_models()
+
+    def mmu_vibecheck(project_root: str, scope: str = "all", format: str = "json"):  # type: ignore[no-untyped-def]
         """Scan a codebase for the launch-blocking gaps AI-generated code ships most.
 
-        Use when: you are about to commit, deploy, or declare a task done, or the user
-        asks "is this safe to ship?" about a project on disk. Deterministic and
-        read-only — no LLM, no network, runs in under a second on most repos.
+        Use when: you just wrote or changed webhook, auth, payment, Supabase/RLS, CORS,
+        rate-limit, env-var or SQL code; you are about to commit, open a PR, deploy, or
+        declare a task done; or the user asks "is this safe to ship?". Deterministic and
+        read-only: no LLM, no network, under a second on most repos.
 
         Args:
             project_root: absolute path of the project to scan (the git root).
             scope: "all" (default, whole project), "changed" (files changed vs HEAD
                 plus untracked), or "staged" (staged files). Scoped scans need git.
+            format: "json" (default) returns the document as text; "agent" returns compact
+                text (rule id, path:line, fix, how to silence). Structured content is the
+                same `mmu.vibecheck/v1` document either way.
 
         Returns the `mmu.vibecheck/v1` document: {"schema", "tool", "root", "scope",
         "summary": {blocking, warnings, passed, skipped, suppressed}, "findings":
@@ -200,29 +361,51 @@ def build_server(root: Path | None = None):
         suppression, notes}]}. `summary.blocking` > 0 means "do not ship yet": apply
         each finding's `fix` at its `locations`, then scan again. A false positive is
         silenced with a `mmu-ignore[<rule_id>]: <reason>` comment on the flagged line.
-        Do NOT use for: reviewing code style or architecture — this only checks the
+        Do NOT use for: reviewing code style or architecture. This only checks the
         specific gaps listed in each finding.
         """
-        from mmu_cli.vibecheck.engine import ScanError, scan
-        from mmu_cli.vibecheck.output import to_json
+        document, text = user_error(vibecheck_tool, project_root, scope, format)
+        return CallToolResult(content=[TextContent(type="text", text=text)], structuredContent=document)
 
-        target = Path(project_root).expanduser()
-        if not target.is_dir():
-            raise ValueError(f"project_root is not a directory: {project_root}")
-        if scope not in {"all", "changed", "staged"}:
-            raise ValueError(f"scope must be all, changed, or staged (got {scope!r})")
-        try:
-            return to_json(scan(target, scope=scope))
-        except ScanError as exc:
-            raise ValueError(f"{exc.code}: {exc.message}") from None
+    # `Annotated[CallToolResult, Model]`: the tool controls its text content and the SDK
+    # publishes Model as the output schema and validates the structured content against it.
+    mmu_vibecheck.__annotations__["return"] = Annotated[CallToolResult, document_model]
+    mcp.tool(title="Vibecheck launch gate", annotations=local_read_only)(mmu_vibecheck)
 
-    @mcp.tool()
-    def mmu_validate_idea(idea: str, limit: int = 20) -> dict:
+    @mcp.tool(title="Explain a vibecheck rule", annotations=local_read_only)
+    def mmu_explain_rule(rule_id: str) -> dict[str, Any]:
+        """Explain one vibecheck rule: what it detects, why it matters, and the fix.
+
+        Use when: a `mmu_vibecheck` finding is unclear, you need the full fix
+        instructions, or you must decide whether a finding is a false positive.
+
+        Args:
+            rule_id: the finding's `rule_id`, e.g. "webhook-signature", "supabase-rls".
+
+        Returns: {"id", "title", "severity", "summary", "fix", "ref", "tags", "confidence"}.
+        Raises ValueError listing the known ids when the id is unknown.
+        """
+        return user_error(explain_rule, rule_id)
+
+    @mcp.tool(title="List vibecheck rules", annotations=local_read_only)
+    def mmu_list_rules() -> list[dict[str, Any]]:
+        """List every vibecheck rule with its id, severity and one-line summary.
+
+        Use when: the user asks what the launch gate checks, or you need a rule id
+        for `mmu_explain_rule` or for a `mmu-ignore[<rule-id>]: <reason>` marker.
+
+        Returns: [{"id", "title", "severity" (P0 blocks, P1 warns), "summary", "tags"}].
+        """
+        return list_rules()
+
+    @mcp.tool(title="Validate a startup idea", annotations=web_read_only)
+    def mmu_validate_idea(idea: str, limit: int = 20) -> dict[str, Any]:
         """Check a startup idea against real Hacker News + Reddit threads.
 
         Use when: the user describes a product idea and wants to know if people
         already complain about the problem, who the competitors are, and how the
-        sentiment leans. Free mode — public search + local sentiment, no API keys.
+        sentiment leans. Free mode: public search + local sentiment, no API keys.
+        Calls the public HN and Reddit search APIs.
 
         Args:
             idea: one sentence describing the product (e.g. "invoice reminders for freelancers").
@@ -232,17 +415,17 @@ def build_server(root: Path | None = None):
         "competitors": [{name, mentions}], "top_threads": [{source, title, url}],
         "errors", "note"}. Treat `top_threads` as the evidence and `verdict` as a
         summary of it. When the `[validate]` extra is missing the result is
-        {"status": "unavailable", "note"}; on search failure {"status": "error", "errors"}
-        — neither carries a verdict, so check `status` first.
+        {"status": "unavailable", "note"}; on search failure {"status": "error", "errors"}.
+        Neither carries a verdict, so check `status` first.
         """
         return validate_idea(idea, limit=limit)
 
-    @mcp.tool()
+    @mcp.tool(title="Get a launch blueprint", annotations=local_read_only)
     def mmu_get_blueprint(name: str) -> dict[str, str]:
         """Fetch one MMU launch blueprint (a checklist of what a shipped SaaS needs in one area).
 
         Use when: the user asks what they must have before launch for a specific
-        area — billing, auth/security, frontend, backend, ai-product, marketplace…
+        area: billing, auth/security, frontend, backend, ai-product, marketplace…
         Call mmu_list_blueprints first if you do not know the exact name.
 
         Args:
@@ -251,9 +434,9 @@ def build_server(root: Path | None = None):
         Returns: {"name", "path", "content"} where content is the full markdown
         checklist. Raises ValueError if the name is unknown or ambiguous.
         """
-        return get_blueprint(name, root)
+        return user_error(get_blueprint, name, root)
 
-    @mcp.tool()
+    @mcp.tool(title="List launch blueprints", annotations=local_read_only)
     def mmu_list_blueprints() -> list[dict[str, str]]:
         """List the available MMU launch blueprints (15 core + 2 industry) with a one-line description each.
 
@@ -264,7 +447,7 @@ def build_server(root: Path | None = None):
         """
         return list_blueprints(root)
 
-    @mcp.tool()
+    @mcp.tool(title="List prompt templates", annotations=local_read_only)
     def mmu_list_idea_templates() -> list[dict[str, str]]:
         """List MMU prompt templates: session start/close, ADR, and the Product Hunt launch kit.
 
