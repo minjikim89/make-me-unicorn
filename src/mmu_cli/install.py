@@ -7,6 +7,7 @@ Targets
   --gemini     .gemini/settings.json   BeforeTool(run_shell_command) + AfterAgent
   --git        <git hooks dir>/pre-commit, chaining any existing hook
   --agents-md  AGENTS.md               a marked instruction block
+  --skill      .agents/skills/mmu-vibecheck/SKILL.md   the Agent Skill (Codex and other agentskills.io hosts)
 
 Every write is idempotent: our entries are recognised by the `hook --host <host> --event <event>`
 tail of the command (JSON configs) or by a marker line (git hook, AGENTS.md), removed, and
@@ -25,7 +26,8 @@ import subprocess
 from pathlib import Path
 from typing import Any
 
-TARGETS = ("claude", "codex", "cursor", "gemini", "git", "agents-md")
+TARGETS = ("claude", "codex", "cursor", "gemini", "git", "agents-md", "skill")
+SKILL_REL = "skills/mmu-vibecheck/SKILL.md"
 UVX_COMMAND = "uvx --from make-me-unicorn mmu hook"
 _OURS = re.compile(r"\bhook --host (?:claude|codex|cursor|gemini) --event (?:pre-shell|stop|post-edit)\b")
 
@@ -267,6 +269,28 @@ def _plan_agents_md(root: Path, uninstall: bool) -> dict[str, Any]:
     return {**plan, "action": "update" if before is not None else "create", "content": after, "detail": ""}
 
 
+# --- Agent Skill -------------------------------------------------------------
+
+def _plan_skill(root: Path, uninstall: bool) -> dict[str, Any]:
+    path = root / ".agents" / SKILL_REL
+    plan: dict[str, Any] = {"target": "skill", "path": str(path)}
+    before = path.read_text(encoding="utf-8") if path.is_file() else None
+    if uninstall:
+        if before is None or "name: mmu-vibecheck" not in before:
+            return {**plan, "action": "unchanged", "detail": "not installed"}
+        return {**plan, "action": "remove", "content": None, "prune_empty_parents": 3, "detail": ""}
+    from mmu_cli._data import find_content_root
+
+    content_root = find_content_root()
+    source = content_root / SKILL_REL if content_root else None
+    if source is None or not source.is_file():
+        return {**plan, "action": "error", "detail": "the bundled skill file is missing; reinstall make-me-unicorn"}
+    after = source.read_text(encoding="utf-8")
+    if before == after:
+        return {**plan, "action": "unchanged", "detail": "already up to date"}
+    return {**plan, "action": "update" if before is not None else "create", "content": after, "detail": ""}
+
+
 # --- driver ------------------------------------------------------------------
 
 def plan(root: Path, targets: list[str], base: str, uninstall: bool = False) -> list[dict[str, Any]]:
@@ -278,6 +302,8 @@ def plan(root: Path, targets: list[str], base: str, uninstall: bool = False) -> 
             out.append(_plan_git(root, uninstall))
         elif target == "agents-md":
             out.append(_plan_agents_md(root, uninstall))
+        elif target == "skill":
+            out.append(_plan_skill(root, uninstall))
     return out
 
 
@@ -293,6 +319,12 @@ def apply(steps: list[dict[str, Any]]) -> None:
                 path.unlink(missing_ok=True)
                 if step.get("restore_from"):
                     Path(step["restore_from"]).rename(path)
+                parent = path.parent
+                for _ in range(int(step.get("prune_empty_parents", 0))):
+                    if not parent.is_dir() or any(parent.iterdir()):
+                        break
+                    parent.rmdir()
+                    parent = parent.parent
                 continue
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text(step["content"], encoding="utf-8", newline="\n")
@@ -316,6 +348,7 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--gemini", action="store_true", help="Gemini CLI: .gemini/settings.json")
     parser.add_argument("--git", action="store_true", help="git pre-commit hook (chains an existing one)")
     parser.add_argument("--agents-md", action="store_true", help="Append the gate instructions to AGENTS.md")
+    parser.add_argument("--skill", action="store_true", help="Copy the mmu-vibecheck Agent Skill to .agents/skills/")
     parser.add_argument("--all", action="store_true", help="Every target above")
     parser.add_argument("--dry-run", action="store_true", help="Print the planned changes without writing")
     parser.add_argument("--uninstall", action="store_true", help="Remove what `mmu install` added")
@@ -331,7 +364,7 @@ def run(args: argparse.Namespace, root: Path) -> int:
     if not targets:
         targets = detect_targets(root)
         if not targets:
-            msg = ("nothing to install: pass --claude, --codex, --cursor, --gemini, --git, --agents-md or --all "
+            msg = ("nothing to install: pass --claude, --codex, --cursor, --gemini, --git, --agents-md, --skill or --all "
                    f"(no agent config directory found in {root})")
             print(json.dumps({"error": msg}) if as_json else f"mmu install: {msg}")
             return 2
@@ -345,7 +378,7 @@ def run(args: argparse.Namespace, root: Path) -> int:
     if not args.dry_run:
         apply(steps)
     if as_json:
-        public = [{k: v for k, v in s.items() if k not in ("content", "executable")} for s in steps]
+        public = [{k: v for k, v in s.items() if k not in ("content", "executable", "prune_empty_parents")} for s in steps]
         print(json.dumps({"dry_run": args.dry_run, "uninstall": args.uninstall, "command": base, "steps": public},
                          indent=2))
     else:

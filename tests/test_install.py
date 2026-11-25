@@ -264,15 +264,39 @@ class AllTargetsTests(unittest.TestCase):
             _git_init(root)
             self.assertEqual(_run(root, "--all")[0], 0)
             for rel in (".claude/settings.json", ".codex/hooks.json", ".cursor/hooks.json", ".gemini/settings.json",
-                        ".git/hooks/pre-commit", "AGENTS.md"):
+                        ".git/hooks/pre-commit", "AGENTS.md", ".agents/skills/mmu-vibecheck/SKILL.md"):
                 self.assertTrue((root / rel).is_file(), rel)
             code, out = _run(root, "--all")
             self.assertEqual(code, 0)
-            self.assertEqual(out.count("already up to date"), 6)
+            self.assertEqual(out.count("already up to date"), 7)
             self.assertEqual(_run(root, "--all", "--uninstall")[0], 0)
             left = sorted(p.relative_to(root).as_posix() for p in root.rglob("*") if p.is_file() and ".git/" not in p.as_posix())
             self.assertEqual(left, [])
+            self.assertFalse((root / ".agents").exists())
             self.assertFalse((root / ".git" / "hooks" / "pre-commit").exists())
+
+    def test_skill_copy_matches_the_canonical_skill(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self.assertEqual(_run(root, "--skill")[0], 0)
+            canonical = (REPO_ROOT / "skills" / "mmu-vibecheck" / "SKILL.md").read_text(encoding="utf-8")
+            self.assertEqual((root / ".agents/skills/mmu-vibecheck/SKILL.md").read_text(encoding="utf-8"), canonical)
+            self.assertEqual((REPO_ROOT / ".agents/skills/mmu-vibecheck/SKILL.md").read_text(encoding="utf-8"), canonical)
+            self.assertEqual((REPO_ROOT / "src/mmu_cli/data/skills/mmu-vibecheck/SKILL.md").read_text(encoding="utf-8"), canonical)
+
+    def test_skill_frontmatter_follows_the_agent_skills_spec(self):
+        for name in ("mmu-vibecheck", "mmu-startup"):
+            text = (REPO_ROOT / "skills" / name / "SKILL.md").read_text(encoding="utf-8")
+            front = text.split("---")[1]
+            fields = dict(line.split(": ", 1) for line in front.strip().splitlines() if ": " in line and not line.startswith(" "))
+            with self.subTest(skill=name):
+                self.assertEqual(fields["name"], name)
+                self.assertRegex(fields["name"], r"^[a-z0-9]+(-[a-z0-9]+)*$")
+                self.assertLessEqual(len(fields["description"]), 1024)
+                self.assertLess(len(text.splitlines()), 500)
+        vibecheck = (REPO_ROOT / "skills/mmu-vibecheck/SKILL.md").read_text(encoding="utf-8")
+        for trigger in ("webhook", "auth", "Stripe", "Supabase", "CORS", "env vars", "before committing", "done"):
+            self.assertIn(trigger, vibecheck.split("---")[1])
 
     def test_pre_commit_framework_manifest(self):
         text = (REPO_ROOT / ".pre-commit-hooks.yaml").read_text(encoding="utf-8")
