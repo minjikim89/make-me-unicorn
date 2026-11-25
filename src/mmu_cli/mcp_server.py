@@ -194,7 +194,7 @@ def build_server(root: Path | None = None):
                 plus untracked), or "staged" (staged files). Scoped scans need git.
 
         Returns the `mmu.vibecheck/v1` document: {"schema", "tool", "root", "scope",
-        "summary": {blocking, warnings, passed, skipped, suppressed}, "findings":
+        "summary": {blocking, warnings, passed, skipped, suppressed, baselined}, "findings":
         [{rule_id, severity (P0|P1), status (fail|warn|suppressed), title, message,
         locations: [{path, line, end_line, snippet}], files, fix, ref, confidence,
         suppression, notes}]}. `summary.blocking` > 0 means "do not ship yet": apply
