@@ -12,7 +12,16 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from mmu_cli.vibecheck.engine import ScanError, ScanResult, all_rules, get_rule, scan
+from mmu_cli.vibecheck.engine import (
+    DEFAULT_BASELINE,
+    ScanError,
+    ScanResult,
+    all_rules,
+    baseline_path,
+    get_rule,
+    scan,
+    write_baseline,
+)
 from mmu_cli.vibecheck.output import (
     FORMATS,
     error_json,
@@ -51,6 +60,14 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--fail-on", type=_fail_on, default="P0", metavar="{P0,P1,never}",
         help="Exit 1 when findings at this severity or above exist (default: P0)",
+    )
+    parser.add_argument(
+        "--baseline", nargs="?", const=DEFAULT_BASELINE, default=None, metavar="FILE",
+        help=f"Report findings recorded in FILE as `baselined` (non-blocking); default FILE: {DEFAULT_BASELINE}",
+    )
+    parser.add_argument(
+        "--write-baseline", nargs="?", const=DEFAULT_BASELINE, default=None, metavar="FILE",
+        help=f"Record every current finding in FILE and exit 0; default FILE: {DEFAULT_BASELINE}",
     )
     parser.add_argument("--list-rules", action="store_true", help="List every rule id and exit")
     parser.add_argument("--explain", metavar="RULE_ID", help="Show what a rule detects and how to fix it, then exit")
@@ -105,7 +122,16 @@ def run(args: argparse.Namespace, root: Path) -> int:
             _emit(json.dumps(rule.to_dict(), ensure_ascii=False, indent=2) if as_json else render_rule(rule), args.output)
             return 0
         mode, since = _scope(args)
-        result = scan(root, scope=mode, since=since)
+        write_to = getattr(args, "write_baseline", None)
+        if write_to is not None:
+            target = baseline_path(root, write_to)
+            count = write_baseline(scan(root), target)  # always the whole project: a baseline of a diff is meaningless
+            summary: Any = {"schema": "mmu.vibecheck/v1", "baseline": {"path": str(target), "entries": count}}
+            text = f"Wrote {count} finding(s) to {target}. Run `mmu vibecheck --baseline` to report only new ones."
+            _emit(json.dumps(summary, ensure_ascii=False, indent=2) if as_json else text, args.output)
+            return 0
+        use = getattr(args, "baseline", None)
+        result = scan(root, scope=mode, since=since, baseline=baseline_path(root, use) if use is not None else None)
         _emit(render(result, fmt, include_all=args.all), args.output, colorize=fmt == "text")
     except ScanError as exc:
         if as_json:

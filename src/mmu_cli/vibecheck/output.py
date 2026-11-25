@@ -18,8 +18,11 @@ from mmu_cli.vibecheck.engine import (
 )
 
 FORMATS = ("text", "json", "sarif", "agent")
-_REPORTED = {"fail", "warn", "suppressed"}
-_ICONS = {"fail": "[fail]", "warn": "[warn]", "ok": "[ok]", "skip": "[skip]", "suppressed": "[suppressed]"}
+_REPORTED = {"fail", "warn", "suppressed", "baselined"}
+_ICONS = {
+    "fail": "[fail]", "warn": "[warn]", "ok": "[ok]", "skip": "[skip]", "suppressed": "[suppressed]",
+    "baselined": "[baselined]",
+}
 
 _HASH_COMMENT = {".py", ".rb", ".sh", ".bash", ".zsh", ".yml", ".yaml", ".toml", ".tf", ".r", ".pl", ".ex", ".exs"}
 _SLASH_COMMENT = {
@@ -41,6 +44,7 @@ def format_findings(findings: list[Finding]) -> tuple[list[str], int]:
     fails = [f for f in findings if f.status == "fail"]
     warns = [f for f in findings if f.status == "warn"]
     suppressed = [f for f in findings if f.status == "suppressed"]
+    baselined = [f for f in findings if f.status == "baselined"]
     for f in findings:
         lines.append(f"  {_ICONS.get(f.status, f'[{f.status}]')} ({f.severity}) {f.check}: {f.message}")
         if f.status not in _REPORTED:
@@ -53,6 +57,9 @@ def format_findings(findings: list[Finding]) -> tuple[list[str], int]:
         if f.status == "suppressed":
             lines.append(f"        ↳ suppressed: {f.suppress_reason}")
             continue
+        if f.status == "baselined":
+            lines.append("        ↳ in the baseline: not blocking, fix when you touch this code")
+            continue
         for note in f.notes:
             lines.append(f"        ↳ note: {note}")
         if f.hint:
@@ -61,6 +68,8 @@ def format_findings(findings: list[Finding]) -> tuple[list[str], int]:
             lines.append(f"        ↳ why: {f.ref}")
     lines.append("")
     tail = f", {len(suppressed)} suppressed" if suppressed else ""
+    if baselined:
+        tail += f", {len(baselined)} baselined"
     if fails:
         lines.append(f"Vibe check result: {len(fails)} launch-blocking issue(s), {len(warns)} warning(s){tail}")
         return lines, 1
@@ -141,7 +150,9 @@ def render_agent(result: ScanResult) -> str:
     s = result.summary()
     lines = [
         f"mmu vibecheck: {s['blocking']} blocking (P0), {s['warnings']} warning(s) (P1), "
-        f"{s['suppressed']} suppressed | scope: {_scope_label(result.scope)}"
+        f"{s['suppressed']} suppressed"
+        + (f", {s['baselined']} baselined" if s.get("baselined") else "")
+        + f" | scope: {_scope_label(result.scope)}"
     ]
     active = [f for f in result.findings if f.status in {"fail", "warn"}]
     active.sort(key=lambda f: 0 if f.status == "fail" else 1)
@@ -223,6 +234,9 @@ def to_sarif(result: ScanResult) -> dict[str, Any]:
         if f.status == "suppressed":
             kind = "inSource" if f.suppress_source == "inline" else "external"
             base["suppressions"] = [{"kind": kind, "justification": f.suppress_reason}]
+        if f.status == "baselined":
+            base["baselineState"] = "unchanged"
+            base["level"] = "note"
         if not f.locations:
             results.append({**base, "partialFingerprints": {"primaryLocationLineHash": f"{fingerprint(f.check, None)}:1"}})
         for loc in f.locations:
@@ -272,6 +286,8 @@ def render_rule(rule: Rule) -> str:
         *[f"  {line}" for line in rule.fix.splitlines()],
         "",
     ]
+    for name, fix in rule.fix_variants:
+        lines += [f"Fix ({name}):", *[f"  {line}" for line in fix.splitlines()], ""]
     if rule.ref:
         lines.append(f"Reference: {rule.ref}")
     if rule.tags:
