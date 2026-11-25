@@ -1,0 +1,3 @@
+VITE_API_URL=https://api.pixelpress.example
+VITE_STRIPE_SECRET_KEY={{SECRET:stripe_live}}
+JWT_SECRET={{SECRET:github:jwt}}

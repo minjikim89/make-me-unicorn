@@ -1,0 +1,1 @@
+{"name":"express-bad","dependencies":{"express":"4.21.0","cors":"2.8.5","pg":"8.13.0","stripe":"17.4.0","lodash":"4.17.21","jsonwebtoken":"9.0.2"}}

@@ -1,0 +1,87 @@
+# Vue + Vite frontend with an Express API. Covers the frontend and transport rules, and a
+# webhook that is verified but not idempotent. CORS is allowlisted, a rate limiter and
+# Sentry are in place: those rules must stay quiet.
+
+[[expect]]
+id = "G1"
+rule = "client-bundle-secrets"
+path = ".env"
+line = 2
+severity = "P0"
+
+[[expect]]
+id = "G2"
+rule = "jwt-secret-default"
+path = "server/index.ts"
+line = 13
+severity = "P0"
+
+[[expect]]
+id = "G3"
+rule = "code-injection"
+path = "server/index.ts"
+line = 40
+severity = "P0"
+
+[[expect]]
+id = "G4"
+rule = "webhook-idempotency"
+path = "server/index.ts"
+line = 22
+severity = "P1"
+
+[[expect]]
+id = "G5"
+rule = "disabled-ssl"
+path = "server/index.ts"
+line = 16
+severity = "P1"
+
+[[expect]]
+id = "G6"
+rule = "stack-trace-leak"
+path = "server/index.ts"
+line = 41
+severity = "P1"
+
+[[expect]]
+id = "G7"
+rule = "sourcemaps-exposed"
+path = "vite.config.ts"
+line = 7
+severity = "P1"
+
+[[expect]]
+id = "G8"
+rule = "jwt-localstorage"
+path = "src/api.ts"
+line = 6
+severity = "P1"
+
+[[expect]]
+id = "G9"
+rule = "dangerous-html"
+path = "src/Preview.vue"
+line = 8
+severity = "P1"
+
+[[must_not]]  # verified with constructEvent
+rule = "webhook-signature"
+
+[[must_not]]  # .env is git-ignored
+rule = "secrets"
+
+[[must_not]]
+rule = "env-not-ignored"
+
+[[must_not]]  # allowlisted origin
+rule = "cors-wildcard"
+
+[[must_not]]  # express-rate-limit is mounted
+rule = "rate-limiting"
+
+[[must_not]]  # Sentry is initialised
+rule = "error-monitoring"
+
+[[must_not]]  # bound parameters
+rule = "sql-fstring"

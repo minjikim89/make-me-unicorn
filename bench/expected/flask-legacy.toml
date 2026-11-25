@@ -1,0 +1,87 @@
+# Single-file Flask app with the classic Python mistakes, next to their safe counterparts.
+
+[[expect]]
+id = "D1"
+rule = "jwt-secret-default"
+path = "app.py"
+line = 11
+severity = "P0"
+
+[[expect]]
+id = "D2"
+rule = "unsafe-deserialization"
+path = "app.py"
+line = 22
+severity = "P0"
+
+[[expect]]
+id = "D3"
+rule = "code-injection"
+path = "app.py"
+line = 32
+severity = "P0"
+
+[[expect]]
+id = "D4"
+rule = "sql-fstring"
+path = "app.py"
+line = 43
+severity = "P0"
+
+[[expect]]
+id = "D5"
+rule = "admin-route-no-auth"
+path = "app.py"
+line = 54
+severity = "P1"
+
+[[expect]]
+id = "D6"
+rule = "stack-trace-leak"
+path = "app.py"
+line = 63
+severity = "P1"
+
+[[expect]]
+id = "D7"
+rule = "debug-mode"
+path = "app.py"
+line = 71
+severity = "P1"
+
+[[expect]]
+id = "D8"
+rule = "secrets"
+path = ".env"
+line = 2
+severity = "P0"
+
+[[expect]]
+id = "D8"
+rule = "env-not-ignored"
+path = ".env"
+severity = "P1"
+
+[[expect]]
+id = "D9"
+rule = "rate-limiting"
+path = "app.py"
+severity = "P1"
+
+[[expect]]
+id = "D10"
+rule = "error-monitoring"
+path = "app.py"
+severity = "P1"
+
+[[expect]]  # pickle.load of a local model file: reported as a warning, not a blocker
+id = "D11"
+rule = "unsafe-deserialization"
+path = "app.py"
+line = 27
+severity = "P1"
+
+# Safe counterparts in the same file are covered by strict scoring: a report on line 17
+# (SafeLoader passed positionally), 37 (argument-array subprocess), 50 (bound parameter)
+# or 67 (prose f-string) would show up as an unexpected line only if the rule fired at
+# P0 on a new path; the line checks above pin the exact offending lines.

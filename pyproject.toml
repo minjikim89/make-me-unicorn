@@ -74,11 +74,16 @@ mmu_cli = ["data/**/*.md"]
 [tool.ruff]
 line-length = 120
 target-version = "py311"
+# Benchmark fixtures are deliberately flawed sample projects, not code of this repo.
+extend-exclude = ["bench/fixtures"]
 
 [tool.ruff.lint]
 # Pin the rule set explicitly so lint results don't drift when a new ruff
 # release changes its defaults (CI installs the latest ruff).
 select = ["E4", "E7", "E9", "F"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
 
 [tool.mypy]
 python_version = "3.11"

@@ -1,0 +1,32 @@
+# A correct FastAPI service: verified + idempotent Stripe webhook (Header() idiom,
+# stripe.Webhook.construct_event, on_conflict_do_nothing), password reset flow, slowapi
+# limits, Sentry, yaml.load with a positional SafeLoader, prose f-strings, a bound
+# query with a constant table name, argument-array subprocess. Zero P0s allowed.
+#
+# No [[expect]] entries: every reported finding counts as a false positive.
+# Known: `unsafe-deserialization` warns (P1) on pickle.load of a cache file the app wrote
+# itself (app/reports.py:14). It is scored as a P1 false positive.
+
+[[must_not]]
+rule = "webhook-signature"
+
+[[must_not]]
+rule = "webhook-idempotency"
+
+[[must_not]]
+rule = "password-reset"
+
+[[must_not]]
+rule = "sql-fstring"
+
+[[must_not]]
+rule = "rate-limiting"
+
+[[must_not]]
+rule = "error-monitoring"
+
+[[must_not]]
+rule = "jwt-secret-default"
+
+[[must_not]]
+rule = "code-injection"

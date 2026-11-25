@@ -1,0 +1,7 @@
+# git-ignored: real values live here and are never committed
+NEXT_PUBLIC_SUPABASE_URL=https://ledgerlyprod.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY={{SECRET:supabase_anon}}
+SUPABASE_SERVICE_ROLE_KEY={{SECRET:supabase_service_role}}
+STRIPE_SECRET_KEY={{SECRET:stripe_live}}
+STRIPE_WEBHOOK_SECRET={{SECRET:stripe_whsec}}
+OPENAI_API_KEY={{SECRET:openai}}

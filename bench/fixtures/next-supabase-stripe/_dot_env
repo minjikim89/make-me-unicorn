@@ -1,0 +1,7 @@
+NEXT_PUBLIC_SUPABASE_URL=https://xyzcompanyabc.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY={{SECRET:supabase_anon}}
+SUPABASE_SERVICE_ROLE_KEY={{SECRET:supabase_service_role}}
+STRIPE_SECRET_KEY={{SECRET:stripe_live}}
+STRIPE_WEBHOOK_SECRET={{SECRET:stripe_whsec}}
+NEXT_PUBLIC_OPENAI_API_KEY={{SECRET:openai}}
+NEXT_PUBLIC_APP_URL=http://localhost:3000

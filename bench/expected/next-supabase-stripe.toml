@@ -1,0 +1,100 @@
+# Next.js App Router + Supabase + Stripe SaaS with 8 planted issues (A1-A8) and 5 pieces of
+# correct code that must stay unflagged (A-OK1..5).
+
+[[expect]]
+id = "A1"
+rule = "secrets"
+path = ".env"
+line = 4
+severity = "P0"
+
+[[expect]]
+id = "A1"
+rule = "env-not-ignored"
+path = ".env"
+severity = "P1"
+
+[[expect]]
+id = "A2"
+rule = "client-bundle-secrets"
+path = ".env"
+line = 6
+severity = "P0"
+
+[[expect]]
+id = "A2"
+rule = "client-bundle-secrets"
+path = "app/api/ai/summarize/route.ts"
+line = 4
+severity = "P0"
+
+[[expect]]
+id = "A3"
+rule = "secrets"
+path = "components/AdminPanel.tsx"
+line = 8
+severity = "P0"
+
+[[expect]]
+id = "A4"
+rule = "webhook-signature"
+path = "app/api/webhooks/stripe-legacy/route.ts"
+severity = "P0"
+
+[[expect]]
+id = "A5"
+rule = "llm-route-unthrottled"
+path = "app/api/ai/summarize/route.ts"
+severity = "P1"
+
+[[expect]]
+id = "A6"
+rule = "admin-route-no-auth"
+path = "app/api/admin/users/route.ts"
+severity = "P1"
+
+[[expect]]
+id = "A7"
+rule = "supabase-rls"
+path = "supabase/migrations/0001_init.sql"
+line = 1
+severity = "P0"
+
+[[expect]]
+id = "A8"
+rule = "dangerous-html"
+path = "components/InvoiceNote.tsx"
+line = 3
+severity = "P1"
+
+# Not planted on purpose, but true of the fixture: the login page signs in with a password
+# and the app has no forgot/reset-password flow, and no error tracker is installed.
+[[expect]]
+rule = "password-reset"
+path = "app/login/page.tsx"
+line = 13
+severity = "P0"
+
+[[expect]]
+rule = "error-monitoring"
+path = "package.json"
+severity = "P1"
+
+[[must_not]]  # A-OK1: verified with constructEvent
+rule = "webhook-signature"
+path = "app/api/webhooks/stripe/route.ts"
+
+[[must_not]]  # A-OK2: rate limited and validated
+rule = "llm-route-unthrottled"
+path = "app/api/checkout/route.ts"
+
+[[must_not]]  # A-OK3: service-role key read from server env
+rule = "secrets"
+path = "lib/supabase-admin.ts"
+
+[[must_not]]  # A-OK4: anon key in the browser client
+rule = "client-bundle-secrets"
+path = "lib/supabase-browser.ts"
+
+[[must_not]]  # the project has a limiter (lib/rate-limit.ts)
+rule = "rate-limiting"

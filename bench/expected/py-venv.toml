@@ -1,0 +1,20 @@
+# A tiny project with a virtualenv checked out next to it and `/.env` in .gitignore.
+# The vendored package under venv/ holds a secret, DEBUG = True and pickle on request
+# data: none of it may be reported, because none of it is the user's code.
+#
+# No [[expect]] entries: the scan must come back clean.
+
+[[must_not]]
+rule = "secrets"
+
+[[must_not]]
+rule = "env-not-ignored"
+
+[[must_not]]
+rule = "debug-mode"
+
+[[must_not]]
+rule = "unsafe-deserialization"
+
+[[must_not]]
+rule = "jwt-secret-default"

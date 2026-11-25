@@ -1,0 +1,45 @@
+# The same kind of app as next-supabase-stripe, done right: RLS on every table, webhook
+# verified through an imported helper and deduplicated, password login with a reset
+# flow, LLM route behind auth + Upstash rate limit, admin route with a role check,
+# sanitized HTML, JSON-LD script, Sentry, secrets only in a git-ignored .env.local.
+#
+# No [[expect]] entries: the scan must come back clean.
+
+[[must_not]]
+rule = "secrets"
+
+[[must_not]]
+rule = "env-not-ignored"
+
+[[must_not]]
+rule = "client-bundle-secrets"
+
+[[must_not]]
+rule = "webhook-signature"
+
+[[must_not]]
+rule = "webhook-idempotency"
+
+[[must_not]]
+rule = "password-reset"
+
+[[must_not]]
+rule = "supabase-rls"
+
+[[must_not]]
+rule = "llm-route-unthrottled"
+
+[[must_not]]
+rule = "admin-route-no-auth"
+
+[[must_not]]
+rule = "dangerous-html"
+
+[[must_not]]
+rule = "rate-limiting"
+
+[[must_not]]
+rule = "error-monitoring"
+
+[[must_not]]
+rule = "sql-fstring"
