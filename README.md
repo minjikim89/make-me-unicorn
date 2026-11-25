@@ -264,57 +264,84 @@ export ANTHROPIC_API_KEY=sk-ant-...
 
 Core CLI stays zero-dependency. AI features degrade gracefully.
 
-## Use as a Claude Code Plugin (commit gate)
+## Put the gate in your agent's loop
+
+Agents skip optional tools, but they cannot skip a hook. `mmu install` registers `mmu vibecheck` as a hook in the agent you use, so a P0 finding stops the commit, the push, or a premature "done" while the agent can still fix it.
+
+```bash
+pip install make-me-unicorn        # or use uvx; the installer then registers `uvx --from make-me-unicorn mmu hook`
+mmu install --claude               # .claude/settings.json
+mmu install --codex --cursor --gemini --git --agents-md --skill   # or: mmu install --all
+mmu install --all --dry-run        # print the planned changes
+mmu install --all --uninstall      # remove them again
+```
+
+| Host | Commit / push gate | "Not done yet" gate | Post-edit feedback | Config written |
+|------|--------------------|---------------------|--------------------|----------------|
+| Claude Code | PreToolUse (Bash) | Stop | PostToolUse (Edit, Write, MultiEdit) | `.claude/settings.json` |
+| Codex CLI | PreToolUse (Bash) | Stop | PostToolUse (apply_patch) | `.codex/hooks.json` |
+| Cursor | beforeShellExecution | stop | not available | `.cursor/hooks.json` |
+| Gemini CLI | BeforeTool (run_shell_command) | AfterAgent | not available | `.gemini/settings.json` |
+| git | pre-commit (chains an existing hook) | | | `.git/hooks/pre-commit` |
+| pre-commit framework | hook id `mmu-vibecheck` | | | `.pre-commit-hooks.yaml` |
+
+What the agent sees when a commit is blocked:
+
+```text
+mmu vibecheck: 2 launch-blocking issue(s) in /path/to/app — commit blocked.
+mmu vibecheck: 2 blocking (P0), 0 warning(s) (P1), 0 suppressed | scope: changed (2 file(s))
+P0 webhook-signature app/api/webhooks/stripe/route.ts:4
+  what: webhook handlers found but no signature verification markers
+  fix: Verify the provider signature on the raw request body before parsing or trusting the event; return 400 on failure. …
+  silence (only if false positive): // mmu-ignore[webhook-signature]: <reason>
+```
+
+- The commit gate scans what the commit will contain: staged files, or all changed files for `git commit -a`, pathspecs, and `git add … && git commit …`. A push scans files changed since the upstream.
+- The stop gate sends the agent back at most `MMU_STOP_MAX` times per session (default 3) and honours the host's own loop guard. `MMU_STOP_DISABLE=1` turns it off.
+- If the scanner cannot run, the action goes through and one visible line says so. The gate never blocks on its own failure.
+- Bypass one command with a `MMU_HOOK_DISABLE=1` prefix; set it in the agent's environment to disable all hooks. `MMU_HOOK_ON_PUSH_ONLY=1` gates only pushes.
+
+### Claude Code plugin
 
 ```bash
 # In Claude Code:
 /plugin marketplace add minjikim89/make-me-unicorn
-/plugin install make-me-unicorn
+/plugin install make-me-unicorn --marketplace minjikim89/make-me-unicorn
 ```
 
-Once installed, **every `git commit` / `git push` the agent runs goes through `mmu vibecheck` first.** A P0 finding blocks the command and shows the agent exactly what to fix and why:
+The plugin registers the same three hooks from its bundled source (no `pip install`; needs `python3` 3.10+), the `mmu-vibecheck` skill, a `/vibecheck` command, and the MCP server (started with `uvx`, so it needs [uv](https://docs.astral.sh/uv/)). The `mmu-startup` skill (blueprints, idea validation, Product Hunt kit) is included for planning.
 
-```text
-mmu vibecheck: 1 launch-blocking issue(s) in /path/to/app — commit blocked.
-  ✗ (P0) supabase-rls: 1 table(s) created without ENABLE ROW LEVEL SECURITY: payments
-      - supabase/migrations/20260901_init.sql
-      ↳ Every table reachable with the anon key needs RLS plus at least one policy.
-      ↳ why: https://vibe-eval.com/updates/vibe-coding-security-monthly-aug-2026/
-```
-
-Why a hook instead of an MCP tool: agents skip optional tools, but a hook always runs. With Claude Code's auto mode on by default, the commit is the last point where a human still sees what happened. The gate is a PreToolUse hook on `Bash`. If the scanner itself cannot run, the commit goes through and you get a visible warning instead of a silent pass. Bypass one command by prefixing it (`MMU_HOOK_DISABLE=1 git commit …`); set the same variable in Claude Code's environment to disable the gate for a session. `MMU_HOOK_ON_PUSH_ONLY=1` gates only pushes.
-
-The plugin also ships the `mmu-startup` skill (blueprints, idea validation, Product Hunt kit), which loads only the blueprint(s) relevant to the conversation. Any tool that supports the Agent Skills spec (Claude Desktop, OpenAI Codex CLI) can use the skill; the commit gate is Claude Code only.
+The `mmu-vibecheck` skill follows the Agent Skills spec. Codex and other hosts that read `.agents/skills/` pick it up from this repository, or from your project after `mmu install --skill`.
 
 ## MCP Server Mode
 
-MMU also runs as an MCP (Model Context Protocol) server, so any MCP-compatible agent (Claude Code, Claude Desktop, Cursor, Gemini CLI) can call MMU's blueprints and templates as native tools.
+MMU also runs as an MCP (Model Context Protocol) server for any MCP client (Claude Code, Claude Desktop, Cursor, Gemini CLI, Codex). It works with MCP Python SDK v1 (1.27+) and v2.
 
 ```bash
-pip install make-me-unicorn[mcp]
-mmu serve-mcp                          # stdio transport (default)
-mmu serve-mcp --transport sse          # SSE transport
+uvx --from 'make-me-unicorn[mcp]' mmu serve-mcp     # zero-install
+pip install 'make-me-unicorn[mcp]' && mmu serve-mcp # stdio transport (default)
 ```
 
-Claude Desktop config (`~/Library/Application Support/Claude/claude_desktop_config.json`):
+Client config:
 
 ```json
 {
   "mcpServers": {
-    "mmu": {
-      "command": "mmu",
-      "args": ["serve-mcp", "--root", "/path/to/cloned/make-me-unicorn"]
+    "make-me-unicorn": {
+      "command": "uvx",
+      "args": ["--from", "make-me-unicorn[mcp]", "mmu", "serve-mcp"]
     }
   }
 }
 ```
 
-Tools exposed:
+Tools exposed (all read-only):
 
-- `mmu_vibecheck(project_root)` — scan a project for launch-blocking gaps; returns findings with `ref` links
-- `mmu_validate_idea(idea)` — check an idea against live HN + Reddit threads
-- `mmu_get_blueprint(name)` / `mmu_list_blueprints` — launch checklists per area
-- `mmu_list_idea_templates` — start/close/ADR prompts + Product Hunt kit
+- `mmu_vibecheck(project_root, scope="all"|"changed"|"staged", format="json"|"agent")`: the launch gate. Structured output is the `mmu.vibecheck/v1` document
+- `mmu_explain_rule(rule_id)` / `mmu_list_rules()`: what a rule detects and how to fix it
+- `mmu_validate_idea(idea)`: check an idea against live HN + Reddit threads (network)
+- `mmu_get_blueprint(name)` / `mmu_list_blueprints()`: launch checklists per area
+- `mmu_list_idea_templates()`: start/close/ADR prompts + Product Hunt kit
 
 `mmu_validate_idea` needs the `[validate]` extra for sentiment scoring; it is free mode only (no API keys).
 
@@ -406,5 +433,4 @@ If MMU caught something you would have missed, **[a star](https://github.com/min
 
 MIT. See `LICENSE`.
 
-<!-- MCP Registry ownership proof -->
-mcp-name: io.github.minjikim89/make-me-unicorn
+<!-- mcp-name: io.github.minjikim89/make-me-unicorn -->

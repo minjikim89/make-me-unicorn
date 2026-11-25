@@ -12,6 +12,9 @@ The format is inspired by Keep a Changelog and follows semantic intent.
 - **`mmu vibecheck --json` output is now the `mmu.vibecheck/v1` document** (`docs/vibecheck-json-schema.md`): `schema`, `tool`, `root`, `scope`, `summary`, `findings`. The `messages` text blob, `failures` and `exit_code` keys are gone; `ok`/`skip` findings are listed only with `--all`. Findings keep `check`, `hint` and `files` as deprecated aliases next to `rule_id`, `fix` and `locations`.
 - The `webhook-safety` skip finding is replaced by `webhook-signature` and `webhook-idempotency` skips, so every finding id is a registered rule.
 - `mmu_vibecheck` MCP tool returns the same v1 document (was `{findings, failures, exit_code}`).
+- **`mmu` with no subcommand now runs `mmu vibecheck`** on the current directory (exit 1 on P0 findings) instead of printing the dashboard. `mmu status` still shows the dashboard. This is what makes `uvx make-me-unicorn` a one-command gate.
+- **The MCP extra is now `mcp>=1.27,<3`** and `mmu_vibecheck` returns the v1 document as MCP structured content with a published output schema. Clients that parsed the text content still get the JSON document as text by default.
+- `hooks/vibecheck_gate.py` is now a thin wrapper around `mmu hook`; its private helpers (`_should_gate`, `_run_vibecheck`, …) moved to `mmu_cli.hooks`.
 
 ### Added
 
@@ -29,6 +32,18 @@ The format is inspired by Keep a Changelog and follows semantic intent.
 - **Claude Code plugin now gates commits.** A PreToolUse hook (`hooks/vibecheck_gate.py`) runs `mmu vibecheck` before any `git commit` / `git push` the agent issues (including `git -C <path>`, env-prefixed, chained and subshell forms) and blocks on P0 findings, printing the finding, hint, and `why:` link to the agent. Uses the plugin's bundled source; if the scanner cannot run, the commit is allowed and a visible warning is shown instead of a silent pass. All subprocesses share a 45s deadline under the hook's 60s timeout. Bypass one command with a `MMU_HOOK_DISABLE=1` prefix, or set it in the environment to disable for the session; `MMU_HOOK_ON_PUSH_ONLY=1` gates only pushes.
 - **`mmu_vibecheck` MCP tool** — the scanner is callable from any MCP client (findings, failure count, exit code). Rejects a `project_root` that is not a directory instead of returning a clean verdict for a path it never scanned.
 
+- **`mmu hook`: one hook entry point for Claude Code, Codex CLI, Cursor, and Gemini CLI.** It reads the host's hook JSON on stdin, detects the host and event (or takes `--host` / `--event`), and answers in that host's format.
+  - *Commit and push gate*: scans `--staged` for a plain commit, `--changed` when the commit takes working-tree content (`-a`, pathspecs, or `git add … && git commit …` in one command, where the hook runs before the add), and `--since @{u}` for a push with an upstream. The block reason is the scanner's `--format agent` text: rule id, `path:line`, fix, and how to silence a false positive with a reason.
+  - *Stop gate*: when the agent is about to finish with P0 findings in uncommitted changes, it is sent back with the findings. Bounded by the host's own loop flag and by `MMU_STOP_MAX` (default 3 per session, counter kept in the git dir and reset by a clean scan). `MMU_STOP_DISABLE=1` turns it off.
+  - *Post-edit feedback* (Claude Code, Codex): after an edit to a code or config file, P0 findings located in that file are returned as context. Never blocks.
+  - Fails open: if the scanner errors or runs out of time, the action is allowed and one line says so.
+- **`mmu install`**: `--claude` (`.claude/settings.json`), `--codex` (`.codex/hooks.json`), `--cursor` (`.cursor/hooks.json`), `--gemini` (`.gemini/settings.json`), `--git` (pre-commit hook that keeps an existing hook as `pre-commit.pre-mmu` and runs it first), `--agents-md` (a marked block in `AGENTS.md`), `--skill` (`.agents/skills/mmu-vibecheck/`), `--all`, `--dry-run`, `--uninstall`, `--command`. Existing JSON is merged, repeated runs change nothing, and invalid JSON is left untouched. The hook command is `mmu hook` when `mmu` is on PATH, otherwise `uvx --from make-me-unicorn mmu hook`.
+- **`.pre-commit-hooks.yaml`** for the pre-commit framework (hook id `mmu-vibecheck`).
+- **`make-me-unicorn` console script**, so `uvx make-me-unicorn vibecheck` works without installing anything. `mmu --version`.
+- **`mmu-vibecheck` Agent Skill** (`skills/mmu-vibecheck/`, mirrored to `.agents/skills/` for Codex and bundled in the wheel): triggers after writing webhook, auth, payment, Supabase/RLS, CORS, rate-limit or env-var code and before a commit, PR, deploy, or "done".
+- **Claude Code plugin**: Stop and PostToolUse hooks next to the commit gate, a `/vibecheck` command, and a bundled MCP server entry (`.mcp.json`, started with `uvx`, so it needs `uv`).
+- **MCP server works with MCP Python SDK v2 and v1** (#33). New tools `mmu_explain_rule` and `mmu_list_rules`; `mmu_vibecheck` takes `format="json"|"agent"`. Every tool has a title and read-only annotations (`mmu_validate_idea` is marked open-world), the server sends instructions that tell the agent when to call the gate, and `serverInfo.version` is the package version.
+
 ### Changed
 
 - `mmu_cli.vibecheck` is now a package (`engine`, `output`, `command`, `rules/`); existing imports (`check_*`, `Finding`, `run_vibecheck`, `format_findings`, `downgrade_test_only_findings`) are re-exported unchanged.
@@ -37,6 +52,11 @@ The format is inspired by Keep a Changelog and follows semantic intent.
 - MCP tool descriptions rewritten to state purpose, when to use, arguments and return shape (following the TDQS tool-definition guidance); `mmu_vibecheck` and `mmu_validate_idea` are listed first, and `mmu_validate_idea` now documents its real `status`/`top_threads` shape.
 - Plugin manifest category `productivity` → `security`; description leads with the commit gate. FAQ, Product Hunt kit, `server.json`, and the four translated READMEs updated to match.
 - CI lint and type-check now cover `hooks/`.
+
+- Global `--json` and `--root` work before or after any subcommand (`mmu --json --root ../app doctor`).
+- CLI output is forced to UTF-8, fixing a `UnicodeEncodeError` on Windows consoles using cp1252.
+- `server.json` uses the 2025-12-11 registry schema; the `mcp` extra is passed to `uvx` with `--with`. The README ownership marker is now an HTML comment.
+- The `mmu-startup` skill description is limited to planning so it does not compete with `mmu-vibecheck`.
 
 ## [0.7.0] - 2026-06-10
 
