@@ -311,6 +311,25 @@ class ScopeTests(unittest.TestCase):
             vibecheck.scan(self.root, scope="since", since="no-such-ref")
         self.assertEqual(ctx.exception.code, "bad-ref")
 
+    def test_files_from_lists_the_scope(self):
+        write(self.root, "new.py", 'r = f"DELETE FROM t WHERE id = {i}"\n')
+        found = vibecheck.scan(self.root, scope="files", files=["./old.py", "", "missing.py"]).findings
+        self.assertEqual({f.check: lines_of(f) for f in found if f.status == "fail"}, {"sql-fstring": [("old.py", 1)]})
+        listing = self.root / "list.txt"
+        listing.write_text("new.py\n", encoding="utf-8")
+        code, out, _ = run_cli("vibecheck", "--root", str(self.root), "--files-from", str(listing), "--format", "json")
+        doc = json.loads(out)
+        self.assertEqual((code, doc["scope"]), (1, {"mode": "files", "files": 1}))
+        self.assertEqual([loc["path"] for f in doc["findings"] if f["status"] == "fail" for loc in f["locations"]],
+                         ["new.py"])
+        with mock.patch.object(sys, "stdin", io.StringIO("clean.py\n")):
+            code, out, _ = run_cli("vibecheck", "--root", str(self.root), "--files-from", "-", "--format", "agent")
+        self.assertEqual(code, 0)
+        self.assertIn("scope: listed (1 file(s))", out)
+        code, _, err = run_cli("vibecheck", "--root", str(self.root), "--files-from", str(self.root / "nope.txt"))
+        self.assertEqual(code, 2)
+        self.assertIn("--files-from: cannot read", err)
+
     def test_cli_scope_flags_and_scope_in_json(self):
         write(self.root, "new.py", 'r = f"DELETE FROM t WHERE id = {i}"\n')
         code, out, _ = run_cli("vibecheck", "--root", str(self.root), "--changed", "--format", "json")

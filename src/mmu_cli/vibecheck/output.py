@@ -84,7 +84,7 @@ def _scope_label(scope: dict[str, Any]) -> str:
     mode = scope.get("mode", "all")
     if mode == "all":
         return "all files"
-    label = f"since {scope.get('since')}" if mode == "since" else mode
+    label = f"since {scope.get('since')}" if mode == "since" else "listed" if mode == "files" else mode
     return f"{label} ({scope.get('files', 0)} file(s))"
 
 

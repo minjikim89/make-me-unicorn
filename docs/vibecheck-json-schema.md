@@ -19,7 +19,7 @@ Fields are only added within `v1`; a removal or a change of meaning bumps the `s
 | `schema` | string | Always `mmu.vibecheck/v1` |
 | `tool` | object | `{"name": "mmu", "version": "<package version>"}` |
 | `root` | string | Absolute path that was scanned |
-| `scope` | object | `{"mode": "all"}`, or `{"mode": "changed" \| "staged" \| "since", "files": <n>, "since": "<ref>"}` (`since` only in that mode). `truncated: <n>` is added when more than 20,000 code files were found and the last `n` (in path order) were left out |
+| `scope` | object | `{"mode": "all"}`, or `{"mode": "changed" \| "staged" \| "since" \| "files", "files": <n>, "since": "<ref>"}` (`since` only in that mode; `files` is `--files-from`). `truncated: <n>` is added when more than 20,000 code files were found and the last `n` (in path order) were left out |
 | `summary` | object | Counts of findings by status: `blocking` (fail), `warnings` (warn), `passed` (ok), `skipped` (skip), `suppressed`, `baselined` |
 | `findings` | array | `fail`, `warn`, `suppressed` and `baselined` findings; `--all` adds `ok` and `skip` |
 

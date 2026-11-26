@@ -5,10 +5,11 @@ host's JSON payload on stdin, works out which host and event it is, and answers 
 host's dialect.
 
 Events
-  pre-shell  before a shell command. Gates only `git commit` / `git push`.
-             commit → `--staged` (or `--changed` when the commit takes working-tree
-             content: -a/--all, pathspecs, or a `git add` chained in the same command);
-             push → `--since @{u}` when an upstream exists, else the whole project.
+  pre-shell  before a shell command. Gates only `git commit` / `git push` in command position.
+             commit → `--staged`, or exactly the files it records when that differs
+             (-a/--all, pathspecs, a `git add` earlier in the same command);
+             push → the files touched by commits no remote-tracking ref has yet (the whole
+             project when the repository has no remote-tracking refs at all).
   stop       the agent is about to say "done". Scans `--changed`; blocking findings send
              the agent back to work. On Claude Code and Codex only findings in files the
              agent edited in this session count (recorded by post-edit); no recorded edits,
@@ -20,11 +21,14 @@ Events
 
 Policy: fail OPEN. If the scanner cannot run or runs out of time the action is allowed and
 one visible line says so. Every subprocess shares one deadline below the host timeout.
+Every decision, blocks included, is JSON on stdout with exit 0: a host reads exit 2 as a block,
+and a launcher failure (an old `mmu`, `uvx` offline) must never look like one.
 
 Scanner contract: `mmu vibecheck --format json` (schema mmu.vibecheck/v1), exit 0 clean,
 1 blocking, 2 scanner error. See docs/vibecheck-json-schema.md.
 
-Bypass: MMU_HOOK_DISABLE=1 in the environment (all events) or as a prefix on one command;
+Bypass: MMU_HOOK_DISABLE=1 in the environment (all events) or as a prefix on one command
+(`MMU_HOOK_DISABLE=1 git commit ...`, or exported earlier in the same command);
 MMU_HOOK_ON_PUSH_ONLY=1 gates only pushes; MMU_STOP_DISABLE=1 turns off the stop gate.
 """
 
@@ -39,6 +43,7 @@ import shlex
 import subprocess
 import sys
 import time
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -51,23 +56,16 @@ POST_EDIT_DEADLINE_SECONDS = 10.0
 STOP_MAX_DEFAULT = 3
 REASON_MAX_CHARS = 6000
 
-# `git` as a word (not part of a path or another word), then any global options
-# (-C dir, -c k=v, --git-dir=…, --no-pager, …), then the subcommand as a whole word.
-# Env-var prefixes, subshells, `&&` chains and line continuations all still match;
-# the trailing lookahead keeps `git commit-tree` / `git pushx` out.
-_GIT_OPTS = r"(?:\s+(?:-[cC]\s+\S+|--[a-z-]+(?:=\S+)?|-\w+))*"
-_GIT_CMD = re.compile(
-    r"(?<![\w./-])git(?P<opts>" + _GIT_OPTS + r")\s+(?P<verb>commit|push)(?![\w-])(?P<rest>[^;&|\n]*)"
-)
-_GIT_ADD = re.compile(r"(?<![\w./-])git" + _GIT_OPTS + r"\s+(?:add|stage|rm|mv)(?![\w-])")
-_GIT_C_PATH = re.compile(r"-C\s+(?:'([^']+)'|\"([^\"]+)\"|(\S+))")
-_PER_COMMAND_DISABLE = re.compile(r"(?<![\w-])MMU_HOOK_DISABLE=1(?=\s)")
-_NOOP_FLAGS = re.compile(r"(?<!\S)(?:--dry-run|--help|-h)(?!\S)")
+# Fallback for a command the parser below cannot split (unbalanced quotes): the old text search.
+_GIT_FALLBACK = re.compile(r"(?<![\w./-])git(?:\s+-\S+(?:\s+\S+)?)*?\s+(?P<verb>commit|push)(?![\w-])")
 
 # commit options that consume the next token (so it is not a pathspec)
 _COMMIT_ARG_OPTS = {"-m", "-F", "-C", "-c", "-t", "--message", "--file", "--reuse-message", "--reedit-message",
                     "--template", "--author", "--date", "--fixup", "--squash", "--cleanup", "--pathspec-from-file",
                     "--trailer"}
+_COMMIT_NOOP = {"--dry-run", "-h", "--help", "--short", "--porcelain", "--long"}
+_PUSH_ARG_OPTS = {"--repo", "--receive-pack", "--exec", "-o", "--push-option"}
+_PUSH_NOOP = {"--dry-run", "-n", "-h", "--help", "--delete", "-d"}
 
 _CODE_SUFFIXES = {
     ".py", ".js", ".jsx", ".ts", ".tsx", ".mjs", ".mts", ".cjs", ".go", ".rb", ".php", ".java", ".kt", ".rs",
@@ -75,89 +73,517 @@ _CODE_SUFFIXES = {
     ".conf", ".sh", ".tf", ".html",
 }
 _PATCH_FILE = re.compile(r"^\*\*\* (?:Add|Update) File: (.+)$", re.MULTILINE)
+_TRUTHY = {"1", "true", "yes", "on"}
+
+
+def _truthy(value: str | None) -> bool:
+    return (value or "").strip().lower() in _TRUTHY
+
+
+def env_on(name: str) -> bool:
+    return _truthy(os.environ.get(name))
 
 
 # --- command analysis --------------------------------------------------------
+#
+# The command is split the way a POSIX shell splits it, not searched as text: only a `git commit`
+# or `git push` in command position is gated, so `echo "git commit"`, a comment, a heredoc body or a
+# commit message that mentions `--help` decides nothing. `cd`/`pushd`, `git -C`, `--git-dir` and
+# `--work-tree` move the target repository; `bash -c '...'` and `eval` are followed; env prefixes,
+# wrappers (`env`, `sudo`, `command`, `time`, ...) and redirections are skipped.
+# Not followed: a variable in command position (`$GIT commit`) and git aliases.
 
-def gated_match(command: str) -> re.Match[str] | None:
-    """Return the first commit/push match that should be gated, or None."""
-    if os.environ.get("MMU_HOOK_DISABLE") == "1" or _PER_COMMAND_DISABLE.search(command):
-        return None
-    push_only = os.environ.get("MMU_HOOK_ON_PUSH_ONLY") == "1"
-    for m in _GIT_CMD.finditer(command):
-        if _NOOP_FLAGS.search(m.group("rest")):
+_PUNCT = ";&|()<>\n"
+_OPERATORS = ("<<<", "&&", "||", ";;", ">>", "<<", ">&", "<&", "&>", ">|", ";", "&", "|", "(", ")", "<", ">", "\n")
+_SEPARATORS = {"&&", "||", ";;", ";", "&", "|", "\n"}
+_REDIRECTS = {"<<<", ">>", "<<", ">&", "<&", "&>", ">|", "<", ">"}
+_RESERVED = {"if", "then", "else", "elif", "do", "while", "until", "!", "{", "}", "fi", "done", "esac"}
+_WRAPPER_ARGS: dict[str, set[str]] = {
+    "sudo": {"-u", "-g", "-C", "-D", "-h", "-p", "-r", "-t", "-U"}, "doas": {"-u", "-C"},
+    "env": {"-u", "-C", "-S"}, "nice": {"-n"}, "timeout": {"-s", "-k"}, "exec": {"-a"}, "time": {"-f", "-o"},
+    "command": set(), "builtin": set(), "nohup": set(),
+}
+_SHELLS = {"sh", "bash", "zsh", "dash", "ksh", "ash"}
+_ASSIGNMENT = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=")
+_GIT_ARG_OPTS = {"-C", "-c", "--git-dir", "--work-tree", "--namespace", "--config-env", "--super-prefix",
+                 "--list-cmds"}
+_ADD_VERBS = {"add", "stage"}
+_ADD_INTERACTIVE = {"-p", "--patch", "-i", "--interactive", "-e", "--edit"}
+
+
+@dataclass
+class GitCall:
+    """One `git` invocation found in a shell command."""
+
+    verb: str
+    args: list[str]
+    cwd: Path                 # where git runs (after `cd` and `-C`)
+    start: Path               # where to look for the repository (`--work-tree` / `--git-dir` win)
+    disabled: bool = False    # MMU_HOOK_DISABLE=1 set for this command
+    adds: list[tuple[Path, list[str]]] = field(default_factory=list)  # `git add` calls earlier in the command
+    unparsed: bool = False    # found by the text fallback: scope is a superset
+
+
+def _strip_shell_noise(command: str) -> str:
+    """Drop what a shell never runs as words: line continuations, comments and heredoc bodies."""
+    out: list[str] = []
+    i, n = 0, len(command)
+    quote = ""
+    heredocs: list[str] = []
+    word_start = True
+    while i < n:
+        ch = command[i]
+        if quote == "'":
+            out.append(ch)
+            quote = "" if ch == "'" else quote
+            i += 1
             continue
-        if m.group("verb") == "push" or not push_only:
-            return m
+        if ch == "\\" and i + 1 < n:
+            if command[i + 1] == "\n":
+                i += 2
+                continue
+            out.append(command[i:i + 2])
+            i += 2
+            word_start = False
+            continue
+        if quote == '"':
+            out.append(ch)
+            quote = "" if ch == '"' else quote
+            i += 1
+            continue
+        if ch in "'\"":
+            quote = ch
+        elif ch == "#" and word_start:
+            end = command.find("\n", i)
+            i = n if end < 0 else end
+            continue
+        elif command.startswith("<<", i) and not command.startswith("<<<", i):
+            j = i + (3 if command.startswith("<<-", i) else 2)
+            while j < n and command[j] in " \t":
+                j += 1
+            k = j
+            while k < n and command[k] not in " \t\n;&|()<>":
+                k += 1
+            delim = re.sub(r"[\"'\\]", "", command[j:k])
+            if delim:
+                heredocs.append(delim)
+            out.append(command[i:k])
+            i, word_start = k, False
+            continue
+        elif ch == "\n" and heredocs:
+            out.append(ch)
+            i += 1
+            for delim in heredocs:
+                while i < n:
+                    end = command.find("\n", i)
+                    line = command[i:n if end < 0 else end]
+                    i = n if end < 0 else end + 1
+                    if line.strip() == delim:
+                        break
+            heredocs, word_start = [], True
+            continue
+        out.append(ch)
+        i += 1
+        word_start = ch in " \t\n;&|()<>"
+    return "".join(out)
+
+
+def _tokens(command: str) -> list[str]:
+    """Shell words and operators. Raises ValueError on unbalanced quotes."""
+    lex = shlex.shlex(_strip_shell_noise(command), posix=True, punctuation_chars=_PUNCT)
+    lex.whitespace, lex.whitespace_split, lex.commenters = " \t\r", True, ""
+    out: list[str] = []
+    for tok in lex:
+        if tok and all(c in _PUNCT for c in tok):
+            while tok:
+                op = next(o for o in _OPERATORS if tok.startswith(o))
+                out.append(op)
+                tok = tok[len(op):]
+        else:
+            out.append(tok)
+    return out
+
+
+def _command_words(words: list[str]) -> tuple[dict[str, str], list[str]]:
+    """(leading assignments, the command and its arguments), redirections and wrappers removed."""
+    plain: list[str] = []
+    i = 0
+    while i < len(words):
+        if words[i] in _REDIRECTS:
+            i += 2
+        elif words[i].isdigit() and i + 1 < len(words) and words[i + 1] in _REDIRECTS:
+            i += 1
+        else:
+            plain.append(words[i])
+            i += 1
+    assigns: dict[str, str] = {}
+    i = 0
+    while i < len(plain):
+        word = plain[i]
+        wrapper = os.path.basename(word)
+        if _ASSIGNMENT.match(word):
+            name, _, value = word.partition("=")
+            assigns[name] = value
+            i += 1
+        elif word in _RESERVED:
+            i += 1
+        elif wrapper in _WRAPPER_ARGS:
+            i += 1
+            while i < len(plain) and plain[i].startswith("-") and plain[i] != "-":
+                i += 2 if plain[i] in _WRAPPER_ARGS[wrapper] else 1
+            if wrapper == "timeout" and i < len(plain):
+                i += 1  # the duration
+        else:
+            break
+    return assigns, plain[i:]
+
+
+def _shell_script(args: list[str]) -> str | None:
+    """The script of `sh -c '<script>'` (also `bash -lc`, `-ec`, `-o pipefail -c`)."""
+    has_c = False
+    i = 0
+    while i < len(args):
+        arg = args[i]
+        if arg in ("-o", "+o"):
+            i += 2
+            continue
+        if arg.startswith("-") and not arg.startswith("--"):
+            has_c = has_c or "c" in arg[1:]
+            i += 1
+            continue
+        if arg.startswith("--"):
+            i += 1
+            continue
+        return arg if has_c else None
+    return None
+
+
+def _git_call(args: list[str], here: Path, disabled: bool) -> GitCall:
+    c_dir, git_dir, work_tree = here, "", ""
+    help_only = False
+    i = 0
+    while i < len(args):
+        arg = args[i]
+        if arg in _GIT_ARG_OPTS:
+            value = args[i + 1] if i + 1 < len(args) else ""
+            if arg == "-C" and value:
+                c_dir = c_dir / os.path.expanduser(value)
+            elif arg == "--git-dir":
+                git_dir = value
+            elif arg == "--work-tree":
+                work_tree = value
+            i += 2
+            continue
+        if arg.startswith("--git-dir="):
+            git_dir = arg.split("=", 1)[1]
+        elif arg.startswith("--work-tree="):
+            work_tree = arg.split("=", 1)[1]
+        elif arg in ("-h", "--help", "--version", "-v"):
+            help_only = True
+        elif not arg.startswith("-"):
+            break
+        i += 1
+    start = c_dir
+    if work_tree:
+        start = c_dir / os.path.expanduser(work_tree)
+    elif git_dir:
+        gd = c_dir / os.path.expanduser(git_dir)
+        start = gd.parent if gd.name == ".git" else gd
+    verb = "" if help_only or i >= len(args) else args[i]
+    return GitCall(verb=verb, args=args[i + 1:], cwd=c_dir, start=start, disabled=disabled)
+
+
+def git_calls(command: str, cwd: str | Path = ".", _depth: int = 0) -> list[GitCall]:
+    """Every git invocation in `command`, in order, with the directory it runs in. Raises ValueError."""
+    calls: list[GitCall] = []
+    here = Path(cwd)
+    saved: list[tuple[Path, dict[str, str]]] = []  # a subshell's cd and export do not leak out of it
+    exported: dict[str, str] = {}
+    words: list[str] = []
+    for tok in [*_tokens(command), "\n"]:
+        if tok not in _SEPARATORS and tok not in ("(", ")"):
+            words.append(tok)
+            continue
+        if words:
+            here = _simple_command(words, here, exported, calls, _depth)
+            words = []
+        if tok == "(":
+            saved.append((here, dict(exported)))
+        elif tok == ")" and saved:
+            here, outer = saved.pop()
+            exported.clear()
+            exported.update(outer)
+    return calls
+
+
+def _simple_command(words: list[str], here: Path, exported: dict[str, str], calls: list[GitCall],
+                    depth: int) -> Path:
+    """Record the git call in one simple command; return the working directory after it."""
+    assigns, cmd = _command_words(words)
+    if not cmd:
+        return here
+    name = os.path.basename(cmd[0].replace("\\", "/"))
+    args = cmd[1:]
+    if name in ("cd", "pushd"):
+        target = next((a for a in args if not a.startswith("-") or a == "-"), "~")
+        return here if target == "-" or "$" in target else here / os.path.expanduser(target)
+    if name == "export":
+        for arg in args:
+            if _ASSIGNMENT.match(arg):
+                key, _, value = arg.partition("=")
+                exported[key] = value
+        return here
+    disabled = _truthy(assigns.get("MMU_HOOK_DISABLE", exported.get("MMU_HOOK_DISABLE")))
+    script = " ".join(args) if name == "eval" else _shell_script(args) if name in _SHELLS else None
+    if script is not None and depth < 3:
+        for call in git_calls(script, here, depth + 1):
+            call.disabled = call.disabled or disabled
+            calls.append(call)
+        return here
+    if name in ("git", "git.exe"):
+        calls.append(_git_call(args, here, disabled))
+    return here
+
+
+@dataclass
+class _Commit:
+    options: set[str]
+    paths: list[str]
+
+
+def _parse_commit(args: list[str]) -> _Commit:
+    options: set[str] = set()
+    paths: list[str] = []
+    i = 0
+    while i < len(args):
+        tok = args[i]
+        i += 1
+        if tok == "--":
+            paths.extend(args[i:])
+            break
+        if tok.startswith("--"):
+            name = tok.split("=", 1)[0]
+            options.add(name)
+            if name in _COMMIT_ARG_OPTS and "=" not in tok:
+                i += 1
+            continue
+        if tok.startswith("-") and len(tok) > 1:
+            cluster = tok[1:]
+            for j, ch in enumerate(cluster):
+                options.add("-" + ch)
+                if ch in "mFCct":
+                    i += 1 if j == len(cluster) - 1 else 0  # `-m msg` takes the next token; `-mmsg` does not
+                    break
+                if ch in "Su":
+                    break  # optional value attached: `-S<keyid>`, `-uno`
+            continue
+        paths.append(tok)
+    return _Commit(options, paths)
+
+
+def _parse_push(args: list[str]) -> tuple[set[str], list[str]]:
+    options: set[str] = set()
+    positional: list[str] = []
+    i = 0
+    while i < len(args):
+        tok = args[i]
+        i += 1
+        if tok == "--":
+            positional.extend(args[i:])
+            break
+        if tok.startswith("--"):
+            name = tok.split("=", 1)[0]
+            options.add(name)
+            if name in _PUSH_ARG_OPTS and "=" not in tok:
+                i += 1
+            continue
+        if tok.startswith("-") and len(tok) > 1:
+            options.update("-" + ch for ch in tok[1:])
+            if tok == "-o":
+                i += 1
+            continue
+        positional.append(tok)
+    return options, positional
+
+
+def _push_revs(options: set[str], positional: list[str]) -> list[str] | None:
+    """Revisions whose commits the push sends; None when it only deletes."""
+    revs: list[str] = []
+    if options & {"--all", "--branches", "--mirror"}:
+        revs.append("--branches")
+    if "--tags" in options:
+        revs.append("--tags")
+    refspecs = positional[1:]
+    i = 0
+    while i < len(refspecs):
+        spec = refspecs[i]
+        i += 1
+        if spec == "tag" and i < len(refspecs):
+            revs.append("refs/tags/" + refspecs[i])
+            i += 1
+            continue
+        src = spec.lstrip("+").split(":", 1)[0]
+        if src:
+            revs.append("--branches" if "*" in src else src)
+    if refspecs and not revs:
+        return None
+    return revs or ["HEAD"]
+
+
+def _is_noop(call: GitCall) -> bool:
+    if call.verb == "commit":
+        return bool(_parse_commit(call.args).options & _COMMIT_NOOP)
+    options, positional = _parse_push(call.args)
+    return bool(options & _PUSH_NOOP) or _push_revs(options, positional) is None
+
+
+def gated_call(command: str, cwd: str | Path = ".") -> GitCall | None:
+    """The first `git commit` / `git push` in `command` that the gate checks, or None."""
+    if env_on("MMU_HOOK_DISABLE"):
+        return None
+    push_only = env_on("MMU_HOOK_ON_PUSH_ONLY")
+    try:
+        calls = git_calls(command, cwd)
+    except ValueError:
+        m = _GIT_FALLBACK.search(command)
+        if m is None or (push_only and m.group("verb") == "commit"):
+            return None
+        return GitCall(verb=m.group("verb"), args=[], cwd=Path(cwd), start=Path(cwd), unparsed=True)
+    adds: list[tuple[Path, list[str]]] = []
+    for call in calls:
+        if call.verb in _ADD_VERBS:
+            adds.append((call.cwd, call.args))
+            continue
+        if call.verb not in ("commit", "push") or call.disabled or _is_noop(call):
+            continue
+        if call.verb == "commit" and push_only:
+            continue
+        call.adds = adds
+        return call
     return None
 
 
 def should_gate(command: str) -> bool:
-    return gated_match(command) is not None
+    return gated_call(command) is not None
 
 
-def _commit_takes_worktree(command: str, match: re.Match[str]) -> bool:
-    """True when the commit will include content that is not staged yet at hook time."""
-    if _GIT_ADD.search(command[: match.start()]):
-        return True  # `git add -A && git commit …`: the hook runs before the add
-    try:
-        tokens = shlex.split(match.group("rest"))
-    except ValueError:
-        return True
-    skip = False
-    for tok in tokens:
-        if skip:
-            skip = False
-            continue
-        if tok == "--":
-            return True  # everything after is a pathspec
-        if tok in ("--all", "--include", "--only", "--interactive", "--patch"):
-            return True
-        if tok.startswith("--"):
-            skip = tok in _COMMIT_ARG_OPTS
-            continue
-        if tok.startswith("-") and len(tok) > 1:
-            cluster = tok[1:]
-            for i, ch in enumerate(cluster):
-                if ch in "aiop":
-                    return True
-                if ch in "mFCct":
-                    skip = i == len(cluster) - 1  # `-m msg` consumes the next token; `-mmsg` does not
-                    break
-            continue
-        return True  # a bare token is a pathspec: git commits that file's working-tree content
-    return False
-
-
-def _git(args: list[str], cwd: Path, deadline: float) -> str | None:
+def _git_out(args: list[str], cwd: Path, deadline: float, cap: float = 3.0) -> str | None:
+    """stdout of a git command (may be empty), or None when it failed or could not run."""
     try:
         out = subprocess.run(
-            ["git", *args], cwd=str(cwd), capture_output=True, text=True,
-            timeout=max(1.0, min(3.0, deadline - time.monotonic())),
+            # core.fsmonitor=false: never let the repository's own config run a command through the hook.
+            ["git", "-c", "core.fsmonitor=false", *args], cwd=str(cwd), capture_output=True, text=True,
+            encoding="utf-8", errors="replace", timeout=max(1.0, min(cap, deadline - time.monotonic())),
         )
     except (OSError, subprocess.SubprocessError):
         return None
-    return out.stdout.strip() if out.returncode == 0 and out.stdout.strip() else None
+    return out.stdout if out.returncode == 0 else None
 
 
-def repo_root(cwd: str, match: re.Match[str] | None, deadline: float) -> Path:
-    """Git toplevel for the command: honours `git -C <path>`, falls back to cwd."""
-    start = Path(cwd)
-    if match is not None:
-        c = _GIT_C_PATH.search(match.group("opts"))
-        if c:
-            start = (start / (c.group(1) or c.group(2) or c.group(3))).expanduser()
-    top = _git(["rev-parse", "--show-toplevel"], start, deadline)
-    return Path(top) if top else start
+def _git(args: list[str], cwd: Path, deadline: float) -> str | None:
+    out = _git_out(args, cwd, deadline)
+    return out.strip() if out and out.strip() else None
 
 
-def scope_for(command: str, match: re.Match[str], root: Path, deadline: float) -> list[str]:
-    """`mmu vibecheck` scope flags for a gated commit/push."""
-    if match.group("verb") == "commit":
-        return ["--changed"] if _commit_takes_worktree(command, match) else ["--staged"]
-    if _git(["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"], root, deadline):
-        return ["--since", "@{u}"]
-    return []
+def _names(args: list[str], cwd: Path, deadline: float, cap: float = 3.0) -> set[str] | None:
+    out = _git_out(args, cwd, deadline, cap)
+    return None if out is None else {p for p in out.split("\0") if p.strip()}
+
+
+def repo_root(call: GitCall, deadline: float) -> Path:
+    """Git toplevel for the call (after `cd`, `-C`, `--work-tree`), falling back to where it starts."""
+    top = _git(["rev-parse", "--show-toplevel"], call.start, deadline)
+    return Path(top) if top else call.start
+
+
+@dataclass
+class Scope:
+    """`mmu vibecheck` scope flags, plus the file list fed on stdin for `--files-from -`."""
+
+    flags: list[str]
+    files: list[str] | None = None
+
+    @classmethod
+    def listed(cls, files: set[str]) -> Scope:
+        return cls(["--files-from", "-"], sorted(files))
+
+    def stdin(self) -> str:
+        return "".join(f"{p}\n" for p in self.files or [])
+
+
+def _inside(path: Path, root: Path) -> bool:
+    try:
+        path.resolve().relative_to(root.resolve())
+    except (ValueError, OSError):
+        return False
+    return True
+
+
+_DIFF_NAMES = ["--name-only", "-z", "--no-relative", "--diff-filter=d"]
+_ADDED = re.compile(r"^add '(.*)'$")
+
+
+def _commit_scope(call: GitCall, root: Path, deadline: float) -> Scope:
+    """Exactly the files the commit records, when that differs from what is staged now."""
+    commit = _parse_commit(call.args)
+    opts = commit.options
+    takes_all = bool(opts & {"-a", "--all"})
+    if call.unparsed:
+        return Scope(["--changed"])
+    if not (takes_all or commit.paths or call.adds or opts & {"-p", "--patch", "--interactive",
+                                                               "--pathspec-from-file"}):
+        return Scope(["--staged"])
+    if opts & {"-p", "--patch", "--interactive", "--pathspec-from-file"}:
+        return Scope(["--changed"])
+    staged = _names(["diff", "--cached", *_DIFF_NAMES], root, deadline)
+    if staged is None:
+        return Scope(["--changed"])
+    # `git commit <paths>` records only those paths; staged changes elsewhere stay out (unless --include)
+    files = set(staged) if not commit.paths or opts & {"-i", "--include"} else set()
+    for add_cwd, add_args in call.adds:
+        if set(add_args) & _ADD_INTERACTIVE:
+            return Scope(["--changed"])
+        top = _git(["rev-parse", "--show-toplevel"], add_cwd, deadline)
+        if top is None or Path(top).resolve() != root.resolve():
+            continue  # another repository
+        out = _git_out(["add", "--dry-run", *add_args], add_cwd, deadline, cap=10.0) or ""
+        files.update(m.group(1) for m in map(_ADDED.match, out.splitlines()) if m)
+    if takes_all:
+        tracked = _names(["diff", *_DIFF_NAMES], root, deadline)
+        if tracked is None:
+            return Scope(["--changed"])
+        files |= tracked | staged
+    if commit.paths:
+        where = call.cwd if _inside(call.cwd, root) else root
+        for diff in (["diff"], ["diff", "--cached"]):
+            got = _names([*diff, *_DIFF_NAMES, "--", *commit.paths], where, deadline)
+            if got is None:
+                return Scope(["--changed"])
+            files |= got
+    return Scope.listed(files) if files else Scope(["--staged"])
+
+
+def _push_scope(call: GitCall, root: Path, deadline: float) -> Scope | None:
+    """Files touched by the commits the push sends that no remote-tracking ref has yet; None: nothing new."""
+    options, positional = _parse_push(call.args)
+    revs = _push_revs(options, positional) or ["HEAD"]
+    if call.unparsed:
+        revs = ["HEAD"]
+    remotes = _git_out(["for-each-ref", "--count=1", "--format=%(refname)", "refs/remotes"], root, deadline)
+    if not remotes or not remotes.strip():
+        return Scope([])  # no remote-tracking refs (first push, or git failed): every file is new
+    files = _names(["log", "-z", "--name-only", "--format=", "--no-renames", "--diff-filter=d", *revs,
+                    "--not", "--remotes"], root, deadline, cap=10.0)
+    if files is None:
+        return Scope([])  # unknown revision or git error: the whole project, as before
+    return Scope.listed(files) if files else None
+
+
+def scope_for(call: GitCall, root: Path, deadline: float) -> Scope | None:
+    """`mmu vibecheck` scope for a gated commit/push; None when there is nothing to check."""
+    if call.verb == "commit":
+        return _commit_scope(call, root, deadline)
+    return _push_scope(call, root, deadline)
 
 
 # --- scanner -----------------------------------------------------------------
@@ -171,14 +597,16 @@ def _launcher() -> tuple[list[str], dict[str, str]]:
     return [sys.executable, "-m", "mmu_cli", "vibecheck"], env
 
 
-def _run(args: list[str], root: Path, deadline: float) -> subprocess.CompletedProcess[str] | str:
+def _run(args: list[str], root: Path, deadline: float, stdin: str = "") -> subprocess.CompletedProcess[str] | str:
     cmd, env = _launcher()
     remaining = deadline - time.monotonic()
     if remaining < 2:
         return "no time left before the hook deadline"
+    if not root.is_dir():
+        return f"{root} is not a directory"
     try:
         return subprocess.run(
-            [*cmd, *args], capture_output=True, text=True, encoding="utf-8", errors="replace",
+            [*cmd, *args], input=stdin, capture_output=True, text=True, encoding="utf-8", errors="replace",
             timeout=remaining, env=env, cwd=str(root),
         )
     except FileNotFoundError:
@@ -189,9 +617,9 @@ def _run(args: list[str], root: Path, deadline: float) -> subprocess.CompletedPr
         return f"scanner could not start: {exc}"
 
 
-def run_scan(root: Path, scope: list[str], deadline: float) -> dict[str, Any] | str:
+def run_scan(root: Path, scope: Scope, deadline: float) -> dict[str, Any] | str:
     """Return the parsed v1 document, or a short string saying why the scan could not run."""
-    proc = _run(["--format", "json", *scope], root, deadline)
+    proc = _run(["--format", "json", *scope.flags], root, deadline, scope.stdin())
     if isinstance(proc, str):
         return proc
     try:
@@ -240,11 +668,12 @@ def _fallback_reason(fails: list[dict[str, Any]]) -> str:
     return "\n".join(lines)
 
 
-def build_reason(headline: str, fails: list[dict[str, Any]], root: Path, scope: list[str], deadline: float,
+def build_reason(headline: str, fails: list[dict[str, Any]], root: Path, scope: Scope, deadline: float,
                  footer: str, use_agent_format: bool = True) -> str:
     """Headline + the scanner's own `--format agent` text (path:line, rule, fix, how to silence) + footer."""
     body = ""
-    proc = _run(["--format", "agent", *scope], root, deadline) if use_agent_format else "filtered findings"
+    proc = (_run(["--format", "agent", *scope.flags], root, deadline, scope.stdin())
+            if use_agent_format else "filtered findings")
     if not isinstance(proc, str) and proc.returncode == 1 and proc.stdout.strip():
         body = proc.stdout.strip()
     if not body:
@@ -379,8 +808,9 @@ class Reply:
                 return self._emit({"permission": "deny", "user_message": first, "agent_message": reason})
             if self.host == "gemini":
                 return self._emit({"decision": "deny", "reason": reason})
-            # Claude Code and Codex: exit 2, stderr is handed to the model as the denial reason.
-            return self._emit(None, code=2, stderr=reason)
+            # Claude Code and Codex: a JSON deny with exit 0; the reason is handed to the model.
+            return self._emit({"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "deny",
+                                                       "permissionDecisionReason": reason}})
         if self.event == "stop":
             if self.host == "cursor":
                 return self._emit({"followup_message": reason})
@@ -438,7 +868,8 @@ def _edited(state: Path | None) -> set[str]:
     return {str(p) for p in edited} if isinstance(edited, list) else set()
 
 
-def _save_state(state: Path | None, blocks: int | None = None, add_edited: set[str] | None = None) -> None:
+def _save_state(state: Path | None, blocks: int | None = None, add_edited: set[str] | None = None,
+                seen: set[str] | None = None) -> None:
     """Merge into the session state. `_clear_state` removes it."""
     if state is None:
         return
@@ -446,6 +877,8 @@ def _save_state(state: Path | None, blocks: int | None = None, add_edited: set[s
         data = _load_state(state)
         if blocks is not None:
             data["blocks"] = blocks
+        if seen is not None:
+            data["seen"] = sorted(seen)
         if add_edited:
             data["edited"] = sorted(_edited(state) | add_edited)
         data["updated"] = int(time.time())
@@ -467,6 +900,12 @@ def _clear_state(state: Path | None) -> None:
             state.unlink(missing_ok=True)
         except OSError:
             pass
+
+
+def _marks(fails: list[dict[str, Any]]) -> set[str]:
+    """rule:path for each finding location (no line numbers: they move while the agent edits)."""
+    return {f"{f.get('rule_id') or f.get('check')}:{loc.get('path')}"
+            for f in fails for loc in f.get("locations") or [] if isinstance(loc, dict)}
 
 
 def _session_id(payload: dict[str, Any]) -> str:
@@ -494,12 +933,14 @@ _SILENCE = (
 def handle_pre_shell(payload: dict[str, Any], reply: Reply) -> int:
     deadline = time.monotonic() + DEADLINE_SECONDS
     command = shell_command(payload, reply.host)
-    match = gated_match(command) if command else None
-    if match is None:
+    call = gated_call(command, payload_cwd(payload)) if command else None
+    if call is None:
         return reply.allow()
-    root = repo_root(payload_cwd(payload), match, deadline)
-    scope = scope_for(command, match, root, deadline)
-    verb = match.group("verb")
+    root = repo_root(call, deadline)
+    scope = scope_for(call, root, deadline)
+    if scope is None:
+        return reply.allow()  # the push sends no commit that a remote does not already have
+    verb = call.verb
     result = run_scan(root, scope, deadline)
     if isinstance(result, str):
         return reply.allow(f"mmu vibecheck gate did not run ({result}) — {verb} allowed unchecked.")
@@ -516,7 +957,7 @@ def handle_pre_shell(payload: dict[str, Any], reply: Reply) -> int:
 
 
 def handle_stop(payload: dict[str, Any], reply: Reply) -> int:
-    if os.environ.get("MMU_HOOK_DISABLE") == "1" or os.environ.get("MMU_STOP_DISABLE") == "1":
+    if env_on("MMU_HOOK_DISABLE") or env_on("MMU_STOP_DISABLE"):
         return reply.allow()
     limit = stop_max()
     if limit == 0 or payload.get("stop_hook_active") is True:
@@ -527,7 +968,8 @@ def handle_stop(payload: dict[str, Any], reply: Reply) -> int:
     except (TypeError, ValueError):
         pass
     deadline = time.monotonic() + DEADLINE_SECONDS
-    root = repo_root(payload_cwd(payload), None, deadline)
+    cwd = Path(payload_cwd(payload))
+    root = repo_root(GitCall(verb="", args=[], cwd=cwd, start=cwd), deadline)
     state = _state_file(root, _session_id(payload), deadline)
     if state is None:
         return reply.allow()  # not a git repository: nothing to scope the scan to, stay quiet
@@ -538,26 +980,30 @@ def handle_stop(payload: dict[str, Any], reply: Reply) -> int:
     edited = _edited(state)
     if tracks_edits and not edited:
         return reply.allow()
-    result = run_scan(root, ["--changed"], deadline)
+    changed = Scope(["--changed"])
+    result = run_scan(root, changed, deadline)
     if isinstance(result, str):
         return reply.allow(f"mmu vibecheck stop gate did not run ({result}).")
     all_fails = blocking(result)
     fails = _only_in(all_fails, edited) if tracks_edits else all_fails
     where = "files edited in this session" if tracks_edits else "uncommitted changes"
-    count = _stop_count(state)
     if not fails:
         _clear_state(state)
         return reply.allow()
+    # The cap counts attempts at the same findings: a new one starts the count again.
+    marks = _marks(fails)
+    seen = {str(m) for m in _load_state(state).get("seen") or []}
+    count = _stop_count(state) if marks <= seen else 0
     if count >= limit:
         return reply.allow(
             f"mmu vibecheck: {len(fails)} launch-blocking issue(s) remain in {where}; the stop gate has "
             f"already sent the agent back {count} time(s) this session (MMU_STOP_MAX={limit}), so it is letting go. "
             "Run `mmu vibecheck --changed` to see them."
         )
-    _save_state(state, blocks=count + 1)
+    _save_state(state, blocks=count + 1, seen=seen | marks)
     reason = build_reason(
         f"mmu vibecheck: not done yet — {len(fails)} launch-blocking issue(s) in {where} ({root}).",
-        fails, root, ["--changed"], deadline,
+        fails, root, changed, deadline,
         "Fix the P0 findings and re-run `mmu vibecheck --changed --format agent` until they are gone "
         f"before telling the user the work is done. {_SILENCE} "
         "If the user explicitly asked to defer this hardening, do not fix it: list these P0s in your final "
@@ -570,7 +1016,7 @@ def handle_stop(payload: dict[str, Any], reply: Reply) -> int:
 
 
 def handle_post_edit(payload: dict[str, Any], reply: Reply) -> int:
-    if os.environ.get("MMU_HOOK_DISABLE") == "1" or reply.host == "cursor":
+    if env_on("MMU_HOOK_DISABLE") or reply.host == "cursor":
         return reply.allow()
     files = edited_files(payload)
     if not files:
@@ -597,7 +1043,7 @@ def handle_post_edit(payload: dict[str, Any], reply: Reply) -> int:
     wanted = {rel for rel in touched if Path(rel).suffix.lower() in _CODE_SUFFIXES or Path(rel).name.startswith(".env")}
     if not wanted:
         return reply.allow()  # not a code or config file: no scan
-    result = run_scan(root, ["--changed"], deadline)
+    result = run_scan(root, Scope(["--changed"]), deadline)
     if isinstance(result, str):
         return reply.allow()  # feedback only; the commit and stop gates report scanner trouble
     lines: list[str] = []
@@ -650,7 +1096,11 @@ def run(host: str | None = None, event: str | None = None, stdin: Any = None) ->
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="mmu hook", description="Agent hook entry point for mmu vibecheck")
     add_arguments(parser)
-    args, _ = parser.parse_known_args(argv)
+    try:
+        args, _ = parser.parse_known_args(argv)
+    except SystemExit as exc:
+        # `--help` ends here; a bad --host/--event must not exit 2 (a block): detect both from the payload.
+        return 0 if exc.code in (0, None) else run(None, None)
     return run(args.host, args.event)
 
 

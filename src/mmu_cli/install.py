@@ -9,16 +9,21 @@ Targets
   --agents-md  AGENTS.md               a marked instruction block
   --skill      .agents/skills/mmu-vibecheck/SKILL.md   the Agent Skill (Codex and other agentskills.io hosts)
 
-Every write is idempotent: our entries are recognised by the `hook --host <host> --event <event>`
-tail of the command (JSON configs) or by a marker line (git hook, AGENTS.md), removed, and
-re-added. `--uninstall` only removes. Existing settings are merged, never replaced; a config
-file that is not valid JSON is left untouched and reported.
+Every write is idempotent: our entries are recognised by a command that ends in
+`hook --host <host> --event <event>` (JSON configs) or by a marker line (git hook, AGENTS.md),
+removed, and re-added. `--uninstall` only removes. Existing settings are merged, never replaced;
+a config file that is not valid JSON, or whose `hooks` is not an object, is left untouched and
+reported. On macOS and Linux the hook command ends in `|| true`: if the launcher itself fails
+(`uvx` offline, an old `mmu`), the host sees exit 0, not a block. mmu blocks with JSON on stdout.
+A repository whose git hooks are managed elsewhere (`core.hooksPath`: husky, lefthook, ...) is not
+modified by `--git`; the report gives the line to add to that manager instead.
 """
 
 from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import shlex
 import shutil
@@ -29,7 +34,11 @@ from typing import Any
 TARGETS = ("claude", "codex", "cursor", "gemini", "git", "agents-md", "skill")
 SKILL_REL = "skills/mmu-vibecheck/SKILL.md"
 UVX_COMMAND = 'uvx --from "make-me-unicorn>=0.9" mmu hook'
-_OURS = re.compile(r"\bhook --host (?:claude|codex|cursor|gemini) --event (?:pre-shell|stop|post-edit)\b")
+_TAIL = r"\bhook --host (?:claude|codex|cursor|gemini) --event (?:pre-shell|stop|post-edit)(?: \|\| true)?"
+_OURS = re.compile(_TAIL + r"\s*$")
+_OURS_IN_TEXT = re.compile(_TAIL + r'"')
+GUARD = "" if os.name == "nt" else " || true"
+GIT_HOOK_LINE = 'uvx --from "make-me-unicorn>=0.9" mmu vibecheck --staged --format agent'
 
 GIT_MARKER = "# mmu-vibecheck pre-commit hook"
 CHAINED_SUFFIX = ".pre-mmu"
@@ -109,7 +118,7 @@ def default_command() -> str:
 # --- JSON hook configs -------------------------------------------------------
 
 def _cmd(base: str, host: str, event: str) -> str:
-    return f"{base} --host {host} --event {event}"
+    return f"{base} --host {host} --event {event}{GUARD}"
 
 
 def _is_ours(handler: Any) -> bool:
@@ -130,8 +139,8 @@ def _strip_nested(hooks: dict[str, Any]) -> None:
                     continue
                 group = {**group, "hooks": handlers}
             kept.append(group)
-        if kept:
-            hooks[event] = kept
+        if kept or not groups:
+            hooks[event] = kept  # an event list the user left empty stays
         else:
             del hooks[event]
 
@@ -142,7 +151,7 @@ def _strip_flat(hooks: dict[str, Any]) -> None:
         if not isinstance(hooks[event], list):
             continue
         kept = [h for h in hooks[event] if not _is_ours(h)]
-        if kept:
+        if kept or not hooks[event]:
             hooks[event] = kept
         else:
             del hooks[event]
@@ -220,7 +229,10 @@ def _plan_json(host: str, root: Path, base: str, uninstall: bool) -> dict[str, A
         if not isinstance(data, dict):
             return {"target": host, "path": str(path), "action": "error",
                     "detail": "top level is not a JSON object; left untouched"}
-    had_ours = bool(before and _OURS.search(before))
+        if "hooks" in data and not isinstance(data["hooks"], dict):
+            return {"target": host, "path": str(path), "action": "error",
+                    "detail": "`hooks` is not a JSON object; left untouched"}
+    had_ours = bool(before and _OURS_IN_TEXT.search(before))
     data = _apply_json(host, data, base, uninstall)
     after: str | None = json.dumps(data, indent=2, ensure_ascii=False) + "\n"
     if uninstall and not had_ours:
@@ -248,6 +260,15 @@ def _git_hooks_dir(root: Path) -> Path | None:
     return path if path.is_absolute() else (root / path)
 
 
+def _hooks_path_setting(root: Path) -> str:
+    try:
+        out = subprocess.run(["git", "config", "--get", "core.hooksPath"], cwd=str(root),
+                             capture_output=True, text=True, timeout=10)
+    except (OSError, subprocess.SubprocessError):
+        return ""
+    return out.stdout.strip() if out.returncode == 0 else ""
+
+
 def _plan_git(root: Path, uninstall: bool) -> dict[str, Any]:
     hooks_dir = _git_hooks_dir(root)
     if hooks_dir is None:
@@ -267,6 +288,13 @@ def _plan_git(root: Path, uninstall: bool) -> dict[str, Any]:
         return {**plan, "action": "remove", "content": None, "detail": ""}
     if ours and before == GIT_HOOK:
         return {**plan, "action": "unchanged", "detail": "already up to date"}
+    managed = _hooks_path_setting(root)
+    if managed and not ours:
+        # husky and similar managers regenerate this directory and dispatch on the hook's file name:
+        # moving their pre-commit aside would silently stop the user's own hook.
+        return {**plan, "action": "error",
+                "detail": f"core.hooksPath is {managed} (husky, lefthook or another hook manager); left untouched. "
+                          f"Add this line to that manager's pre-commit hook instead: {GIT_HOOK_LINE}"}
     if before is not None and not ours:
         if chained.exists():
             return {**plan, "action": "error",

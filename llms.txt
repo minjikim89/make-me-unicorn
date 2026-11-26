@@ -11,7 +11,7 @@
 
 ## Run a scan
 
-- `mmu vibecheck` whole project; `--staged`, `--changed`, `--since <ref>` limit the scope
+- `mmu vibecheck` whole project; `--staged`, `--changed`, `--since <ref>`, `--files-from <file|->` limit the scope
 - `--format agent` compact fix list for an LLM; `--format json` (schema `mmu.vibecheck/v1`); `--format sarif` (2.1.0)
 - Exit codes: 0 nothing blocking, 1 findings at or above `--fail-on` (default P0), 2 the scan could not run
 - `--list-rules`, `--explain <rule-id>`

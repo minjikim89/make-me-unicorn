@@ -1944,6 +1944,12 @@ def command_validate(
 
 def main() -> int:
     _force_utf8_output()
+    if sys.argv[1:2] == ["hook"]:
+        # Straight to the hook: the main parser exits 2 on an argument it does not know, and an agent
+        # host reads exit 2 as "block this action".
+        from mmu_cli.hooks import main as hook_main
+
+        return hook_main(sys.argv[2:])
     args = parse_args()
     if not args.command:
         # No subcommand: run the launch gate. `mmu status` is the dashboard.

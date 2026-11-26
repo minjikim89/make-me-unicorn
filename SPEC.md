@@ -126,7 +126,7 @@ Deterministic, read-only scan. No network, no LLM. `mmu vibecheck --list-rules` 
 - P0 (blocking): `secrets`, `client-bundle-secrets`, `supabase-rls`, `webhook-signature`, `sql-fstring`, `code-injection`, `jwt-secret-default`, `unsafe-deserialization`, `git-config-exec`.
 - P1 (warning): `llm-route-unthrottled`, `admin-route-no-auth`, `password-reset`, `webhook-idempotency`, `rate-limiting`, `cors-wildcard`, `dangerous-html`, `jwt-localstorage`, `stack-trace-leak`, `sourcemaps-exposed`, `env-not-ignored`, `disabled-ssl`, `debug-mode`, `error-monitoring`.
 - Severity policy: P0 only with specific evidence; findings about something being absent are P1. Comments are never evidence.
-- Scope: whole project by default; `--staged`, `--changed`, `--since <ref>` limit findings to those files. Repo-level findings (dotenv files, `.git/config`) stay in scope.
+- Scope: whole project by default; `--staged`, `--changed`, `--since <ref>`, `--files-from <file|->` limit findings to those files. Repo-level findings (dotenv files, `.git/config`) stay in scope.
 - Skipped: vendor and build directories at any depth, files over 1 MB, minified bundles, git-ignored files. Extra excludes: `[vibecheck] skip_paths` (or `[doctor] skip_paths`) in `.mmu/config.toml`.
 - Suppression: `mmu-ignore[<rule-id>]: <reason>` on the flagged line or the line above (a reason is required), or `[vibecheck] ignore = ["glob:rule-id"]`. Baseline: `--write-baseline`, `--baseline`.
 - Output: `--format text|json|sarif|agent`, `--output <file>`. JSON schema `mmu.vibecheck/v1`: `docs/vibecheck-json-schema.md`.
@@ -139,15 +139,17 @@ Deterministic, read-only scan. No network, no LLM. `mmu vibecheck --list-rules` 
 
 | Event | Claude Code | Codex CLI | Cursor | Gemini CLI |
 |---|---|---|---|---|
-| `pre-shell` (git commit / push) | `PreToolUse` on `Bash`; block = exit 2 + reason on stderr | same as Claude Code | `beforeShellExecution`; block = `{"permission": "deny"}` | `BeforeTool` on `run_shell_command`; block = `{"decision": "deny"}` |
+| `pre-shell` (git commit / push) | `PreToolUse` on `Bash`; block = `{"hookSpecificOutput": {"permissionDecision": "deny", ...}}` | same as Claude Code | `beforeShellExecution`; block = `{"permission": "deny"}` | `BeforeTool` on `run_shell_command`; block = `{"decision": "deny"}` |
 | `stop` | `Stop`; block = `{"decision": "block", "reason": ...}` | same | `stop`; `followup_message` | `AfterAgent`; `{"decision": "deny"}` |
 | `post-edit` | `PostToolUse` on `Edit\|Write\|MultiEdit`; `additionalContext` | `PostToolUse` on `apply_patch` | not registered | not registered |
 
-- Commit scope: `--staged`; `--changed` when the command commits working-tree content (`-a`, pathspecs, `git add ... && git commit`). Push scope: `--since @{u}` when an upstream exists.
+- Gated: `git commit` / `git push` in command position, as a POSIX shell splits the command. Text that only mentions them (an `echo`, a comment, a heredoc body, a commit message) is not gated; `cd`, `pushd`, `git -C`, `--git-dir` and `--work-tree` pick the repository; `bash -c` and `eval` are followed. Not followed: a variable in command position and git aliases.
+- Commit scope: `--staged`; when the commit records other content (`-a`, pathspecs, `git add ... && git commit`), exactly those files (`--files-from -`). Push scope: files touched by the commits that no remote-tracking ref has yet; nothing new, no scan; no remote-tracking refs at all, the whole project.
+- Exit code: always `0`, blocks included. A host reads exit 2 as a block, so a launcher failure must not produce one; `mmu install` ends the command in `|| true` on macOS and Linux for the same reason.
 - Stop scope (Claude Code, Codex): P0 findings in files the agent edited in this session, recorded by the post-edit hook under the git dir. No recorded edits: allow. Cursor and Gemini: `--changed`.
 - Loop bounds: the host's own flag (`stop_hook_active`, `loop_count`) and `MMU_STOP_MAX` (default 3 per session).
 - Fail-open: if the scanner errors or times out, the action is allowed and one line says so.
-- Environment: `MMU_HOOK_DISABLE=1` (all hooks), `MMU_HOOK_ON_PUSH_ONLY=1` (gate pushes only), `MMU_STOP_DISABLE=1`, `MMU_STOP_MAX`.
+- Environment: `MMU_HOOK_DISABLE=1` (all hooks; per command as a prefix or exported earlier in the same command), `MMU_HOOK_ON_PUSH_ONLY=1` (gate pushes only), `MMU_STOP_DISABLE=1`, `MMU_STOP_MAX`.
 
 ## Gate behavior
 

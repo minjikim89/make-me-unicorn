@@ -60,8 +60,8 @@ class JsonTargetTests(unittest.TestCase):
         pre = data["hooks"]["PreToolUse"]
         self.assertEqual(pre[0], existing["hooks"]["PreToolUse"][0])
         self.assertEqual(pre[1], {"matcher": "Bash", "hooks": [
-            {"type": "command", "command": "mmu hook --host claude --event pre-shell", "timeout": 60}]})
-        self.assertEqual(data["hooks"]["Stop"][0]["hooks"][0]["command"], "mmu hook --host claude --event stop")
+            {"type": "command", "command": "mmu hook --host claude --event pre-shell" + install.GUARD, "timeout": 60}]})
+        self.assertEqual(data["hooks"]["Stop"][0]["hooks"][0]["command"], "mmu hook --host claude --event stop" + install.GUARD)
         self.assertEqual(data["hooks"]["PostToolUse"][0]["matcher"], "Edit|Write|MultiEdit")
         first = settings.read_text(encoding="utf-8")
         code, out = _run(self.root, "--claude")
@@ -94,7 +94,7 @@ class JsonTargetTests(unittest.TestCase):
         self.assertEqual(hooks["PreToolUse"][0]["matcher"], "Bash")
         self.assertEqual(hooks["PostToolUse"][0]["matcher"], "apply_patch|Edit|Write")
         self.assertEqual(hooks["Stop"][0]["hooks"][0],
-                         {"type": "command", "command": "mmu hook --host codex --event stop", "timeout": 60})
+                         {"type": "command", "command": "mmu hook --host codex --event stop" + install.GUARD, "timeout": 60})
 
     def test_cursor_shape_and_merge(self):
         path = self.root / ".cursor" / "hooks.json"
@@ -105,9 +105,10 @@ class JsonTargetTests(unittest.TestCase):
         data = self._load(".cursor/hooks.json")
         self.assertEqual(data["version"], 1)
         self.assertEqual(data["hooks"]["stop"], [
-            {"command": "./notify.sh"}, {"command": "mmu hook --host cursor --event stop", "timeout": 60}])
+            {"command": "./notify.sh"}, {"command": "mmu hook --host cursor --event stop" + install.GUARD, "timeout": 60}])
         shell = data["hooks"]["beforeShellExecution"]
-        self.assertEqual(shell, [{"command": "mmu hook --host cursor --event pre-shell", "timeout": 60, "matcher": "git"}])
+        self.assertEqual(shell, [{"command": "mmu hook --host cursor --event pre-shell" + install.GUARD, "timeout": 60,
+                                  "matcher": "git"}])
         self.assertNotIn("afterFileEdit", data["hooks"])
         _run(self.root, "--cursor", "--uninstall")
         self.assertEqual(self._load(".cursor/hooks.json"), {"version": 1, "hooks": {"stop": [{"command": "./notify.sh"}]}})
@@ -122,10 +123,42 @@ class JsonTargetTests(unittest.TestCase):
         before = data["hooks"]["BeforeTool"][0]
         self.assertEqual(before["matcher"], "run_shell_command")
         self.assertEqual(before["hooks"][0], {"name": "mmu-gate", "type": "command",
-                                               "command": "mmu hook --host gemini --event pre-shell", "timeout": 60000})
-        self.assertEqual(data["hooks"]["AfterAgent"][0]["hooks"][0]["command"], "mmu hook --host gemini --event stop")
+                                               "command": "mmu hook --host gemini --event pre-shell" + install.GUARD,
+                                               "timeout": 60000})
+        self.assertEqual(data["hooks"]["AfterAgent"][0]["hooks"][0]["command"],
+                         "mmu hook --host gemini --event stop" + install.GUARD)
         _run(self.root, "--gemini", "--uninstall")
         self.assertEqual(self._load(".gemini/settings.json"), {"theme": "dark"})
+
+    @unittest.skipIf(os.name == "nt", "the guard is POSIX-only")
+    def test_guard_turns_a_launcher_failure_into_allow(self):
+        """`uvx` offline or an old `mmu` exits 2, which a host reads as a block: the registered command must not."""
+        _run(self.root, "--claude", command="sh -c 'echo launcher failed >&2; exit 2' --")
+        command = self._load(".claude/settings.json")["hooks"]["PreToolUse"][0]["hooks"][0]["command"]
+        self.assertTrue(command.endswith(" || true"))
+        self.assertEqual(subprocess.run(["sh", "-c", command], capture_output=True).returncode, 0)
+
+    def test_uninstall_keeps_user_handlers_that_wrap_mmu(self):
+        settings = self.root / ".claude" / "settings.json"
+        settings.parent.mkdir()
+        wrapper = {"type": "command",
+                   "command": "./scripts/audit.sh && mmu hook --host claude --event pre-shell || notify-send blocked"}
+        existing = {"hooks": {"PreToolUse": [{"matcher": "Bash", "hooks": [wrapper]}], "Notification": []}}
+        settings.write_text(json.dumps(existing), encoding="utf-8")
+        _run(self.root, "--claude")
+        self.assertEqual(self._load(".claude/settings.json")["hooks"]["PreToolUse"][0]["hooks"], [wrapper])
+        _run(self.root, "--claude", "--uninstall")
+        self.assertEqual(self._load(".claude/settings.json"), existing)
+
+    def test_hooks_that_are_not_an_object_are_left_untouched(self):
+        path = self.root / ".codex" / "hooks.json"
+        path.parent.mkdir()
+        text = json.dumps({"hooks": [{"command": "user.sh"}]})
+        path.write_text(text, encoding="utf-8")
+        code, out = _run(self.root, "--codex")
+        self.assertEqual(code, 1)
+        self.assertIn("`hooks` is not a JSON object; left untouched", out)
+        self.assertEqual(path.read_text(encoding="utf-8"), text)
 
     def test_invalid_json_is_left_untouched(self):
         path = self.root / ".claude" / "settings.json"
@@ -234,6 +267,20 @@ class GitHookTests(unittest.TestCase):
         proc = subprocess.run([*git, "commit", "-m", "y"], cwd=str(self.root), capture_output=True, text=True, env=env)
         self.assertEqual(proc.returncode, 0, proc.stderr)
         self.assertIn("could not run", proc.stderr)
+
+    def test_hook_manager_directory_is_left_untouched(self):
+        """husky dispatches on the hook's file name: moving its pre-commit aside silently stops the user's hook."""
+        husky = self.root / ".husky" / "_"
+        husky.mkdir(parents=True)
+        stub = husky / "pre-commit"
+        stub.write_text('#!/usr/bin/env sh\n. "$(dirname "$0")/h"\n', encoding="utf-8")
+        subprocess.run(["git", "config", "core.hooksPath", ".husky/_"], cwd=str(self.root), check=True)
+        code, out = _run(self.root, "--git")
+        self.assertEqual(code, 1)
+        self.assertIn("core.hooksPath is .husky/_", out)
+        self.assertIn("mmu vibecheck --staged --format agent", out)
+        self.assertEqual(sorted(p.name for p in husky.iterdir()), ["pre-commit"])
+        self.assertNotIn(install.GIT_MARKER, stub.read_text(encoding="utf-8"))
 
     def test_not_a_repo_is_an_error(self):
         with tempfile.TemporaryDirectory() as plain:

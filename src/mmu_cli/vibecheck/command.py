@@ -57,6 +57,10 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
     scope.add_argument("--changed", action="store_true", help="Only findings in files changed vs HEAD or untracked")
     scope.add_argument("--staged", action="store_true", help="Only findings in staged files")
     scope.add_argument("--since", metavar="REF", help="Only findings in files changed since the git ref REF")
+    scope.add_argument(
+        "--files-from", metavar="FILE",
+        help="Only findings in the files listed in FILE, one root-relative path per line (`-` reads stdin)",
+    )
     parser.add_argument(
         "--fail-on", type=_fail_on, default="P0", metavar="{P0,P1,never}",
         help="Exit 1 when findings at this severity or above exist (default: P0)",
@@ -104,8 +108,18 @@ def _scope(args: argparse.Namespace) -> tuple[str, str | None]:
         return "changed", None
     if getattr(args, "staged", False):
         return "staged", None
+    if getattr(args, "files_from", None):
+        return "files", None
     since = getattr(args, "since", None)
     return ("since", since) if since else ("all", None)
+
+
+def _read_file_list(source: str) -> list[str]:
+    try:
+        text = sys.stdin.read() if source == "-" else Path(source).expanduser().read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError) as exc:
+        raise ScanError("usage", f"--files-from: cannot read {source}: {exc}") from None
+    return [line.strip("\r") for line in text.split("\n") if line.strip()]
 
 
 def run(args: argparse.Namespace, root: Path) -> int:
@@ -131,7 +145,9 @@ def run(args: argparse.Namespace, root: Path) -> int:
             _emit(json.dumps(summary, ensure_ascii=False, indent=2) if as_json else text, args.output)
             return 0
         use = getattr(args, "baseline", None)
-        result = scan(root, scope=mode, since=since, baseline=baseline_path(root, use) if use is not None else None)
+        listed = _read_file_list(args.files_from) if mode == "files" else None
+        result = scan(root, scope=mode, since=since, baseline=baseline_path(root, use) if use is not None else None,
+                      files=listed)
         _emit(render(result, fmt, include_all=args.all), args.output, colorize=fmt == "text")
     except ScanError as exc:
         if as_json:

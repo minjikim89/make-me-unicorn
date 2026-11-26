@@ -867,8 +867,11 @@ def apply_baseline(findings: list[Finding], fingerprints: set[str]) -> list[Find
 
 # --- Runner ----------------------------------------------------------------
 
-def scan(root: Path, scope: str = "all", since: str | None = None, baseline: Path | None = None) -> ScanResult:
-    """Run every rule on `root` and return findings for `scope` (all | changed | staged | since).
+def scan(root: Path, scope: str = "all", since: str | None = None, baseline: Path | None = None,
+         files: list[str] | None = None) -> ScanResult:
+    """Run every rule on `root` and return findings for `scope` (all | changed | staged | since | files).
+
+    `files`: the root-relative paths for scope `files` (what `--files-from` lists).
 
     `baseline`: a file written by `write_baseline`; findings recorded in it get status `baselined`.
     """
@@ -878,12 +881,15 @@ def scan(root: Path, scope: str = "all", since: str | None = None, baseline: Pat
     if not root.is_dir():
         raise ScanError("bad-root", f"--root {root} is not a directory")
     scope_info: dict[str, Any] = {"mode": scope}
-    files: set[str] | None = None
-    if scope != "all":
-        files = scoped_files(root, scope, since)
+    in_scope: set[str] | None = None
+    if scope == "files":
+        in_scope = {_normalize_rel(p) for p in files or [] if _normalize_rel(p)}
+        scope_info["files"] = len(in_scope)
+    elif scope != "all":
+        in_scope = scoped_files(root, scope, since)
         if scope == "since":
             scope_info["since"] = since
-        scope_info["files"] = len(files)
+        scope_info["files"] = len(in_scope)
     known = load_baseline(baseline) if baseline is not None else None
 
     reset_caches()
@@ -900,9 +906,16 @@ def scan(root: Path, scope: str = "all", since: str | None = None, baseline: Pat
     findings = downgrade_test_only_findings(findings)
     if known is not None:
         findings = apply_baseline(findings, known)
-    if files is not None:
-        findings = apply_scope(findings, files)
+    if in_scope is not None:
+        findings = apply_scope(findings, in_scope)
     return ScanResult(root=root, findings=findings, scope=scope_info)
+
+
+def _normalize_rel(path: str) -> str:
+    rel = path.strip().replace("\\", "/")
+    while rel.startswith("./"):
+        rel = rel[2:]
+    return rel
 
 
 def run_vibecheck(root: Path) -> list[Finding]:
