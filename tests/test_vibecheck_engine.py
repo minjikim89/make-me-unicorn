@@ -289,6 +289,18 @@ class ScopeTests(unittest.TestCase):
         git(self.root, "add", "new.py")
         self.assertEqual(self._active("staged"), {"sql-fstring": [("new.py", 1)]})
 
+    def test_staged_and_changed_before_the_first_commit(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            git(root, "init", "-q")
+            write(root, "app.py", 'q = f"SELECT * FROM t WHERE id = {c}"\n')
+            write(root, "later.py", "DEBUG = True\n")
+            git(root, "add", "app.py")
+            staged = {f.check for f in vibecheck.scan(root, scope="staged").findings if f.status == "fail"}
+            self.assertEqual(staged, {"sql-fstring"}, "the initial commit must be gated like any other")
+            changed = {f.check for f in vibecheck.scan(root, scope="changed").findings if f.status in {"fail", "warn"}}
+            self.assertEqual(changed, {"sql-fstring", "debug-mode"})
+
     def test_since_ref(self):
         write(self.root, "new.py", 'r = f"DELETE FROM t WHERE id = {i}"\n')
         git(self.root, "add", "-A")
