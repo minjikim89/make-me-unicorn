@@ -146,10 +146,21 @@ class JsonTargetTests(unittest.TestCase):
         self.assertFalse((self.root / ".git" / "hooks" / "pre-commit").exists())
 
     def test_default_command_and_target_detection(self):
-        with mock.patch.object(install.shutil, "which", return_value="/usr/local/bin/mmu"):
+        uvx = "uvx --from make-me-unicorn mmu hook"
+        with mock.patch.object(install.shutil, "which", return_value="/usr/local/bin/mmu"), \
+                mock.patch.object(install, "_supports_hook", return_value=True):
             self.assertEqual(install.default_command(), "mmu hook")
         with mock.patch.object(install.shutil, "which", return_value=None):
-            self.assertEqual(install.default_command(), "uvx --from make-me-unicorn mmu hook")
+            self.assertEqual(install.default_command(), uvx)
+        with mock.patch.object(install.shutil, "which", return_value="/usr/local/bin/mmu"), \
+                mock.patch.object(install, "_supports_hook", return_value=False):
+            self.assertEqual(install.default_command(), uvx, "an mmu older than 0.9 has no `hook` and exits 2")
+        ephemeral = "/home/u/.cache/uv/archive-v0/AbC123/bin/mmu"
+        with mock.patch.object(install.shutil, "which", return_value=ephemeral), \
+                mock.patch.object(install, "_supports_hook", return_value=True):
+            self.assertEqual(install.default_command(), uvx, "the mmu of a `uvx make-me-unicorn install` run is deleted later")
+        self.assertTrue(install._is_ephemeral("/home/u/.local/pipx/.cache/0a1b/bin/mmu"))
+        self.assertFalse(install._is_ephemeral("/home/u/.local/bin/mmu"))
         code, out = _run(self.root)
         self.assertEqual(code, 2)
         self.assertIn("nothing to install", out)

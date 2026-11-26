@@ -75,8 +75,35 @@ mmu vibecheck --changed --format agent
 {MD_END}"""
 
 
+MIN_HOOK_VERSION = (0, 9)
+
+
+def _is_ephemeral(path: str) -> bool:
+    """True for executables in a uvx/pipx run cache: they vanish, so a hook must not point at them."""
+    parts = [p.lower() for p in Path(path).resolve().parts]
+    uvx_run = "uv" in parts and any(p.startswith("archive-v") for p in parts)
+    pipx_run = "pipx" in parts and ".cache" in parts
+    return uvx_run or pipx_run
+
+
+def _supports_hook(executable: str) -> bool:
+    """True when this mmu understands `mmu hook` (0.9+). An older mmu exits 2 on it, which a host reads as a block."""
+    try:
+        proc = subprocess.run([executable, "--version"], capture_output=True, text=True, timeout=15)
+    except (OSError, subprocess.SubprocessError):
+        return False
+    match = re.search(r"(\d+)\.(\d+)", proc.stdout) if proc.returncode == 0 else None
+    if match is None:
+        return False
+    return (int(match.group(1)), int(match.group(2))) >= MIN_HOOK_VERSION
+
+
 def default_command() -> str:
-    return "mmu hook" if shutil.which("mmu") else UVX_COMMAND
+    """`mmu hook` only for a persistent mmu new enough to run it; otherwise the uvx form."""
+    found = shutil.which("mmu")
+    if found and not _is_ephemeral(found) and _supports_hook(found):
+        return "mmu hook"
+    return UVX_COMMAND
 
 
 # --- JSON hook configs -------------------------------------------------------
