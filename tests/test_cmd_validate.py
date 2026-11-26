@@ -1,3 +1,4 @@
+import importlib.util
 import io
 import sys
 import tempfile
@@ -9,6 +10,8 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT / "src"))
 
 from mmu_cli import cli  # noqa: E402
+
+_HAS_VALIDATE_EXTRA = all(importlib.util.find_spec(m) is not None for m in ("requests", "vaderSentiment"))
 
 
 class ValidateCommandTests(unittest.TestCase):
@@ -70,6 +73,7 @@ class ValidateCommandTests(unittest.TestCase):
             self.assertIn("requests", err.getvalue())
             self.assertNotIn("internet connection", err.getvalue())
 
+    @unittest.skipUnless(_HAS_VALIDATE_EXTRA, "needs the [validate] extra (requests, vaderSentiment)")
     def test_partial_source_failure_is_visible_in_output(self):
         from contextlib import redirect_stderr
         from unittest import mock
