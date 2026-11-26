@@ -1,437 +1,221 @@
 <div align="center">
 
-# Make Me Unicorn
+# make-me-unicorn
 
-**把看不见的盲点也补上，带着信心上线你的 SaaS。**
+**面向 AI 编码智能体的发布关卡。**
 
-面向独立开发者的开源上线检查清单与运营系统。
+你的智能体无法 commit 信任未签名事件的 webhook、未启用 RLS 的 Supabase 表,<br>
+也无法 commit 打进浏览器 bundle 的 `service_role` 密钥。确定性、离线运行、无需账号、不调用 LLM,耗时约 0.1 秒。
 
+[![PyPI](https://img.shields.io/pypi/v/make-me-unicorn?color=blue)](https://pypi.org/project/make-me-unicorn/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-black.svg)](./LICENSE)
-[![PyPI version](https://img.shields.io/pypi/v/make-me-unicorn?color=blue)](https://pypi.org/project/make-me-unicorn/)
-[![PyPI downloads](https://img.shields.io/pypi/dm/make-me-unicorn?color=blue)](https://pypi.org/project/make-me-unicorn/)
-[![CLI](https://img.shields.io/badge/cli-mmu-f59e0b.svg)](./SPEC.md)
-[![Guardrails CI](https://img.shields.io/badge/ci-doctor%20%2B%20gates-22c55e.svg)](./.github/workflows/mmu-guardrails.yml)
-[![Contributions Welcome](https://img.shields.io/badge/contributions-welcome-16a34a.svg)](./CONTRIBUTING.md)
+[![CI](https://github.com/minjikim89/make-me-unicorn/actions/workflows/mmu-guardrails.yml/badge.svg)](./.github/workflows/mmu-guardrails.yml)
+[![Benchmark](https://img.shields.io/badge/P0%20false%20positives-0%20in%2020%20OSS%20repos-22c55e)](./docs/benchmark.md)
 
-[🇺🇸 English](./README.md) · [🇰🇷 한국어](./README.ko.md) · [🇯🇵 日本語](./README.ja.md) · **🇨🇳 简体中文** · [🇪🇸 Español](./README.es.md)
-
-<img src="./assets/brand/unicorn-hero.png" alt="Make Me Unicorn mascot" width="960" />
-
-<img src="./assets/demo.gif" alt="MMU CLI 演示 — init, scan, vibecheck, dashboard" width="720" />
+[English](./README.md) · [한국어](./README.ko.md) · [日本語](./README.ja.md) · **简体中文** · [Español](./README.es.md)
 
 </div>
 
-## 问题所在
+<!-- mcp-name: io.github.minjikim89/make-me-unicorn -->
 
-你正在做一个 SaaS 产品。你用 AI 写代码，速度前所未有。但接下来：
-
-> "等等，我加了密码重置流程吗？"
->
-> "支付 webhook... 做幂等了吗？"
->
-> "隐私政策写了没？退款政策呢？OG 标签呢？"
->
-> "上周关于认证方案的决定是什么来着？为什么选它？"
-
-**你不是代码写不好，而是没有管好该管的事。**
-
-每个独立开发者都会撞上同样的墙：
-
-| 哪里出了问题 | 代价是什么 |
-|-------------|-----------|
-| 做登录的时候忘了密码重置 | 上线第一天用户就被锁在门外 |
-| 跳过了 webhook 签名验证 | 攻击者重放支付事件 |
-| 没加 OG 标签就上线了 | 分享出去的链接看起来都像坏掉了一样 |
-| AI 会话之间丢失上下文 | 每次都要从头给 AI 解释你的项目 |
-| 没有退款政策 | 第一次争议 = Stripe 账户直接冻结 |
-
-MMU 在这些问题**让你损失用户、金钱或信任之前**就帮你拦住。
-
-## 工作原理
-
+```bash
+uvx make-me-unicorn install --claude    # or --codex, --cursor, --gemini, --git, --all
 ```
-mmu init                    # 1. 获取 15 个类别、670+ 检查项
-mmu scan                    # 2. 自动检测你的技术栈，并自动勾选已完成项
-mmu                         # 3. 一眼看到哪些做了、哪些没做
-mmu status --why            # 4. 查看评分明细——哪些被计入、哪些被跳过
-mmu next                    # 5. 获取按优先级排序的下一步行动
-```
+
+全部配置就是这一步。此后,当智能体运行 `git commit` 时,hook 会扫描已 staged 的内容。出现 P0 问题时,命令会被拒绝,并把智能体可以直接应用的修复方法交给它。下面是一个 Next.js + Supabase + Stripe 项目首次 commit 时的真实输出(行有删减,省略了 5 条 P1 警告):
 
 ```text
-  MAKE ME UNICORN - STATUS DASHBOARD
-
-          .--*--.
-         / *v*  \
-        |       |
-         \ ___ /
-          '---'
-
-  Stage: HATCHING    ######..............  22%  (124/551)
-
-  LAUNCH GATES  (16/26)
-    M0 Problem Fit         ################   4/4   PASS
-    M1 Build Fit           ################   5/5   PASS
-    M2 Revenue Fit         ############....   3/4   OPEN
-    M3 Trust Fit           ################   4/4   PASS
-    M4 Growth Fit          ########........   2/4   OPEN
-    M5 Scale Fit           ####............   1/5   OPEN
-
-  BLUEPRINTS  (124/551)
-    Frontend           ##########......  18/35  51%
-    Backend            ############....  24/46  52%
-    Auth               ##########......  16/42  38%
-    Billing            ########........  11/36  30%
-    ...11 more
+mmu vibecheck: 4 blocking (P0), 5 warning(s) (P1), 0 suppressed | scope: staged (22 file(s))
+P0 secrets .env:3 (+1: components/AdminPanel.tsx:8)
+  what: possible hardcoded secrets in 2 file(s): Supabase service_role JWT; ... (the service_role
+        key is in a "use client" file: it bypasses RLS for every visitor)
+P0 client-bundle-secrets .env:6 (+1: app/api/ai/summarize/route.ts:4)
+  what: secret shipped to the browser bundle via public env prefix in 2 file(s): NEXT_PUBLIC_OPENAI_API_KEY ...
+P0 webhook-signature app/api/webhooks/stripe-legacy/route.ts:5
+  what: 1 of 2 webhook handler(s) trust the event without verifying its signature
+  fix: Verify the signature on the raw body before trusting the event, and return 400 when it fails:
+       event = stripe.webhooks.constructEvent(await req.text(), req.headers.get("stripe-signature")!,
+       process.env.STRIPE_WEBHOOK_SECRET!) Do not call req.json() before this: the check needs the
+       exact bytes the provider signed.
+  silence (only if false positive): // mmu-ignore[webhook-signature]: <reason>
+P0 supabase-rls supabase/migrations/0001_init.sql:1
+  what: 1 table(s) created without ENABLE ROW LEVEL SECURITY: public.invoices
+  fix: Add a migration for each listed table: `alter table <schema>.<table> enable row level security;`
+       plus at least one policy, e.g. `create policy "owner can read" on <table> for select using
+       (auth.uid() = user_id);`. ...
+Fix every P0 above, then re-run `mmu vibecheck --format agent --staged` until it reports 0 blocking.
 ```
 
-你的独角兽会随着项目进度不断进化：Egg → Hatching → Foal → Young → Unicorn → Legendary。
+智能体修复、重新运行,然后 commit。代码本身没有问题时,关卡不会输出任何内容:在一次真实的 Claude Code 测试中,智能体第一次就写出了带签名验证的 Stripe webhook,commit 直接通过。
 
-## 为你的项目定制检查清单
+## 为什么要检查缺失
 
-不是每个项目都需要支付功能。不是每个产品都需要多语言。MMU 会自动适配：
+密钥扫描器和 SAST 查找的是已经存在的坏代码。智能体写出的代码更常见的问题是该有的代码不存在:没人写的签名验证、从未添加的 RLS 策略、付费 LLM 路由前面缺少的 rate limit。
+
+- Tenzai 让 5 个编码智能体分别构建相同的 3 个应用(共 15 个应用)。没有一个包含可利用的 SQLi 或 XSS;而在安全控制方面,"in almost all cases, they didn't even try"(几乎在所有情况下,它们甚至没有尝试)([SecurityWeek,2026 年 1 月](https://www.securityweek.com/vibe-coding-tested-ai-agents-nail-sqli-but-fail-miserably-on-security-controls/))。
+- GitGuardian 测得,由 Claude Code 协助的公开 commit 中密钥泄露率为 3.2%,基线为 1.5%([State of Secrets Sprawl 2026](https://blog.gitguardian.com/the-state-of-secrets-sprawl-2026/))。
+
+linter 不会标记一个不存在的函数。`mmu vibecheck` 阅读项目的方式,就像审查者在问"这个 webhook 是在哪里验证的?",并且只有当答案明确是"哪里都没有"时才会阻止。
+
+## 关卡的工作方式
+
+智能体会跳过可选的工具,但跳不过 hook。`mmu install` 会写入调用 `mmu hook` 的 hook 条目,`mmu hook` 则按各宿主的 hook 协议进行应答。
+
+| 宿主 | commit / push 关卡 | "尚未完成"关卡 | 编辑后反馈 | `mmu install` 参数 |
+|------|--------------------|---------------------|--------------------|--------------------|
+| Claude Code | `Bash` 上的 `PreToolUse` | `Stop` | `Edit`/`Write`/`MultiEdit` 上的 `PostToolUse` | `--claude` |
+| Codex CLI | `Bash` 上的 `PreToolUse` | `Stop` | `apply_patch` 上的 `PostToolUse` | `--codex` |
+| Cursor | `beforeShellExecution` | `stop` | 不支持 | `--cursor` |
+| Gemini CLI | `run_shell_command` 上的 `BeforeTool` | `AfterAgent` | 不支持 | `--gemini` |
+| git | `pre-commit`,并串联已有的 hook | | | `--git` |
+| pre-commit 框架 | hook id `mmu-vibecheck` | | | `.pre-commit-hooks.yaml` |
+| GitHub Actions | `uses: minjikim89/make-me-unicorn@v0.9.0`,SARIF 上传到 code scanning | | | |
+
+- **commit 关卡**扫描本次 commit 将包含的内容:staged 的文件;对于 `git commit -a`、pathspec 和 `git add ... && git commit`,则是有改动的文件。push 时扫描自 upstream 以来的改动。
+- **"尚未完成"关卡**在智能体准备结束任务时运行。它只检查智能体在本次会话中编辑过的文件,因此不会让智能体重写它没有碰过的代码。它最多把智能体退回 `MMU_STOP_MAX` 次(默认 3 次);如果你已经让智能体把加固工作推后,它会列出 P0 问题然后停止。
+- **编辑后反馈**把刚写入的文件中的 P0 问题作为上下文返回,不会阻止任何操作。
+- 支持 `mmu install --all`、`--dry-run`、`--uninstall`;`--agents-md` 向 `AGENTS.md` 添加一段指令,`--skill` 把 `mmu-vibecheck` Agent Skill 复制到 `.agents/skills/`。已有的设置会被合并,不会被替换。
+
+Claude Code 已在真实会话中测试。Codex CLI、Cursor 和 Gemini CLI 遵循各自文档中的 hook 约定,并使用文档中的 payload 进行了测试;欢迎提供真实会话中的使用反馈。
+
+设计约束(均有测试覆盖):
+
+- **确定性。** 相同的代码树得到相同的结果。不调用模型,不访问网络,无需账号。
+- **Fail-open。** 如果扫描器自身崩溃或超时,命令会放行,并给出明显的警告。关卡出故障也不会让会话无法继续。
+- **人可以绕过。** 对单条命令使用 `MMU_HOOK_DISABLE=1 git commit ...`;在智能体的环境变量中设置它,则在整个会话中禁用关卡。
+- **快。** 在 20 个真实仓库上的中位数为 89 ms,最大的仓库(1,699 个文件)为 1.1 s。
+
+## 检测内容
+
+P0 阻止,P1 警告。所有推断缺失的启发式规则,除非证据具体,否则一律为 P1。
+
+| 规则 | 级别 | 检测内容 |
+|------|-----|-------|
+| `secrets` | P0 | 源码、配置文件或未被 git 忽略的 dotenv 文件中的有效服务商密钥和 Supabase `service_role` JWT |
+| `client-bundle-secrets` | P0 | 带有 `NEXT_PUBLIC_` / `VITE_` / `EXPO_PUBLIC_` 前缀或在客户端代码中读取的密钥 |
+| `supabase-rls` | P0 | migration 中创建时未 `ENABLE ROW LEVEL SECURITY` 的表 |
+| `webhook-signature` | P0 | 未验证事件就直接使用的 Stripe、GitHub、Svix、Clerk... webhook 处理器 |
+| `sql-fstring` | P0 | 用 f-string、`%`、`.format`、模板字面量或字符串拼接构造并传给 `execute` 的 SQL |
+| `code-injection` | P0 | 流入 `eval`、`exec`、`Function` 或 shell 的请求数据 |
+| `jwt-secret-default` | P0 | 值被硬编码或带有 `|| 'fallback'` 的签名密钥 |
+| `unsafe-deserialization` | P0 | 未使用 safe loader 的 `yaml.load`,对外部输入使用 `pickle` |
+| `git-config-exec` | P0 | 在日常 git 操作中会执行程序的 `.git/config` 配置项(`core.fsmonitor`、`core.sshCommand`、`alias.x = !cmd`) |
+| `llm-route-unthrottled` | P1 | 既无认证也无 rate limit 就调用付费 LLM API 的路由 |
+| `admin-route-no-auth` | P1 | 没有会话或角色检查的 `/admin` 路由 |
+| `password-reset` | P1 | 有密码登录,但整个项目中没有找回/重置密码的流程 |
+| `webhook-idempotency` | P1 | 服务商重试时会产生错误结果的 webhook 处理逻辑 |
+| `rate-limiting` | P1 | 完全没有 rate limiting 的服务端 |
+| `cors-wildcard` | P1 | `*` origin、不带选项的 `cors()`、通配符与 credentials 同时使用 |
+| `dangerous-html` | P1 | 对未经净化的值使用 `dangerouslySetInnerHTML` / `v-html` |
+| `jwt-localstorage` | P1 | 存放在 `localStorage` / `sessionStorage` 中的认证 token |
+| `stack-trace-leak` | P1 | 返回给客户端的异常详情 |
+| `sourcemaps-exposed` | P1 | 生产环境启用了 source map |
+| `env-not-ignored` | P1 | 含有凭据类命名的值且未被 git 忽略的 dotenv 文件 |
+| `disabled-ssl` | P1 | `verify=False`、`rejectUnauthorized: false` |
+| `debug-mode` | P1 | `DEBUG = True`、`app.run(debug=True)`、Dockerfile 中的 `--reload` |
+| `error-monitoring` | P1 | 没有 Sentry 或同类工具 |
+
+`mmu vibecheck --list-rules` 输出这张表;`mmu vibecheck --explain <rule>` 输出某条规则检测什么以及如何修复。
+
+## 准确性
+
+经过实测,可复现,其局限也一并记录在 [`docs/benchmark.md`](./docs/benchmark.md) 中。
+
+| 测量项 | 结果 |
+|-------------|--------|
+| 20 个流行的开源应用(starter、SaaS 套件、框架示例),默认设置 | 经人工复核,错误的 P0 结果为 0 个(本次版本重写规则之前为 11 个) |
+| 12 个 fixture 项目,共埋入 55 个问题 | P0 precision 100%,P0 recall 100%,55 个埋入的问题中发现 52 个 |
+| 未检测 | IDOR、明文密码比较、登录接口返回 password 列:没有规则对授权或数据流建模 |
+
+这些 fixture 是与规则同时编写的,因此应把它们看作回归测试集。对开源仓库的扫描才是独立的验证。
+
+## 直接使用
 
 ```bash
-mmu init                      # 选择你的技术栈（Next.js、Django、Rails……）
+pip install make-me-unicorn          # or run any command through uvx make-me-unicorn ...
+mmu vibecheck                        # whole project, human-readable
+mmu vibecheck --staged               # what is about to be committed
+mmu vibecheck --since origin/main    # what this branch changed
+mmu vibecheck --format agent         # compact fix list for a coding agent
+mmu vibecheck --format json          # schema mmu.vibecheck/v1
+mmu vibecheck --format sarif --output mmu.sarif
 ```
 
-执行 `mmu init` 后会生成 `.mmu/config.toml`。  
-通过这些开关，你可以把不适用于当前项目的检查项排除在评分之外。
+退出码:`0` 表示没有需要阻止的问题,`1` 表示至少有一个达到或高于 `--fail-on`(默认 `P0`)的问题,`2` 表示扫描未能运行。JSON schema:[`docs/vibecheck-json-schema.md`](./docs/vibecheck-json-schema.md)。
+
+### 误报
+
+抑制某一行,并写明原因(没有原因的抑制会被忽略):
+
+```ts
+// mmu-ignore[webhook-signature]: verified by the API gateway before this handler runs
+```
+
+或者在 `.mmu/config.toml` 中按路径配置:
 
 ```toml
-[features]
-billing = false               # 如果没有计费功能，可排除 billing 章节
-email_transactional = true
-email_marketing = false
-i18n = false
-file_upload = false
-mfa = false
-ab_testing = false
-webhooks_outgoing = false
-
-[architecture]
-containerized = false
-iac = false
-ssr = true
-serverless = false
-
-[market]
-targets_eu = false
-targets_california = false
-targets_korea = true
+[vibecheck]
+ignore = ["scripts/seed.ts:secrets", "examples/**:jwt-secret-default"]
 ```
 
-你的分数**只反映与你项目相关的检查项**。  
-用 `mmu status --why` 可以透明查看哪些被计入、哪些被排除。
+在已有代码库中引入关卡:`mmu vibecheck --write-baseline` 记录当前的全部问题,之后 `mmu vibecheck --baseline` 只报告新增的问题。
 
-## MMU 覆盖的内容（让你不用再靠记忆）
+## GitHub Actions
 
-<table>
-<tr>
-<td width="33%">
-
-**构建产品**
-- 前端（响应式、无障碍、表单）
-- 后端（API、数据库、队列）
-- 认证（登录、重置、OAuth、会话）
-- 计费（Stripe、webhook、退款）
-- 测试（单元测试、E2E、智能体安全）
-
-</td>
-<td width="33%">
-
-**准备上线**
-- SEO（OG 标签、站点地图、元数据）
-- 法务（隐私政策、用户条款、GDPR）
-- 安全（CORS、限流、密钥管理）
-- 性能（缓存、懒加载）
-- CI/CD（流水线、回滚方案）
-
-</td>
-<td width="34%">
-
-**上线后运营**
-- 监控（错误追踪、可用性、告警）
-- 数据分析（漏斗、留存、事件）
-- 邮件（事务邮件、模板）
-- 无障碍（WCAG、键盘导航）
-- 可靠性（备份、故障响应方案）
-
-</td>
-</tr>
-</table>
-
-**670+ 检查项。15 个类别。零猜测。**
-
-## MMU 有什么不同？
-
-| | 范围 | 所在位置 | 智能体原生 | 进度跟踪 |
-|---|---|---|---|---|
-| **MMU** | 完整 SaaS：代码 + 计费 + 法务 + 增长 + 运维 | 你仓库里的 markdown | ✅ Claude 插件 + MCP 服务器 | ✅ 分数、关卡、不断进化的仪表盘 |
-| Lighthouse | 仅前端性能/无障碍/SEO | 浏览器/CI | ❌ | 仅单次运行分数，无项目记忆 |
-| 厂商发布清单（Vercel、Stripe 文档） | 仅该厂商的领域 | 厂商文档站 | ❌ | ❌ 只读 |
-| 静态清单仓库 / Notion 模板 | 多数无法验证 | 复制粘贴 | ❌ | ❌ 手动维护，容易过时 |
-| AI 代码审查工具（CodeRabbit 等） | 代码 diff | PR 工作流 | 部分支持 | 仅 PR 维度，无发布视角 |
-
-MMU 不是 linter，也不是文档站 —— 它是 **AI 编码会话与真正发布之间的运营层**：CLI、CI 和 AI 智能体读取并更新同一份清单。
-
-## 给 AI 生成的代码做个 Vibe Check
-
-45% 的 AI 生成代码带着漏洞上线。一条命令扫描 AI 助手最常遗漏的问题：
-
-```bash
-mmu vibecheck
+```yaml
+permissions:
+  contents: read
+  security-events: write
+steps:
+  - uses: actions/checkout@v4
+  - uses: minjikim89/make-me-unicorn@v0.9.0
+    with:
+      sarif-file: mmu.sarif
+  - uses: github/codeql-action/upload-sarif@v4
+    if: always()
+    with:
+      sarif_file: mmu.sarif
 ```
 
-检查项：硬编码密钥 · 未被 gitignore 的 `.env` · Webhook 签名验证 + 幂等性 · 密码重置流程 · f-string SQL · 限流 · 通配符 CORS · `DEBUG = True` · 错误监控。发现 P0 问题时以非零状态退出，可直接接入 CI。
+检测结果会显示在 Security 标签页中,并以注释形式出现在 pull request 上。
 
-## 适用人群
+## Claude Code 插件
 
-| 你是... | MMU 帮你... |
-|---------|------------|
-| **用 AI 写代码的创业者** | 不用每次开会话都从头解释项目。跨工具保持上下文。 |
-| **前端开发者** | 清楚知道要做什么：认证流程、错误状态、响应式断点、OG 标签。 |
-| **产品经理 / 策划** | 拿到结构化的 PRD、定价策略和上线清单——全是 Markdown。 |
-| **全栈独立开发者** | 前端、后端、计费、合规，一个地方统一追踪。不遗漏任何细节。 |
-
-## 60 秒体验
-
-```bash
-pip install make-me-unicorn
-cd your-project
-mmu init && mmu scan && mmu status --why
-```
-
-就这样。你会立刻看到上线准备度评分、已完成项、缺失项，以及原因。
-
-然后运行 `mmu next`，了解现在应该先做什么。
-
-## 快速开始
-
-```bash
-pip install -e .
-
-# 方式 A：生成空模板，自己填写
-mmu init
-
-# 方式 B：让 Claude 生成项目文档（需要 API 密钥）
-pip install -e ".[llm]"
-export ANTHROPIC_API_KEY=sk-ant-...
-mmu init --interactive        # 回答 5 个问题 → 自动生成战略、产品、定价文档
-```
-
-然后：
-
-```bash
-mmu scan                      # 自动检测你的技术栈
-mmu                           # 查看你的仪表盘
-mmu status --why              # 查看评分的详细算法和依据
-mmu next                      # 获取优先级排序的 Top 3 下一步行动
-mmu show frontend             # 深入查看任意类别
-mmu check frontend 3          # 将条目标记为已完成
-mmu gate --stage M0           # 验证你是否准备好进入下一阶段
-mmu doctor                    # 运行护栏健康检查
-```
-
-## 分享你的分数
-
-展示你的上线准备度。粘贴到 README、发推特或分享到 Discord。
-
-```bash
-mmu share                     # 输出可分享的评分卡
-mmu share --clipboard         # 复制到剪贴板（macOS）
-```
-
-```
-┌─────────────────────────────────────────────┐
-│  Make Me Unicorn — Launch Readiness         │
-│                                             │
-│  Score: 68%  Stage: YOUNG UNICORN           │
-│                                             │
-│  M0 Problem Fit    ████████████████  PASS   │
-│  M1 Build Fit      ████████████████  PASS   │
-│  M2 Revenue Fit    ██████████░░░░░░  OPEN   │
-│  M3 Trust Fit      ████████████████  PASS   │
-│  M4 Growth Fit     ████████░░░░░░░░  OPEN   │
-│  M5 Scale Fit      ████░░░░░░░░░░░░  OPEN   │
-│                                             │
-│  Stack: Next.js · Stripe · SSR              │
-│  pip install make-me-unicorn                │
-│  #MakeMeUnicorn                             │
-└─────────────────────────────────────────────┘
-```
-
-## 6 个上线关卡
-
-把它们当成阶段性验收。别跳关。
-
-```
-M0 Problem Fit    →  你知道在给谁做、为什么做吗？
-M1 Build Fit      →  核心产品能跑通全流程吗？
-M2 Revenue Fit    →  用户能付款吗？能退款吗？
-M3 Trust Fit      →  隐私政策？客服路径？日志？
-M4 Growth Fit     →  分享链接好看吗？别人能搜到你吗？
-M5 Scale Fit      →  凌晨三点出故障了怎么办？
-```
-
-运行 `mmu gate --stage M0` 进行验证。有未勾选项 = NOT PASS。
-
-## 12 个工作模式
-
-每次会话一个模式。每个模式只加载你需要的文档。
-
-```bash
-mmu start --mode backend      # 加载：architecture.md、sprint、ADR 日志
-mmu start --mode billing      # 加载：pricing.md、计费清单、合规文档
-mmu start --mode growth       # 加载：SEO 清单、指标文档
-```
-
-这解决了 AI 编程的头号问题：**上下文过载**。你的 AI 助手只拿到它需要的——而不是你整个项目的所有东西。
-
-## AI 集成（可选）
-
-MMU 不依赖任何 AI 也能用。但接入 Claude 后会更强大：
-
-```bash
-pip install make-me-unicorn[llm]
-export ANTHROPIC_API_KEY=sk-ant-...
-```
-
-| 命令 | 效果 |
-|------|------|
-| `mmu init --interactive` | 回答 5 个关于你产品的问题。Claude 自动生成战略、产品规格、定价、架构和 UX 文档。 |
-| `mmu start --mode X --agent` | 自动格式化会话上下文——直接粘贴到 Claude Code 或任何 LLM。 |
-| `mmu doctor --deep` | Claude 阅读你的代码和文档，标记不一致、安全漏洞和盲区。 |
-| `mmu generate strategy` | 基于当前项目状态生成或更新任何核心文档。 |
-
-核心 CLI 零依赖。AI 功能可选，可平滑降级。
-
-## 作为 Claude Code 插件使用（提交门禁）
-
-```bash
-# 在 Claude Code 中:
+```text
 /plugin marketplace add minjikim89/make-me-unicorn
-/plugin install make-me-unicorn
+/plugin install make-me-unicorn@make-me-unicorn
 ```
 
-安装后，**代理执行的每一次 `git commit` / `git push` 都会先经过 `mmu vibecheck`。** 若发现 P0 问题，命令会被拦截，并向代理展示要修什么、为什么（附 `why:` 出处链接）。用钩子而不用 MCP 工具的原因：代理会跳过可选工具，但跳不过钩子。若扫描器本身无法运行，提交会放行但显示可见警告。想单次绕过，在命令前加 `MMU_HOOK_DISABLE=1`；想整个会话关闭，把同名变量设进 Claude Code 的环境。`MMU_HOOK_ON_PUSH_ONLY=1` 仅对 push 设门禁。
+从插件自带的源码注册相同的 3 个 hook(需要 `python3` 3.10+,无需 `pip install`),另外还有 `/vibecheck` 命令、`mmu-vibecheck` skill 和 MCP 服务器(通过 [uv](https://docs.astral.sh/uv/) 启动)。
 
-插件还包含 `mmu-startup` 技能（蓝图、创意验证、Product Hunt 套件），只加载对话所需的蓝图。技能可用于支持 Agent Skills 规范的工具（Claude Desktop、OpenAI Codex CLI），但提交门禁仅限 Claude Code。
+## MCP 服务器
 
-## MCP 服务器模式
-
-MMU 也可以作为 MCP（Model Context Protocol）服务器运行。Claude Code、Claude Desktop、Cursor、Gemini CLI 等 MCP 兼容代理都能将 MMU 的蓝图与模板作为原生工具调用。
-
-```bash
-pip install make-me-unicorn[mcp]
-mmu serve-mcp                          # stdio 传输（默认）
-mmu serve-mcp --transport sse          # SSE 传输
-```
-
-Claude Desktop 配置（`~/Library/Application Support/Claude/claude_desktop_config.json`）：
+面向更愿意主动查询的智能体:`mmu serve-mcp` 提供 `mmu_vibecheck`、`mmu_explain_rule` 和 `mmu_list_rules`(只读)。兼容 MCP SDK v1 和 v2。
 
 ```json
 {
   "mcpServers": {
-    "mmu": {
-      "command": "mmu",
-      "args": ["serve-mcp", "--root", "/path/to/cloned/make-me-unicorn"]
-    }
+    "mmu": { "command": "uvx", "args": ["--from", "make-me-unicorn[mcp]>=0.9", "mmu", "serve-mcp"] }
   }
 }
 ```
 
-暴露的工具：
+MCP 工具只是便利手段。真正的关卡是 hook。
 
-- `mmu_vibecheck(project_root)` — 扫描项目中阻碍上线的缺陷，返回结果附带 `ref` 出处链接
-- `mmu_list_blueprints` — 列出 17 个蓝图（15 个核心 + 2 个行业）
-- `mmu_get_blueprint(name)` — 获取单个蓝图的完整 markdown
-- `mmu_list_idea_templates` — 列出 start/close/ADR 提示词 + Product Hunt 工具包
-- `mmu_validate_idea(idea)` — 基于真实 HN + Reddit 帖子的验证：结论、情感分析、竞品、热门帖子（免费模式，无需 API 密钥；需要 `[validate]` extra）
+## 添加规则
 
-## 验证你的想法
+规则位于 [`src/mmu_cli/vibecheck/rules/`](./src/mmu_cli/vibecheck/rules/)。每条规则都要附带 `bench/fixtures/` 中的 fixture 和 `bench/expected/` 中的预期结果,并且必须让基准测试的 P0 误报保持为零(`python -m unittest tests.test_bench`)。参见 [CONTRIBUTING.md](./CONTRIBUTING.md)。
 
-在动手开发前，从 HN + Reddit 拉取真实信号：
+## 本仓库的另一部分:发布检查清单
+
+make-me-unicorn 最初是面向独立开发者的发布检查清单,这部分仍然提供:15 个检查清单类别、M0 到 M5 的发布关卡、专注会话模式和 MCP blueprint 服务器。检查清单跟踪项目已经决定和完成的事项;上面的关卡检查代码实际做了什么。
 
 ```bash
-pip install make-me-unicorn[validate]
-mmu validate "面向儿童的 AI 家教" --limit 30
+mmu init && mmu scan && mmu status
 ```
 
-默认模式**免费** — 无需 API key，不会发生付费调用。公共 Reddit + HN Algolia 搜索 + 本地 VADER 情感分析 + 基于大写词的竞品识别。结果会自动保存为 `reports/validate/<slug>-<hash>.md`。
-
-如需基于线程综合的一页式验证结论：
-
-```bash
-mmu validate "面向儿童的 AI 家教" --llm
-# 弹出费用确认（约 $0.05–0.20）。使用 -y 可跳过。
-```
-
-`--llm` 必须显式启用，默认流程绝不调用 Anthropic API。
-
-## 会话工作流
-
-每个会话遵循相同的节奏：
-
-```
-1. mmu start --mode backend      ← 选一个聚焦方向，加载相关文档
-2. Build / decide / validate      ← 干活
-3. mmu close                      ← 记录变更和下一步
-```
-
-会话关闭时使用结构化标签记录：
-
-- `[DONE]` — 完成了什么
-- `[DECISION]` — 做了哪些决策（重要决策创建 ADR）
-- `[ISSUE]` — 遇到了什么问题（分类：上下文丢失 / 方向错误 / 文档与代码不一致）
-- `[NEXT]` — 下次会话的第一件事
-
-这意味着你下次开工只需 **5 秒**，而不是花 15 分钟回忆“我上次做到哪了？”
-
-## 示例：TaskNote
-
-看一个完整填写的 MMU 实战示例：
-
-```
-examples/filled/tasknote/
-├── docs/core/strategy.md      ← ICP、价值主张、竞品分析
-├── docs/core/product.md       ← MVP 范围、用户旅程、P0/P1
-├── docs/core/pricing.md       ← Free/Pro/Team、计费规则
-├── docs/core/architecture.md  ← Next.js + FastAPI + Postgres
-├── docs/adr/001_billing_provider_choice.md  ← 为什么选 Stripe？
-└── current_sprint.md          ← 本周的 3 个目标
-```
-
-## 环境要求
-
-- Python `3.10+`
-- `pip`
-- 核心 CLI：零外部依赖
-- AI 功能：`pip install make-me-unicorn[llm]`
-
-## 项目结构
-
-```
-make-me-unicorn/
-├── src/mmu_cli/           # CLI source (Python)
-├── docs/
-│   ├── core/              # Strategy, Product, Pricing, Architecture, UX
-│   ├── ops/               # Roadmap, Metrics, Compliance, Reliability
-│   ├── blueprints/        # 15 category checklists (670+ items)
-│   ├── checklists/        # M0–M5 launch gates
-│   └── adr/               # Decision log templates
-├── prompts/               # Session start/close/ADR templates
-├── examples/filled/       # Concrete example (TaskNote)
-└── tests/                 # Unit tests
-```
-
-## CI 护栏
-
-`mmu doctor` 在每个 PR 上运行。`mmu gate` 对 `docs/ops/gate_targets.txt` 中列出的阶段运行。
-
-## 贡献
-
-参见 `CONTRIBUTING.md`。
+详情:[docs/checklists.md](./docs/checklists.md) 和 [SPEC.md](./SPEC.md)。
 
 ## 许可证
 
-MIT。参见 `LICENSE`。
+MIT
