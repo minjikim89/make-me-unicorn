@@ -1,15 +1,14 @@
 cff-version: 1.2.0
 message: "If you use Make Me Unicorn in your research or product, please cite it as below."
-title: "Make Me Unicorn: An Open-Source Launch Checklist and Operating System for Solo SaaS Builders"
+title: "make-me-unicorn: A Deterministic Launch Gate for AI Coding Agents"
 abstract: >-
-  Make Me Unicorn (MMU) is an open-source command-line tool that helps solo SaaS
-  founders catch what AI-generated code misses before launch. It provides a
-  534+ item checklist across 15 categories (frontend, auth, billing, security,
-  SEO, legal, observability, and more), organized into 6 launch gates
-  (Problem Fit, Build Fit, Revenue Fit, Trust Fit, Growth Fit, Scale Fit).
-  MMU is distributed as a Python CLI (`pip install make-me-unicorn`) and
-  integrates with Claude Code as a plugin and with the Model Context Protocol (MCP)
-  as a server.
+  make-me-unicorn (MMU) is an open-source command-line tool that blocks AI coding
+  agents from committing launch-blocking gaps: unverified webhooks, Supabase tables
+  without row level security, secrets in the browser bundle or in git, and
+  interpolated SQL. It runs as a hook in Claude Code, Codex CLI, Cursor, Gemini CLI
+  and git, is deterministic and offline, and also ships launch checklists for solo
+  builders. Distributed as a Python CLI (`pip install make-me-unicorn`), a Claude
+  Code plugin, and an MCP server.
 type: software
 authors:
   - alias: minjikim89
@@ -30,9 +29,11 @@ keywords:
   - model-context-protocol
   - ai-agent
   - quality-assurance
+  - git-hooks
+  - static-analysis
   - idea-validation
-version: 0.6.3
-date-released: "2026-05-08"
+version: 0.9.0
+date-released: "2026-11-26"
 preferred-citation:
   type: software
   title: "Make Me Unicorn"

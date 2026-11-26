@@ -1,11 +1,10 @@
 name: "MMU Vibe Check"
 description: >-
-  Scan for the launch-blocking gaps AI-generated code misses most: hardcoded
-  secrets, secrets behind NEXT_PUBLIC_/VITE_ prefixes, Supabase tables without
-  RLS, production source maps, command-executing .git/config keys, missing
-  webhook signature verification, no password reset flow, f-string SQL, unsafe
-  pickle/yaml, wildcard CORS, missing rate limits, DEBUG=True, and more.
-  P0 findings fail the build; every finding links the incident data behind it.
+  Deterministic launch gate for AI-written code: unverified webhooks, Supabase
+  tables without RLS, secrets in the browser bundle or in git, interpolated SQL,
+  request data reaching eval/exec, hardcoded signing secrets, unsafe
+  deserialization, plus warnings such as unthrottled LLM routes and admin routes
+  without auth. P0 findings fail the build; optional SARIF for code scanning.
 author: "minjikim89"
 branding:
   icon: "shield"

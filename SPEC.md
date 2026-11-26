@@ -1,18 +1,23 @@
-# MMU CLI Spec (v0.7)
+# MMU CLI Spec (v0.9)
 
 This document defines the current runtime behavior for `Make Me Unicorn`.
 
 ## Design goals
 
-1. Keep markdown files as source of truth.
-2. Reduce founder overhead during context handoff.
-3. Enforce critical SaaS checks before release.
-4. Stay provider-agnostic for LLM workflows.
+1. Stop launch-blocking gaps in agent-written code at the commit: deterministic, offline, no account, fail-open.
+2. Keep markdown files as source of truth.
+3. Reduce founder overhead during context handoff.
+4. Enforce critical SaaS checks before release.
+5. Stay provider-agnostic for LLM workflows.
 
 ## Command surface
 
 | Command | Purpose | Output | Exit Code |
 |---|---|---|---|
+| `mmu` (no subcommand) | Same as `mmu vibecheck` on the current directory | vibecheck report | as `mmu vibecheck` |
+| `mmu install --claude\|--codex\|--cursor\|--gemini\|--git\|--agents-md\|--skill\|--all` | Register the gate as agent hooks, a git pre-commit hook, an AGENTS.md block or an Agent Skill | created/updated/unchanged report (`--dry-run`, `--uninstall`) | `0` success, `2` nothing to install or invalid config |
+| `mmu hook [--host H] [--event E]` | Hook entry point called by agent hosts; reads the host's hook JSON on stdin | host-specific block/allow response | host-specific (see "Hook contract") |
+| `mmu serve-mcp` | MCP server over stdio (extra `[mcp]`) | MCP protocol | `0` on shutdown |
 | `mmu init` | Bootstrap baseline docs/checklists/prompts | created/skipped file report | `0` success |
 | `mmu start --mode <mode>` | Start a focused session | mode file list and optional context bundle | `0` success |
 | `mmu snapshot --target <path>` | Run project diagnostic snapshot | terminal summary + optional markdown report | `0` success |
@@ -23,12 +28,16 @@ This document defines the current runtime behavior for `Make Me Unicorn`.
 | `mmu badge` | Generate README badge (markdown/svg/html) | badge snippet | `0` success |
 | `mmu share` | Generate shareable score card | plain-text card with CTA | `0` success |
 
-Installable command: `mmu` (via `pip install -e .`).
+Installed commands: `mmu` and `make-me-unicorn` (same entry point), via `pip install make-me-unicorn` or `uvx make-me-unicorn ...`.
 Wrapper command: `scripts/mmu.sh`.
 
 ## Global options
 
 - `--json`: print structured JSON instead of plain text.
+- `--root <path>`: project root.
+- Both work before or after the subcommand (`mmu --json --root ../app doctor`).
+- `--version`: print the package version.
+- Output is UTF-8 on every platform.
 
 ## Start command
 
@@ -112,21 +121,33 @@ Config override:
 
 ## Vibecheck checks
 
-Heuristic, read-only scan of project source files (respects `[doctor] skip_paths`):
+Deterministic, read-only scan. No network, no LLM. `mmu vibecheck --list-rules` prints the registry and `mmu vibecheck --explain <rule-id>` prints one rule's detection logic and framework-specific fixes.
 
-| Check | Severity | Fires when |
-|---|---|---|
-| `secrets` | P0 | known credential signatures in code (Stripe/Anthropic/OpenAI/AWS/GitHub/Slack/private keys), or `.env` exists without a `.gitignore` entry |
-| `webhook-signature` | P0 | webhook handler files without signature-verification markers |
-| `webhook-idempotency` | P0 | webhook handler files without idempotency markers |
-| `password-reset` | P0 | auth-related files without password-reset markers |
-| `sql-fstring` | P0 | Python f-string SQL queries (`f"SELECT ..."`) |
-| `rate-limiting` | P1 | server framework detected without rate-limiting markers |
-| `cors-wildcard` | P1 | wildcard CORS origin configuration |
-| `debug-mode` | P1 | hardcoded `DEBUG = True` in Python files |
-| `error-monitoring` | P1 | no error-monitoring dependency or markers (Sentry etc.) |
+- P0 (blocking): `secrets`, `client-bundle-secrets`, `supabase-rls`, `webhook-signature`, `sql-fstring`, `code-injection`, `jwt-secret-default`, `unsafe-deserialization`, `git-config-exec`.
+- P1 (warning): `llm-route-unthrottled`, `admin-route-no-auth`, `password-reset`, `webhook-idempotency`, `rate-limiting`, `cors-wildcard`, `dangerous-html`, `jwt-localstorage`, `stack-trace-leak`, `sourcemaps-exposed`, `env-not-ignored`, `disabled-ssl`, `debug-mode`, `error-monitoring`.
+- Severity policy: P0 only with specific evidence; findings about something being absent are P1. Comments are never evidence.
+- Scope: whole project by default; `--staged`, `--changed`, `--since <ref>` limit findings to those files. Repo-level findings (dotenv files, `.git/config`) stay in scope.
+- Skipped: vendor and build directories at any depth, files over 1 MB, minified bundles, git-ignored files. Extra excludes: `[vibecheck] skip_paths` (or `[doctor] skip_paths`) in `.mmu/config.toml`.
+- Suppression: `mmu-ignore[<rule-id>]: <reason>` on the flagged line or the line above (a reason is required), or `[vibecheck] ignore = ["glob:rule-id"]`. Baseline: `--write-baseline`, `--baseline`.
+- Output: `--format text|json|sarif|agent`, `--output <file>`. JSON schema `mmu.vibecheck/v1`: `docs/vibecheck-json-schema.md`.
+- Exit codes: `0` nothing at or above `--fail-on` (default `P0`), `1` blocking findings, `2` the scan could not run.
+- Accuracy and limits: `docs/benchmark.md`.
 
-Checks with no relevant surface (e.g. no webhook handlers) report `skip`, not `fail`.
+## Hook contract
+
+`mmu hook` reads one hook payload on stdin and answers in the host's format. `mmu install` writes the `--host` and `--event` arguments explicitly.
+
+| Event | Claude Code | Codex CLI | Cursor | Gemini CLI |
+|---|---|---|---|---|
+| `pre-shell` (git commit / push) | `PreToolUse` on `Bash`; block = exit 2 + reason on stderr | same as Claude Code | `beforeShellExecution`; block = `{"permission": "deny"}` | `BeforeTool` on `run_shell_command`; block = `{"decision": "deny"}` |
+| `stop` | `Stop`; block = `{"decision": "block", "reason": ...}` | same | `stop`; `followup_message` | `AfterAgent`; `{"decision": "deny"}` |
+| `post-edit` | `PostToolUse` on `Edit\|Write\|MultiEdit`; `additionalContext` | `PostToolUse` on `apply_patch` | not registered | not registered |
+
+- Commit scope: `--staged`; `--changed` when the command commits working-tree content (`-a`, pathspecs, `git add ... && git commit`). Push scope: `--since @{u}` when an upstream exists.
+- Stop scope (Claude Code, Codex): P0 findings in files the agent edited in this session, recorded by the post-edit hook under the git dir. No recorded edits: allow. Cursor and Gemini: `--changed`.
+- Loop bounds: the host's own flag (`stop_hook_active`, `loop_count`) and `MMU_STOP_MAX` (default 3 per session).
+- Fail-open: if the scanner errors or times out, the action is allowed and one line says so.
+- Environment: `MMU_HOOK_DISABLE=1` (all hooks), `MMU_HOOK_ON_PUSH_ONLY=1` (gate pushes only), `MMU_STOP_DISABLE=1`, `MMU_STOP_MAX`.
 
 ## Gate behavior
 

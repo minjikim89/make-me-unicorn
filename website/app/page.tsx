@@ -106,30 +106,35 @@ export default function Home() {
 
       {/* Hero */}
       <header style={styles.hero}>
-        <h1 style={styles.title}>Make Me Unicorn</h1>
-        <p style={styles.subtitle}>
-          Catch what AI-generated SaaS code misses &mdash; before it costs you
-          users, money, or trust.
+        <h1 style={styles.title}>make-me-unicorn</h1>
+        <p style={styles.subtitle}>A launch gate for AI coding agents.</p>
+        <p style={styles.tagline}>
+          Blocks your agent&apos;s <code>git commit</code> when it ships a webhook
+          that trusts unsigned events, a Supabase table without RLS, or a
+          service_role key in the browser bundle. Deterministic, offline, no
+          account, no LLM.
         </p>
         <p style={styles.tagline}>
-          670+ checklist items &middot; 15 categories &middot; 6 launch gates
-          &middot; Zero guesswork
-        </p>
-        <p style={styles.tagline}>
-          MCP-native: runs as a Claude Code plugin, an Agent Skill, and an MCP
-          server &mdash; your AI agent reads the same checklist you do.
+          Claude Code &middot; Codex CLI &middot; Cursor &middot; Gemini CLI
+          &middot; git pre-commit &middot; GitHub Actions
         </p>
         <div style={styles.cta}>
-          <code style={styles.install}>pip install make-me-unicorn</code>
+          <code style={styles.install}>uvx make-me-unicorn install --claude</code>
         </div>
+        <p style={styles.tagline}>
+          <a href="https://github.com/minjikim89/make-me-unicorn">
+            Rules, benchmark and docs on GitHub
+          </a>
+        </p>
       </header>
 
       {/* Interactive Demo */}
       <section style={styles.demo}>
-        <h2 style={styles.sectionTitle}>Try it now &mdash; check some items</h2>
+        <h2 style={styles.sectionTitle}>Also included: launch checklists</h2>
         <p style={styles.sectionDesc}>
-          Showing {totalItems} of 670+ items. Install the CLI for the full
-          checklist with all 15 categories.
+          The gate checks what the code does; the checklists track what the
+          project has decided and done. Showing {totalItems} of 670+ items
+          across 15 categories.
         </p>
 
         {/* Score Bar */}
