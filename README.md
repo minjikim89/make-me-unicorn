@@ -1,436 +1,221 @@
 <div align="center">
 
-# Make Me Unicorn
+# make-me-unicorn
 
-**Catch what AI-generated SaaS code misses — before it costs you users, money, or trust.**
+**A launch gate for AI coding agents.**
 
-The open-source launch checklist and operating system for solo builders.
+Your agent cannot commit a webhook that trusts unsigned events, a Supabase table without RLS,<br>
+or a `service_role` key in the browser bundle. Deterministic, offline, no account, no LLM, about 0.1 s.
 
+[![PyPI](https://img.shields.io/pypi/v/make-me-unicorn?color=blue)](https://pypi.org/project/make-me-unicorn/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-black.svg)](./LICENSE)
-[![PyPI version](https://img.shields.io/pypi/v/make-me-unicorn?color=blue)](https://pypi.org/project/make-me-unicorn/)
-[![PyPI downloads](https://img.shields.io/pypi/dm/make-me-unicorn?color=blue)](https://pypi.org/project/make-me-unicorn/)
-[![CLI](https://img.shields.io/badge/cli-mmu-f59e0b.svg)](./SPEC.md)
-[![Guardrails CI](https://img.shields.io/badge/ci-doctor%20%2B%20gates-22c55e.svg)](./.github/workflows/mmu-guardrails.yml)
-[![Contributions Welcome](https://img.shields.io/badge/contributions-welcome-16a34a.svg)](./CONTRIBUTING.md)
+[![CI](https://github.com/minjikim89/make-me-unicorn/actions/workflows/mmu-guardrails.yml/badge.svg)](./.github/workflows/mmu-guardrails.yml)
+[![Benchmark](https://img.shields.io/badge/P0%20false%20positives-0%20in%2020%20OSS%20repos-22c55e)](./docs/benchmark.md)
 
-**English** · [🇰🇷 한국어](./README.ko.md) · [🇯🇵 日本語](./README.ja.md) · [🇨🇳 简体中文](./README.zh-CN.md) · [🇪🇸 Español](./README.es.md)
-
-<img src="./assets/brand/unicorn-hero.png" alt="Make Me Unicorn mascot" width="960" />
-
-<img src="./assets/demo.gif" alt="MMU CLI demo — init, scan, vibecheck, dashboard" width="720" />
+**English** · [한국어](./README.ko.md) · [日本語](./README.ja.md) · [简体中文](./README.zh-CN.md) · [Español](./README.es.md)
 
 </div>
 
-## 60-Second Demo
+<!-- mcp-name: io.github.minjikim89/make-me-unicorn -->
 
 ```bash
-pip install make-me-unicorn   # or zero-install: uvx make-me-unicorn
-cd your-project
-mmu init && mmu scan && mmu
+uvx make-me-unicorn install --claude    # or --codex, --cursor, --gemini, --git, --all
 ```
+
+That is the whole setup. From now on, when your agent runs `git commit`, the hook scans what is staged. A P0 finding denies the command and hands the agent a fix it can apply. Real output for the initial commit of a Next.js + Supabase + Stripe project (lines shortened, five P1 warnings cut):
 
 ```text
-  MAKE ME UNICORN - STATUS DASHBOARD
-
-          .--*--.
-         / *v*  \
-        |       |
-         \ ___ /
-          '---'
-
-  Stage: HATCHING    ######..............  22%  (124/551)
-
-  LAUNCH GATES  (16/26)
-    M0 Problem Fit         ################   4/4   PASS
-    M1 Build Fit           ################   5/5   PASS
-    M2 Revenue Fit         ############....   3/4   OPEN
-    M3 Trust Fit           ################   4/4   PASS
-    M4 Growth Fit          ########........   2/4   OPEN
-    M5 Scale Fit           ####............   1/5   OPEN
+mmu vibecheck: 4 blocking (P0), 5 warning(s) (P1), 0 suppressed | scope: staged (22 file(s))
+P0 secrets .env:3 (+1: components/AdminPanel.tsx:8)
+  what: possible hardcoded secrets in 2 file(s): Supabase service_role JWT; ... (the service_role
+        key is in a "use client" file: it bypasses RLS for every visitor)
+P0 client-bundle-secrets .env:6 (+1: app/api/ai/summarize/route.ts:4)
+  what: secret shipped to the browser bundle via public env prefix in 2 file(s): NEXT_PUBLIC_OPENAI_API_KEY ...
+P0 webhook-signature app/api/webhooks/stripe-legacy/route.ts:5
+  what: 1 of 2 webhook handler(s) trust the event without verifying its signature
+  fix: Verify the signature on the raw body before trusting the event, and return 400 when it fails:
+       event = stripe.webhooks.constructEvent(await req.text(), req.headers.get("stripe-signature")!,
+       process.env.STRIPE_WEBHOOK_SECRET!) Do not call req.json() before this: the check needs the
+       exact bytes the provider signed.
+  silence (only if false positive): // mmu-ignore[webhook-signature]: <reason>
+P0 supabase-rls supabase/migrations/0001_init.sql:1
+  what: 1 table(s) created without ENABLE ROW LEVEL SECURITY: public.invoices
+  fix: Add a migration for each listed table: `alter table <schema>.<table> enable row level security;`
+       plus at least one policy, e.g. `create policy "owner can read" on <table> for select using
+       (auth.uid() = user_id);`. ...
+Fix every P0 above, then re-run `mmu vibecheck --format agent --staged` until it reports 0 blocking.
 ```
 
-Your unicorn evolves as you build: **Egg → Hatching → Foal → Young → Unicorn → Legendary.**
+The agent fixes, re-runs, and commits. When the code is already right, the gate stays silent: in a live Claude Code test the agent wrote a verified Stripe webhook on the first try and the commit went straight through.
 
-## Add a Badge to Your README
+## Why absence checks
 
-Show your launch readiness to the world. One command:
+Secret scanners and SAST look for bad code that is there. Code written by agents more often fails on code that is not there: the signature check nobody wrote, the RLS policy that was never added, the rate limit in front of a paid LLM route.
+
+- Tenzai had five coding agents build the same three apps (15 apps). None contained an exploitable SQLi or XSS; on security controls, "in almost all cases, they didn't even try" ([SecurityWeek, Jan 2026](https://www.securityweek.com/vibe-coding-tested-ai-agents-nail-sqli-but-fail-miserably-on-security-controls/)).
+- GitGuardian measured a 3.2% secret-leak rate in Claude Code-assisted public commits against a 1.5% baseline ([State of Secrets Sprawl 2026](https://blog.gitguardian.com/the-state-of-secrets-sprawl-2026/)).
+
+A linter will not flag a function that does not exist. `mmu vibecheck` reads the project the way a reviewer would ask "where do you verify this webhook?" and blocks only when the answer is clearly "nowhere".
+
+## How the gate works
+
+Agents skip optional tools. They cannot skip hooks. `mmu install` writes hook entries that call `mmu hook`, which speaks each host's hook protocol.
+
+| Host | Commit / push gate | "Not done yet" gate | Post-edit feedback | `mmu install` flag |
+|------|--------------------|---------------------|--------------------|--------------------|
+| Claude Code | `PreToolUse` on `Bash` | `Stop` | `PostToolUse` on `Edit`/`Write`/`MultiEdit` | `--claude` |
+| Codex CLI | `PreToolUse` on `Bash` | `Stop` | `PostToolUse` on `apply_patch` | `--codex` |
+| Cursor | `beforeShellExecution` | `stop` | not available | `--cursor` |
+| Gemini CLI | `BeforeTool` on `run_shell_command` | `AfterAgent` | not available | `--gemini` |
+| git | `pre-commit`, chaining any existing hook | | | `--git` |
+| pre-commit framework | hook id `mmu-vibecheck` | | | `.pre-commit-hooks.yaml` |
+| GitHub Actions | `uses: minjikim89/make-me-unicorn@v0.9.0`, SARIF to code scanning | | | |
+
+- **Commit gate** scans what the commit will contain: staged files, or changed files for `git commit -a`, pathspecs and `git add ... && git commit`. A push scans what changed since the upstream.
+- **"Not done yet" gate** runs when the agent tries to finish. It looks only at files the agent edited in this session, so it never makes the agent rewrite code it did not touch. It sends the agent back at most `MMU_STOP_MAX` times (default 3); if you told the agent to defer hardening, it lists the P0s and stops.
+- **Post-edit feedback** returns P0 findings in the file just written as context. It never blocks.
+- `mmu install --all`, `--dry-run`, `--uninstall`; `--agents-md` adds an instruction block to `AGENTS.md`, `--skill` copies the `mmu-vibecheck` Agent Skill into `.agents/skills/`. Existing settings are merged, never replaced.
+
+Claude Code is tested in live sessions. Codex CLI, Cursor and Gemini CLI follow their documented hook contracts and are tested against documented payloads; reports from real sessions are welcome.
+
+Design constraints, all tested:
+
+- **Deterministic.** Same tree, same findings. No model call, no network, no account.
+- **Fail-open.** If the scanner itself crashes or times out, the command goes through with a visible warning. A broken gate never bricks a session.
+- **Bypassable by a human.** `MMU_HOOK_DISABLE=1 git commit ...` for one command; set it in the agent's environment to disable the gate for a session.
+- **Fast.** Median 89 ms across 20 real repositories, 1.1 s on the largest (1,699 files).
+
+## What it catches
+
+P0 blocks. P1 warns. Every absence heuristic is P1 unless the evidence is specific.
+
+| Rule | Sev | Finds |
+|------|-----|-------|
+| `secrets` | P0 | Live provider keys and Supabase `service_role` JWTs in source, config, or a dotenv file git does not ignore |
+| `client-bundle-secrets` | P0 | Secrets behind `NEXT_PUBLIC_` / `VITE_` / `EXPO_PUBLIC_` prefixes or read in client code |
+| `supabase-rls` | P0 | Tables created in migrations without `ENABLE ROW LEVEL SECURITY` |
+| `webhook-signature` | P0 | Stripe, GitHub, Svix, Clerk... webhook handlers that use the event without verifying it |
+| `sql-fstring` | P0 | SQL built with f-strings, `%`, `.format`, template literals or concatenation and passed to `execute` |
+| `code-injection` | P0 | Request data reaching `eval`, `exec`, `Function` or a shell |
+| `jwt-secret-default` | P0 | Signing secrets with a hardcoded value or `|| 'fallback'` |
+| `unsafe-deserialization` | P0 | `yaml.load` without a safe loader, `pickle` on external input |
+| `git-config-exec` | P0 | `.git/config` keys that run a program on ordinary git use (`core.fsmonitor`, `core.sshCommand`, `alias.x = !cmd`) |
+| `llm-route-unthrottled` | P1 | Routes that call a paid LLM API with no auth and no rate limit |
+| `admin-route-no-auth` | P1 | `/admin` routes without a session or role check |
+| `password-reset` | P1 | Password login with no forgot/reset flow anywhere |
+| `webhook-idempotency` | P1 | Webhook effects that are wrong when the provider retries |
+| `rate-limiting` | P1 | A server with no rate limiting at all |
+| `cors-wildcard` | P1 | `*` origins, `cors()` with no options, wildcard with credentials |
+| `dangerous-html` | P1 | `dangerouslySetInnerHTML` / `v-html` on unsanitized values |
+| `jwt-localstorage` | P1 | Auth tokens stored in `localStorage` / `sessionStorage` |
+| `stack-trace-leak` | P1 | Exception details returned to the client |
+| `sourcemaps-exposed` | P1 | Production source maps enabled |
+| `env-not-ignored` | P1 | Dotenv files with credential-named values that git does not ignore |
+| `disabled-ssl` | P1 | `verify=False`, `rejectUnauthorized: false` |
+| `debug-mode` | P1 | `DEBUG = True`, `app.run(debug=True)`, `--reload` in a Dockerfile |
+| `error-monitoring` | P1 | No Sentry or equivalent |
+
+`mmu vibecheck --list-rules` prints this table; `mmu vibecheck --explain <rule>` prints what a rule looks for and how to fix it.
+
+## Accuracy
+
+Measured, reproducible, and written down with its limits in [`docs/benchmark.md`](./docs/benchmark.md).
+
+| Measurement | Result |
+|-------------|--------|
+| 20 popular open-source apps (starters, SaaS kits, framework examples), default settings | 0 wrong P0 findings on review (11 before this release's rule rework) |
+| 12 fixture projects with 55 planted issues | P0 precision 100%, P0 recall 100%, 52 of 55 planted issues found |
+| Not detected | IDOR, plaintext password comparison, password column returned by login: no rule models authorization or data flow |
+
+The fixtures were written alongside the rules, so treat them as a regression suite. The open-source sweep is the independent check.
+
+## Use it directly
 
 ```bash
-mmu badge                          # get markdown badge
-mmu badge --format svg -o badge.svg  # save as SVG file
-mmu badge --format endpoint -o badge.json  # self-updating badge (shields.io endpoint)
-mmu badge --clipboard              # copy to clipboard
+pip install make-me-unicorn          # or run any command through uvx make-me-unicorn ...
+mmu vibecheck                        # whole project, human-readable
+mmu vibecheck --staged               # what is about to be committed
+mmu vibecheck --since origin/main    # what this branch changed
+mmu vibecheck --format agent         # compact fix list for a coding agent
+mmu vibecheck --format json          # schema mmu.vibecheck/v1
+mmu vibecheck --format sarif --output mmu.sarif
 ```
 
-For a badge that stays live, publish `badge.json` at a raw URL (commit it, or push it to Pages) and embed `https://img.shields.io/endpoint?url=<raw-url>` — regenerate the JSON in CI and the badge updates itself.
+Exit codes: `0` nothing blocking, `1` at least one finding at or above `--fail-on` (default `P0`), `2` the scan could not run. JSON schema: [`docs/vibecheck-json-schema.md`](./docs/vibecheck-json-schema.md).
 
-Then paste in your README:
+### False positives
 
-[![Launch Readiness 68% — Young Unicorn](https://img.shields.io/badge/launch%20readiness-68%25%20young%20unicorn-9c27b0?style=flat-square)](https://github.com/minjikim89/make-me-unicorn)
+Suppress one line, with a reason (a suppression without a reason is ignored):
 
-*Every badge links back here. Every README becomes a growth channel.*
-
-## Share Your Score
-
-```bash
-mmu share                     # print shareable score card
-mmu share --clipboard         # copy to clipboard (macOS)
+```ts
+// mmu-ignore[webhook-signature]: verified by the API gateway before this handler runs
 ```
 
-```
-┌─────────────────────────────────────────────┐
-│  Make Me Unicorn — Launch Readiness         │
-│                                             │
-│  Score: 68%  Stage: YOUNG UNICORN           │
-│                                             │
-│  M0 Problem Fit    ████████████████  PASS   │
-│  M1 Build Fit      ████████████████  PASS   │
-│  M2 Revenue Fit    ██████████░░░░░░  OPEN   │
-│  M3 Trust Fit      ████████████████  PASS   │
-│  M4 Growth Fit     ████████░░░░░░░░  OPEN   │
-│  M5 Scale Fit      ████░░░░░░░░░░░░  OPEN   │
-│                                             │
-│  Stack: Next.js · Stripe · SSR              │
-│  pip install make-me-unicorn                │
-│  github.com/minjikim89/make-me-unicorn      │
-│  #MakeMeUnicorn                             │
-└─────────────────────────────────────────────┘
-
-Check your SaaS launch readiness:
-https://github.com/minjikim89/make-me-unicorn
-```
-
-## The Problem
-
-You code with AI. You ship fast. But then:
-
-| What goes wrong | What it costs you |
-|-----------------|-------------------|
-| Forget password reset while building login | Users locked out on day 1 |
-| Skip webhook signature verification | Attackers replay payment events |
-| Launch without OG tags | Every shared link looks broken |
-| Lose context between AI sessions | Re-explain your project from scratch |
-| No refund policy | First dispute = frozen Stripe account |
-
-**You're not failing at coding. You're failing at tracking what matters.**
-
-## What MMU Covers
-
-<table>
-<tr>
-<td width="33%">
-
-**Building**
-- Frontend (responsive, a11y, forms)
-- Backend (API, DB, queues)
-- Auth (login, reset, OAuth, sessions)
-- Billing (Stripe, webhooks, refunds)
-- Testing (unit, E2E, agent safety)
-
-</td>
-<td width="33%">
-
-**Launching**
-- SEO (OG tags, sitemap, meta)
-- Legal (privacy, terms, GDPR)
-- Security (CORS, rate limits, secrets)
-- Performance (caching, lazy load)
-- CI/CD (pipeline, rollback plan)
-
-</td>
-<td width="34%">
-
-**Operating**
-- Monitoring (errors, uptime, alerts)
-- Analytics (funnel, retention, events)
-- Email (transactional, templates)
-- Accessibility (WCAG, keyboard nav)
-- Reliability (backup, incident plan)
-
-</td>
-</tr>
-</table>
-
-**670+ items. 15 categories. 6 launch gates. Zero guesswork.**
-
-## How Is MMU Different?
-
-| | Scope | Lives where | Agent-native | Tracks progress |
-|---|---|---|---|---|
-| **MMU** | Full SaaS: code + billing + legal + growth + ops | Your repo, plain markdown | ✅ Claude plugin + MCP server | ✅ Score, gates, evolving dashboard |
-| Lighthouse | Frontend performance/a11y/SEO only | Browser/CI | ❌ | Per-run score, no project memory |
-| Vendor launch checklists (Vercel, Stripe docs) | One vendor's slice | Their docs site | ❌ | ❌ Read-only |
-| Static checklist repos / Notion templates | Varies, usually unverifiable | Copy-paste | ❌ | ❌ Manual, goes stale |
-| AI code reviewers (CodeRabbit etc.) | Code diffs | PR workflow | Partially | Per-PR, no launch view |
-
-MMU is not a linter and not a docs site — it's the **operating layer between your AI coding sessions and an actual launch**: a verifiable checklist your CLI, CI, and AI agents all read and update.
-
-## Vibe Check Your AI-Generated Code
-
-One command scans for the gaps AI assistants miss most — the ones that show up in real scans of shipped vibe-coded apps, not a generic linter list:
-
-```bash
-mmu vibecheck
-```
-
-```text
-Vibe check — what AI-generated code usually misses
-
-  ✗ (P0) secrets: possible hardcoded secrets in 1 file(s): Stripe live secret key
-  ✗ (P0) webhook-signature: webhook handlers found but no signature verification markers
-        ↳ Verify provider signatures or attackers can forge payment events.
-  ✗ (P0) password-reset: auth code detected but no password reset flow markers
-        ↳ The #1 day-one lockout: users who can log in but can never get back in.
-  ⚠ (P1) rate-limiting: server framework detected but no rate limiting markers
-
-Vibe check result: 3 launch-blocking issue(s), 1 warning(s)
-```
-
-Checks: hardcoded secrets · unignored `.env` · webhook signature + idempotency · password reset flow · f-string SQL · unsafe Python deserialization · rate limiting · wildcard CORS · `DEBUG = True` · error monitoring · secrets behind `NEXT_PUBLIC_`/`VITE_` prefixes · Supabase tables without RLS · production source maps · command-executing `.git/config` keys. P0 findings exit non-zero, so it drops straight into CI.
-
-The newest checks come straight from what is actually broken in the wild. [Reeve's August 2026 scan](https://vibe-eval.com/updates/vibe-coding-security-monthly-aug-2026/) of 30,998 live vibe-coded apps found **57% of Supabase-backed apps allowed unauthenticated table reads** (no RLS), **1 in 23 shipped a secret in the public bundle**, and **13% published source maps**. Every finding prints a `why:` link to the incident report or dataset behind the rule, so you can judge the risk yourself instead of trusting a scanner. Findings whose files all live in test directories (`tests/`, `__tests__/`, `fixtures/`, …) or test-suffixed files (`*.test.ts`, `test_*.py`) are downgraded to warnings — fake keys in fixtures should not block your build. Monorepos are covered: `.env*` files, build configs, and `supabase/` directories are found up to three levels deep.
-
-### Run It in GitHub Actions
-
-One step in any workflow — launch-blocking findings fail the build:
-
-```yaml
-- uses: minjikim89/make-me-unicorn@main
-  # optional:
-  # with:
-  #   root: "apps/web"        # subfolder to scan
-  #   version: "==0.9.0"      # pin a release
-```
-
-## Personalize Your Checklist
-
-Not every project needs billing or i18n. MMU adapts:
-
-```bash
-mmu init                      # generates .mmu/config.toml
-```
+Or a path in `.mmu/config.toml`:
 
 ```toml
-[features]
-billing = false               # no Stripe? billing items won't count against you
-i18n = false
-
-[architecture]
-framework = "nextjs"
+[vibecheck]
+ignore = ["scripts/seed.ts:secrets", "examples/**:jwt-secret-default"]
 ```
 
-Your score reflects **only what applies to your project**. `mmu status --why` shows the breakdown — like Lighthouse, but for SaaS readiness.
+Adopting the gate on an existing codebase: `mmu vibecheck --write-baseline` records today's findings, `mmu vibecheck --baseline` then reports only new ones.
 
-## 6 Launch Gates
+## GitHub Actions
 
-Phase exits. Don't skip ahead.
-
-```
-M0 Problem Fit    →  Do you know WHO and WHY?
-M1 Build Fit      →  Does the core product work end-to-end?
-M2 Revenue Fit    →  Can someone pay you? And get a refund?
-M3 Trust Fit      →  Privacy policy? Support path? Logging?
-M4 Growth Fit     →  Will links look right? Can people find you?
-M5 Scale Fit      →  What happens at 3am?
-```
-
-Run `mmu gate --stage M0` to verify.
-
-## 12 Operating Modes
-
-One mode per session. Each loads only the docs you need — prevents the #1 problem with AI coding: **context overload**.
-
-```bash
-mmu start --mode backend      # loads: architecture.md, sprint, ADR logs
-mmu start --mode billing      # loads: pricing.md, billing checklist, compliance
-mmu start --mode growth       # loads: SEO checklist, metrics
+```yaml
+permissions:
+  contents: read
+  security-events: write
+steps:
+  - uses: actions/checkout@v4
+  - uses: minjikim89/make-me-unicorn@v0.9.0
+    with:
+      sarif-file: mmu.sarif
+  - uses: github/codeql-action/upload-sarif@v4
+    if: always()
+    with:
+      sarif_file: mmu.sarif
 ```
 
-## AI Integration (Optional)
+Findings show up in the Security tab and as annotations on the pull request.
 
-MMU works without AI. But with Claude, it gets powerful:
-
-```bash
-pip install make-me-unicorn[llm]
-export ANTHROPIC_API_KEY=sk-ant-...
-```
-
-| Command | What happens |
-|---------|-------------|
-| `mmu init --interactive` | Answer 5 questions → Claude writes your strategy, product, pricing, architecture, and UX docs |
-| `mmu start --mode X --agent` | Auto-formats session context for Claude Code or any LLM |
-| `mmu doctor --deep` | Claude reads your code, flags mismatches, security gaps, blind spots |
-| `mmu generate strategy` | Generates or updates core docs based on current project state |
-
-Core CLI stays zero-dependency. AI features degrade gracefully.
-
-## Put the gate in your agent's loop
-
-Agents skip optional tools, but they cannot skip a hook. `mmu install` registers `mmu vibecheck` as a hook in the agent you use, so a P0 finding stops the commit, the push, or a premature "done" while the agent can still fix it.
-
-```bash
-pip install make-me-unicorn        # or use uvx; the installer then registers `uvx --from make-me-unicorn mmu hook`
-mmu install --claude               # .claude/settings.json
-mmu install --codex --cursor --gemini --git --agents-md --skill   # or: mmu install --all
-mmu install --all --dry-run        # print the planned changes
-mmu install --all --uninstall      # remove them again
-```
-
-| Host | Commit / push gate | "Not done yet" gate | Post-edit feedback | Config written |
-|------|--------------------|---------------------|--------------------|----------------|
-| Claude Code | PreToolUse (Bash) | Stop | PostToolUse (Edit, Write, MultiEdit) | `.claude/settings.json` |
-| Codex CLI | PreToolUse (Bash) | Stop | PostToolUse (apply_patch) | `.codex/hooks.json` |
-| Cursor | beforeShellExecution | stop | not available | `.cursor/hooks.json` |
-| Gemini CLI | BeforeTool (run_shell_command) | AfterAgent | not available | `.gemini/settings.json` |
-| git | pre-commit (chains an existing hook) | | | `.git/hooks/pre-commit` |
-| pre-commit framework | hook id `mmu-vibecheck` | | | `.pre-commit-hooks.yaml` |
-
-What the agent sees when a commit is blocked:
+## Claude Code plugin
 
 ```text
-mmu vibecheck: 2 launch-blocking issue(s) in /path/to/app — commit blocked.
-mmu vibecheck: 2 blocking (P0), 0 warning(s) (P1), 0 suppressed | scope: changed (2 file(s))
-P0 webhook-signature app/api/webhooks/stripe/route.ts:4
-  what: webhook handlers found but no signature verification markers
-  fix: Verify the provider signature on the raw request body before parsing or trusting the event; return 400 on failure. …
-  silence (only if false positive): // mmu-ignore[webhook-signature]: <reason>
-```
-
-- The commit gate scans what the commit will contain: staged files, or all changed files for `git commit -a`, pathspecs, and `git add … && git commit …`. A push scans files changed since the upstream.
-- The stop gate sends the agent back at most `MMU_STOP_MAX` times per session (default 3) and honours the host's own loop guard. `MMU_STOP_DISABLE=1` turns it off.
-- If the scanner cannot run, the action goes through and one visible line says so. The gate never blocks on its own failure.
-- Bypass one command with a `MMU_HOOK_DISABLE=1` prefix; set it in the agent's environment to disable all hooks. `MMU_HOOK_ON_PUSH_ONLY=1` gates only pushes.
-
-### Claude Code plugin
-
-```bash
-# In Claude Code:
 /plugin marketplace add minjikim89/make-me-unicorn
-/plugin install make-me-unicorn --marketplace minjikim89/make-me-unicorn
+/plugin install make-me-unicorn@make-me-unicorn
 ```
 
-The plugin registers the same three hooks from its bundled source (no `pip install`; needs `python3` 3.10+), the `mmu-vibecheck` skill, a `/vibecheck` command, and the MCP server (started with `uvx`, so it needs [uv](https://docs.astral.sh/uv/)). The `mmu-startup` skill (blueprints, idea validation, Product Hunt kit) is included for planning.
+Registers the same three hooks from the plugin's bundled source (needs `python3` 3.10+, no `pip install`), plus a `/vibecheck` command, the `mmu-vibecheck` skill, and the MCP server (started with [uv](https://docs.astral.sh/uv/)).
 
-The `mmu-vibecheck` skill follows the Agent Skills spec. Codex and other hosts that read `.agents/skills/` pick it up from this repository, or from your project after `mmu install --skill`.
+## MCP server
 
-## MCP Server Mode
-
-MMU also runs as an MCP (Model Context Protocol) server for any MCP client (Claude Code, Claude Desktop, Cursor, Gemini CLI, Codex). It works with MCP Python SDK v1 (1.27+) and v2.
-
-```bash
-uvx --from 'make-me-unicorn[mcp]' mmu serve-mcp     # zero-install
-pip install 'make-me-unicorn[mcp]' && mmu serve-mcp # stdio transport (default)
-```
-
-Client config:
+For agents that prefer to ask: `mmu serve-mcp` exposes `mmu_vibecheck`, `mmu_explain_rule` and `mmu_list_rules` (read-only). Works with MCP SDK v1 and v2.
 
 ```json
 {
   "mcpServers": {
-    "make-me-unicorn": {
-      "command": "uvx",
-      "args": ["--from", "make-me-unicorn[mcp]", "mmu", "serve-mcp"]
-    }
+    "mmu": { "command": "uvx", "args": ["--from", "make-me-unicorn[mcp]>=0.9", "mmu", "serve-mcp"] }
   }
 }
 ```
 
-Tools exposed (all read-only):
+The MCP tools are a convenience. The hooks are the gate.
 
-- `mmu_vibecheck(project_root, scope="all"|"changed"|"staged", format="json"|"agent")`: the launch gate. Structured output is the `mmu.vibecheck/v1` document
-- `mmu_explain_rule(rule_id)` / `mmu_list_rules()`: what a rule detects and how to fix it
-- `mmu_validate_idea(idea)`: check an idea against live HN + Reddit threads (network)
-- `mmu_get_blueprint(name)` / `mmu_list_blueprints()`: launch checklists per area
-- `mmu_list_idea_templates()`: start/close/ADR prompts + Product Hunt kit
+## Add a rule
 
-`mmu_validate_idea` needs the `[validate]` extra for sentiment scoring; it is free mode only (no API keys).
+Rules live in [`src/mmu_cli/vibecheck/rules/`](./src/mmu_cli/vibecheck/rules/). A rule ships with a fixture in `bench/fixtures/`, the expected findings in `bench/expected/`, and must keep the benchmark at zero P0 false positives (`python -m unittest tests.test_bench`). See [CONTRIBUTING.md](./CONTRIBUTING.md).
 
-## Validate an Idea
+## Also in this repo: launch checklists
 
-Pull real signal from HN + Reddit before you build:
+make-me-unicorn started as a launch checklist for solo builders, and that part still ships: 15 checklist categories, launch gates M0 to M5, focused session modes and an MCP blueprint server. It tracks what a project has decided and done; the gate above checks what the code actually does.
 
 ```bash
-pip install make-me-unicorn[validate]
-mmu validate "AI tutor for kids" --limit 30
+mmu init && mmu scan && mmu status
 ```
 
-Default mode is **free** — no API keys, no paid calls. Public Reddit + HN Algolia search, local VADER sentiment, capitalized-token competitor surface. Saves a markdown report to `reports/validate/<slug>-<hash>.md`.
-
-For a 1-page validation verdict synthesized from the threads:
-
-```bash
-mmu validate "AI tutor for kids" --llm
-# Prompts for cost confirmation (~$0.05-0.20). Use -y to skip.
-```
-
-`--llm` is opt-in — the default flow never calls the Anthropic API.
-
-## Full Command Reference
-
-```bash
-mmu                           # status dashboard
-mmu init                      # bootstrap project
-mmu init --interactive        # LLM-guided setup (5 questions → 5 docs)
-mmu scan                      # auto-detect tech stack
-mmu status --why              # score breakdown
-mmu next                      # prioritized next actions
-mmu show frontend             # drill into any category
-mmu check frontend 3          # mark item done
-mmu gate --stage M0           # verify gate readiness
-mmu doctor                    # guardrail health checks
-mmu doctor --deep             # LLM-powered semantic review
-mmu vibecheck                 # scan for AI-generated code blind spots (secrets, webhooks, …)
-mmu share                     # shareable score card
-mmu badge                     # README badge (markdown/svg/html)
-mmu start --mode backend      # start focused session
-mmu close                     # end session with structured memory
-```
-
-## Who This Is For
-
-| You are... | MMU helps you... |
-|------------|------------------|
-| **A founder coding with AI** | Stop re-explaining your project. Keep context across tools. |
-| **A frontend developer** | Know exactly what to build: auth flows, error states, OG tags. |
-| **A product manager** | Structured PRD, pricing strategy, launch checklist — all in markdown. |
-| **A fullstack builder** | Track everything in one place. Nothing slips through. |
-
-## Example: TaskNote
-
-A fully filled-out example:
-
-```
-examples/filled/tasknote/
-├── docs/core/strategy.md      ← ICP, value prop, competitors
-├── docs/core/product.md       ← MVP scope, user journey, P0/P1
-├── docs/core/pricing.md       ← Free/Pro/Team, billing rules
-├── docs/core/architecture.md  ← Next.js + FastAPI + Postgres
-├── docs/adr/001_billing_provider_choice.md  ← Why Stripe?
-└── current_sprint.md          ← This week's 3 goals
-```
-
-## Requirements
-
-- Python `3.10+`
-- Core CLI: zero external dependencies
-- AI features: `pip install make-me-unicorn[llm]`
-
-## CI Guardrails
-
-`mmu doctor` runs on every PR. `mmu gate` runs for stages listed in `docs/ops/gate_targets.txt`.
-
-## Contributing
-
-See `CONTRIBUTING.md`. Issues labeled [`good first issue`](https://github.com/minjikim89/make-me-unicorn/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22) are scoped for a first PR — each one links the exact files to touch.
-
-## Support the Project
-
-If MMU caught something you would have missed, **[a star](https://github.com/minjikim89/make-me-unicorn/stargazers) helps other solo builders find it** — that's the whole growth model of this project.
-
-[![Star History Chart](https://api.star-history.com/svg?repos=minjikim89/make-me-unicorn&type=Date)](https://star-history.com/#minjikim89/make-me-unicorn&Date)
+Details: [docs/checklists.md](./docs/checklists.md) and [SPEC.md](./SPEC.md).
 
 ## License
 
-MIT. See `LICENSE`.
-
-<!-- mcp-name: io.github.minjikim89/make-me-unicorn -->
+MIT

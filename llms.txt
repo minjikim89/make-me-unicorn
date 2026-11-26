@@ -1,52 +1,44 @@
-# Make Me Unicorn (MMU)
+# make-me-unicorn (mmu)
 
-> An open-source launch checklist and operating system for solo SaaS builders. A Python CLI (`pip install make-me-unicorn`), Claude Code plugin, and MCP server that catches what AI-generated SaaS code misses before launch.
+> A deterministic launch gate for AI coding agents. `mmu vibecheck` scans a project for the gaps agent-written code ships most (unverified webhooks, Supabase tables without RLS, secrets in the browser bundle, interpolated SQL) and, installed as a hook, blocks the agent's `git commit` until P0 findings are fixed. Offline, no account, no LLM, about 0.1 s per scan. Python CLI on PyPI as `make-me-unicorn`; MIT.
 
-## What it is
+## Install the gate
 
-Make Me Unicorn (MMU) is a developer tool for solo founders shipping AI-generated SaaS products. It checks a codebase against a 670-item launch checklist across 15 categories — frontend, auth, billing, security, SEO, legal, observability, deployment, monitoring, growth, and more — organized into 6 named launch gates (Problem Fit, Build Fit, Revenue Fit, Trust Fit, Growth Fit, Scale Fit). MMU outputs an evolving "unicorn" status dashboard (Egg → Hatching → Foal → Young → Unicorn → Legendary) as gates pass.
+- `uvx make-me-unicorn install --claude` writes Claude Code hooks to `.claude/settings.json` (PreToolUse on Bash for git commit/push, Stop, PostToolUse on edits)
+- `--codex` (`.codex/hooks.json`), `--cursor` (`.cursor/hooks.json`), `--gemini` (`.gemini/settings.json`), `--git` (pre-commit hook that chains an existing one), `--agents-md` (instruction block in AGENTS.md), `--all`
+- `--dry-run` prints the changes; `--uninstall` removes only mmu's entries
+- Claude Code plugin: `/plugin marketplace add minjikim89/make-me-unicorn` then `/plugin install make-me-unicorn`
 
-## Who it is for
+## Run a scan
 
-- Solo SaaS founders shipping AI-generated code who need a systematic pre-launch quality check
-- Indie hackers running Claude Code, Cursor, or other AI coding agents end-to-end without a team
-- Engineers using the Model Context Protocol (MCP) who want a quality-assurance MCP server in their agent toolchain
-- Builders who want a Claude Code plugin that does idea validation against real HN and Reddit threads
+- `mmu vibecheck` whole project; `--staged`, `--changed`, `--since <ref>` limit the scope
+- `--format agent` compact fix list for an LLM; `--format json` (schema `mmu.vibecheck/v1`); `--format sarif` (2.1.0)
+- Exit codes: 0 nothing blocking, 1 findings at or above `--fail-on` (default P0), 2 the scan could not run
+- `--list-rules`, `--explain <rule-id>`
+- Suppress a line: `mmu-ignore[<rule-id>]: <reason>` (the reason is required). Suppress a path: `[vibecheck] ignore = ["glob:rule-id"]` in `.mmu/config.toml`
+- Existing codebases: `--write-baseline`, then `--baseline` reports only new findings
 
-## Core commands
+## Rules
 
-- `mmu init` — initialize MMU in the current project
-- `mmu scan` — analyze the codebase against the 670-item checklist
-- `mmu` (no args) — show the status dashboard with launch-gate progress
-- `mmu next` — show the next highest-priority item to fix
-- `mmu vibecheck` — scan for the gaps AI-generated code ships most (hardcoded secrets, secrets behind NEXT_PUBLIC_/VITE_ prefixes, Supabase tables without RLS, production source maps, command-executing .git/config keys, unverified webhooks, missing password reset, f-string SQL, unsafe pickle/yaml, missing rate limits, wildcard CORS, debug mode, no error monitoring). Each finding links the incident data behind the rule.
-- `mmu validate <idea>` — validate a startup idea against real HN + Reddit threads (free by default, no API keys; `--llm` opt-in adds Claude synthesis at ~$0.05-0.20 per call)
+P0 (blocking): secrets, client-bundle-secrets, supabase-rls, webhook-signature, sql-fstring, code-injection, jwt-secret-default, unsafe-deserialization, git-config-exec.
+P1 (warning): llm-route-unthrottled, admin-route-no-auth, password-reset, webhook-idempotency, rate-limiting, cors-wildcard, dangerous-html, jwt-localstorage, stack-trace-leak, sourcemaps-exposed, env-not-ignored, disabled-ssl, debug-mode, error-monitoring.
 
-## Distribution
+## For agents
+
+- When a hook blocks a commit, the message lists each P0 with file:line, what is wrong, and a fix. Apply the fix and re-run `mmu vibecheck --format agent` until it reports 0 blocking. Suppress only real false positives, with a reason.
+- MCP server: `mmu serve-mcp` (extra `[mcp]`) exposes `mmu_vibecheck`, `mmu_explain_rule`, `mmu_list_rules` (read-only), plus launch-checklist blueprint tools.
+
+## Accuracy
+
+docs/benchmark.md: 0 wrong P0 findings across 20 popular open-source apps on review; on 12 fixture projects P0 precision and recall are 100%, 52 of 55 planted issues found. Not covered: authorization logic (IDOR), data flow.
+
+## Also included
+
+Launch checklists for solo builders (15 categories, launch gates M0 to M5, session modes, idea validation): docs/checklists.md.
+
+## Links
 
 - PyPI: https://pypi.org/project/make-me-unicorn/
 - GitHub: https://github.com/minjikim89/make-me-unicorn
-- Homepage: https://minjikim89.github.io/make-me-unicorn/
-- License: MIT
-
-## Integrations
-
-- **Claude Code plugin**: use MMU as a skill inside a Claude Code session
-- **MCP server**: run MMU as a Model Context Protocol server for any MCP-compatible agent
-- **CLI**: standalone Python CLI, runs offline for the checklist; online only when calling LLM features
-
-## Documentation
-
-- README (English): https://github.com/minjikim89/make-me-unicorn/blob/main/README.md
-- README (Korean): https://github.com/minjikim89/make-me-unicorn/blob/main/README.ko.md
-- README (Japanese): https://github.com/minjikim89/make-me-unicorn/blob/main/README.ja.md
-- FAQ: https://github.com/minjikim89/make-me-unicorn/blob/main/docs/faq.md
-- Glossary: https://github.com/minjikim89/make-me-unicorn/blob/main/docs/glossary.md
-- Use cases: https://github.com/minjikim89/make-me-unicorn/blob/main/docs/use-cases.md
-- Roadmap: https://github.com/minjikim89/make-me-unicorn/blob/main/ROADMAP.md
-- Spec: https://github.com/minjikim89/make-me-unicorn/blob/main/SPEC.md
-- Changelog: https://github.com/minjikim89/make-me-unicorn/blob/main/CHANGELOG.md
-
-## Citation
-
-If you reference MMU, please cite the repository — see `CITATION.cff` at the repo root for the canonical citation format.
+- JSON schema: docs/vibecheck-json-schema.md
+- Benchmark: docs/benchmark.md
