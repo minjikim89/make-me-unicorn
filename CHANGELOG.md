@@ -4,7 +4,11 @@ All notable changes to this project will be documented in this file.
 
 The format is inspired by Keep a Changelog and follows semantic intent.
 
-## [Unreleased]
+## [0.9.0] - 2026-11-26
+
+make-me-unicorn becomes a launch gate for AI coding agents: `mmu install` registers `mmu vibecheck` as a commit, stop and post-edit hook in Claude Code, Codex CLI, Cursor, Gemini CLI and git, and the rules were reworked for precision (0 wrong P0 findings across 20 open-source apps, `docs/benchmark.md`). The launch checklists are unchanged and documented in `docs/checklists.md`.
+
+First release on PyPI since 0.6.3: it also contains everything listed under 0.7.0, which was tagged on GitHub but not uploaded to PyPI.
 
 ### Breaking
 
@@ -84,6 +88,8 @@ Measured on 12 fixtures and 20 open-source apps (`docs/benchmark.md`): P0 findin
 
 ### Fixed
 
+- `mmu install` never registers an `mmu` that lives in a uvx/pipx run cache (it is deleted later) or one older than 0.9 (it has no `mmu hook` and exits 2, which a host reads as a block); it falls back to `uvx --from "make-me-unicorn>=0.9" mmu hook`. The uvx hook, git hook and plugin MCP commands require `make-me-unicorn>=0.9`, so a stale cached release is never used.
+- Configured `skip_paths` now also apply to the shallow discovery of dotenv files, build configs and `supabase/` directories.
 - `mmu init --force` no longer wipes progress: checklist templates are refreshed with checked items carried over, and edited docs and `.mmu/config.toml` are kept. Use the new `mmu init --reset` to overwrite everything.
 - `mmu check` / `mmu uncheck` accept only an exact blueprint name or alias. Partial names (`e`, `latest`) used to modify an unrelated blueprint; they now fail with a suggestion. `mmu show` still accepts an unambiguous partial name and reports ambiguous ones.
 - `mmu scan` no longer inflates the score: MMU's own scaffold (`docs/`, `prompts/`, `.mmu/`, `Unicorn.md`, `current_sprint.md`) and dependency/build directories are not evidence, markers that match almost any codebase (`G-`, `https://`, `ssl`, `logger`, `throttle`) are gone, and rules no longer tick items a marker cannot prove (forgot-password flow, CORS allowlist, webhook events). New `mmu scan --dry-run` lists what would be checked without writing.

@@ -62,18 +62,25 @@
 - Deferred: blueprint slug collision protection in `mmu_get_blueprint` (slugs are currently unique; revisit when blueprints are user-extensible)
 - Deferred: `--llm` synthesize path test coverage
 
-## v0.8 Distribution Push (in progress)
+## v0.8 Distribution Push (folded into 0.9)
 
-- ✅ Reusable GitHub Action (`action.yml`) — `uses: minjikim89/make-me-unicorn@main` runs `mmu vibecheck` in any workflow
-- ✅ Copy-paste distribution kit (`docs/launch/distribution-kit.md`) — HN, Reddit, GeekNews, X posts + awesome-list/registry snippets
-- ✅ Live badge endpoint — `mmu badge --format endpoint` emits shields.io endpoint JSON for a self-updating badge
-- Submit to MCP registries (official registry, mcp.so, smithery.ai, glama.ai) and awesome lists (awesome-mcp-servers, awesome-claude-skills)
-- GitHub Action follow-ups: score delta comment on PRs, Marketplace listing
-- Showcase gallery of projects using the badge
-- 60-second demo video (idea → validate → vibecheck → launch gates)
+- ✅ Reusable GitHub Action (`action.yml`) — runs `mmu vibecheck` in any workflow; SARIF output for code scanning added in 0.9
+- ✅ Copy-paste distribution kit (`docs/launch/distribution-kit.md`)
+- ✅ Live badge endpoint — `mmu badge --format endpoint`
+- Registry and awesome-list submissions moved to v0.9 follow-ups
 
-## v1.0 Founder OS
+## v0.9 Agent Launch Gate (shipped 2026-11-26)
 
-- Stable CLI package (beyond shell prototype)
-- Community playbooks (B2B SaaS, AI app, commerce SaaS)
-- Hardened release gates with CI templates
+- ✅ `mmu install` for Claude Code, Codex CLI, Cursor, Gemini CLI, git pre-commit, AGENTS.md and the Agent Skill; `.pre-commit-hooks.yaml`
+- ✅ `mmu hook`: commit/push gate, session-scoped "not done yet" gate, post-edit feedback; fail-open
+- ✅ Vibecheck engine v2: `path:line` locations, rule registry, `--format agent|json|sarif`, `--staged|--changed|--since`, suppressions with required reasons, baseline
+- ✅ Rule rework for precision and seven new rules (23 total); `docs/benchmark.md` with a 20-repo open-source sweep
+- ✅ MCP server on SDK v1 and v2 with `mmu_vibecheck`, `mmu_explain_rule`, `mmu_list_rules`
+- ✅ `make-me-unicorn` console script (`uvx make-me-unicorn ...`), `--version`, UTF-8 output
+- Next: live-session verification on Codex CLI, Cursor and Gemini CLI; MCP Registry and directory listings; IDOR/authorization rules need data-flow analysis and are out of scope for the heuristic engine
+
+## v1.0 Stable gate contract
+
+- Freeze the hook protocol, `mmu.vibecheck/v1` JSON schema and rule ids
+- Rules contributed with fixtures and expected findings, held to zero P0 false positives in the benchmark
+- Community playbooks for the launch checklists (B2B SaaS, AI app, commerce SaaS)
