@@ -69,10 +69,10 @@ class JsonTargetTests(unittest.TestCase):
         self.assertIn("already up to date", out)
         self.assertEqual(settings.read_text(encoding="utf-8"), first)
         # changing the command replaces our entries instead of duplicating them
-        _run(self.root, "--claude", command="uvx --from make-me-unicorn mmu hook")
+        _run(self.root, "--claude", command='uvx --from "make-me-unicorn>=0.9" mmu hook')
         data = self._load(".claude/settings.json")
         self.assertEqual(len(data["hooks"]["PreToolUse"]), 2)
-        self.assertIn("uvx --from make-me-unicorn mmu hook --host claude", data["hooks"]["PreToolUse"][1]["hooks"][0]["command"])
+        self.assertIn('uvx --from "make-me-unicorn>=0.9" mmu hook --host claude', data["hooks"]["PreToolUse"][1]["hooks"][0]["command"])
         # uninstall leaves exactly what was there before
         self.assertEqual(_run(self.root, "--claude", "--uninstall")[0], 0)
         self.assertEqual(self._load(".claude/settings.json"), existing)
@@ -146,7 +146,7 @@ class JsonTargetTests(unittest.TestCase):
         self.assertFalse((self.root / ".git" / "hooks" / "pre-commit").exists())
 
     def test_default_command_and_target_detection(self):
-        uvx = "uvx --from make-me-unicorn mmu hook"
+        uvx = 'uvx --from "make-me-unicorn>=0.9" mmu hook'
         with mock.patch.object(install.shutil, "which", return_value="/usr/local/bin/mmu"), \
                 mock.patch.object(install, "_supports_hook", return_value=True):
             self.assertEqual(install.default_command(), "mmu hook")

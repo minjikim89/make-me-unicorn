@@ -28,7 +28,7 @@ from typing import Any
 
 TARGETS = ("claude", "codex", "cursor", "gemini", "git", "agents-md", "skill")
 SKILL_REL = "skills/mmu-vibecheck/SKILL.md"
-UVX_COMMAND = "uvx --from make-me-unicorn mmu hook"
+UVX_COMMAND = 'uvx --from "make-me-unicorn>=0.9" mmu hook'
 _OURS = re.compile(r"\bhook --host (?:claude|codex|cursor|gemini) --event (?:pre-shell|stop|post-edit)\b")
 
 GIT_MARKER = "# mmu-vibecheck pre-commit hook"
@@ -43,7 +43,7 @@ fi
 if command -v mmu >/dev/null 2>&1; then
   mmu vibecheck --staged --format agent
 elif command -v uvx >/dev/null 2>&1; then
-  uvx --from make-me-unicorn mmu vibecheck --staged --format agent
+  uvx --from "make-me-unicorn>=0.9" mmu vibecheck --staged --format agent
 else
   echo "mmu vibecheck: mmu is not installed (pip install make-me-unicorn); commit allowed unchecked." >&2
   exit 0

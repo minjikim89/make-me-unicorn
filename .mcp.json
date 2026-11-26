@@ -4,7 +4,7 @@
       "command": "uvx",
       "args": [
         "--from",
-        "make-me-unicorn[mcp]",
+        "make-me-unicorn[mcp]>=0.9",
         "mmu",
         "serve-mcp"
       ]
