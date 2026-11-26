@@ -5,12 +5,12 @@ const SITE_URL =
   "https://minjikim89.github.io/make-me-unicorn";
 
 export const metadata: Metadata = {
-  title: "Make Me Unicorn — SaaS Launch Readiness Checklist",
+  title: "make-me-unicorn: a launch gate for AI coding agents",
   description:
-    "670+ checklist items across 15 categories. Catch what AI-generated code misses before it costs you users, money, or trust.",
+    "Blocks your AI coding agent's git commit when it ships an unverified webhook, a Supabase table without RLS, or a leaked key. Deterministic, offline, no LLM.",
   openGraph: {
-    title: "Make Me Unicorn",
-    description: "The open-source launch checklist for solo SaaS builders.",
+    title: "make-me-unicorn",
+    description: "A launch gate for AI coding agents.",
     type: "website",
     url: SITE_URL,
     siteName: "Make Me Unicorn",
@@ -19,8 +19,8 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title: "Make Me Unicorn",
-    description: "670+ SaaS launch checklist items. Stop building blind.",
+    title: "make-me-unicorn",
+    description: "Blocks your AI coding agent's git commit when it ships an unverified webhook, a Supabase table without RLS, or a leaked key. Deterministic, offline, no LLM.",
   },
 };
 
