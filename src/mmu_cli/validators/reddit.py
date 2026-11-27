@@ -33,9 +33,10 @@ def search_reddit(query: str, limit: int = 30) -> list[dict[str, Any]]:
         return []
     import requests  # type: ignore[import-untyped]
 
+    params: dict[str, str | int] = {"q": query, "limit": min(limit, 100), "sort": "relevance", "t": "year"}
     response = requests.get(
         REDDIT_SEARCH_URL,
-        params={"q": query, "limit": min(limit, 100), "sort": "relevance", "t": "year"},
+        params=params,
         headers={"User-Agent": USER_AGENT},
         timeout=15,
     )

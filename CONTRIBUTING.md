@@ -39,7 +39,7 @@ pip install -e ".[all]"
 ```bash
 mmu --help                # CLI works
 python -m unittest discover -s tests -p "test_*.py" -v   # all tests pass
-ruff check src tests      # no lint errors
+ruff check src tests scripts hooks      # no lint errors
 ```
 
 ## Development Workflow
@@ -52,8 +52,8 @@ ruff check src tests      # no lint errors
 ### Quality Checks (run before every PR)
 
 ```bash
-ruff check src tests                                    # lint
-mypy src/mmu_cli                                        # type check
+ruff check src tests scripts hooks                                    # lint
+mypy src/mmu_cli hooks                                        # type check
 python -m unittest discover -s tests -p "test_*.py" -v  # unit tests
 ```
 
@@ -110,4 +110,4 @@ Keep items actionable and verifiable. "Add error handling" is vague — "Return 
 - [ ] Is it still useful for experienced engineers?
 - [ ] Does it stay consistent with the existing operating model?
 - [ ] Do all tests pass? (`python -m unittest discover -s tests`)
-- [ ] Does lint pass? (`ruff check src tests`)
+- [ ] Does lint pass? (`ruff check src tests scripts hooks`)

@@ -1,0 +1,6 @@
+fastapi
+stripe
+slowapi
+sentry-sdk
+sqlalchemy
+pyyaml

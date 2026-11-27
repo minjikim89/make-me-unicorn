@@ -1,0 +1,13 @@
+# https://pre-commit.com: add to .pre-commit-config.yaml
+#   - repo: https://github.com/minjikim89/make-me-unicorn
+#     rev: v0.9.0
+#     hooks:
+#       - id: mmu-vibecheck
+- id: mmu-vibecheck
+  name: mmu vibecheck (launch gate)
+  description: Block the commit when staged files contain launch-blocking gaps (secrets, unverified webhooks, missing RLS, f-string SQL).
+  entry: mmu vibecheck --staged
+  language: python
+  pass_filenames: false
+  always_run: true
+  require_serial: true

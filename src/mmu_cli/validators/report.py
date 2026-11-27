@@ -52,12 +52,17 @@ def format_text(
     sentiment: dict[str, float],
     competitors: list[tuple[str, int]],
     llm_report: str | None = None,
+    errors: list[str] | None = None,
 ) -> str:
     lines: list[str] = []
     lines.append(f"MMU Validate — {idea}")
     lines.append("=" * 60)
     lines.append("")
     lines.append(f"Threads found: {len(hits)} (HN + Reddit)")
+    if errors:
+        lines.append("Partial results — a source could not be searched:")
+        for err in errors:
+            lines.append(f"  ! {err}")
     lines.append(
         f"Sentiment: {_verdict(sentiment.get('compound', 0.0), int(sentiment.get('count', 0)))}  "
         f"(compound={sentiment.get('compound', 0.0):+.2f}, n={int(sentiment.get('count', 0))})"
@@ -92,10 +97,16 @@ def format_markdown(
     sentiment: dict[str, float],
     competitors: list[tuple[str, int]],
     llm_report: str | None = None,
+    errors: list[str] | None = None,
 ) -> str:
     lines: list[str] = []
     lines.append(f"# Validation Report: {idea}")
     lines.append("")
+    if errors:
+        lines.append("> **Partial results** — a source could not be searched:")
+        for err in errors:
+            lines.append(f"> - {err}")
+        lines.append("")
     lines.append(
         f"- **Threads**: {len(hits)}  "
         f"- **Sentiment**: {_verdict(sentiment.get('compound', 0.0), int(sentiment.get('count', 0)))} "

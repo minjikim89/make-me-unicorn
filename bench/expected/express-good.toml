@@ -1,0 +1,42 @@
+# A correct Express API: allowlisted CORS, express-rate-limit on /auth, bound queries
+# (including an ORDER BY chosen from an allowlist), webhook verified in an imported
+# helper, password reset flow, JWT secret read with no fallback, env-guarded stack in the
+# error handler, RegExp.exec on request data, secrets only in a git-ignored .env.
+#
+# No [[expect]] entries: the scan must come back clean.
+
+[[must_not]]
+rule = "secrets"
+
+[[must_not]]
+rule = "env-not-ignored"
+
+[[must_not]]
+rule = "sql-fstring"
+
+[[must_not]]
+rule = "code-injection"
+
+[[must_not]]
+rule = "webhook-signature"
+
+[[must_not]]
+rule = "password-reset"
+
+[[must_not]]
+rule = "jwt-secret-default"
+
+[[must_not]]
+rule = "cors-wildcard"
+
+[[must_not]]
+rule = "rate-limiting"
+
+[[must_not]]
+rule = "stack-trace-leak"
+
+[[must_not]]
+rule = "admin-route-no-auth"
+
+[[must_not]]
+rule = "error-monitoring"

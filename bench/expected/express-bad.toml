@@ -1,0 +1,90 @@
+# Express API written the way a hurried agent writes it. Ground truth from reading the code.
+
+[[expect]]
+id = "C1"
+rule = "secrets"
+path = ".env.production"
+line = 1
+severity = "P0"
+
+[[expect]]
+id = "C1"
+rule = "env-not-ignored"
+path = ".env.production"
+severity = "P1"
+
+[[expect]]
+id = "C2"
+rule = "secrets"
+path = "config/prod.json"
+line = 1
+severity = "P0"
+
+[[expect]]
+id = "C3"
+rule = "secrets"
+path = "lib/gh.mjs"
+line = 1
+severity = "P0"
+
+[[expect]]
+id = "C4"
+rule = "secrets"
+path = "lib/supabase.js"
+line = 1
+severity = "P0"
+
+[[expect]]
+id = "C5,C6"
+rule = "sql-fstring"
+path = "server.js"
+line = 12
+severity = "P0"
+
+[[expect]]
+id = "C7"
+rule = "webhook-signature"
+path = "server.js"
+line = 15
+severity = "P0"
+
+[[expect]]
+id = "C8"
+rule = "code-injection"
+path = "server.js"
+line = 19
+severity = "P0"
+
+[[expect]]
+id = "C9"
+rule = "cors-wildcard"
+path = "server.js"
+line = 9
+severity = "P1"
+
+[[expect]]
+id = "C10"
+rule = "rate-limiting"
+path = "server.js"
+severity = "P1"
+
+[[expect]]
+id = "C11"
+rule = "error-monitoring"
+path = "server.js"
+severity = "P1"
+
+[[expect]]  # Supabase is used with no schema in the repo: RLS cannot be checked
+rule = "supabase-rls"
+path = "lib/supabase.js"
+severity = "P1"
+
+[[uncovered]]
+id = "C12"
+issue = "Passwords compared in plaintext inside the SQL query (no hashing)"
+path = "server.js"
+
+[[uncovered]]
+id = "C13"
+issue = "Login returns the whole user row, password column included"
+path = "server.js"

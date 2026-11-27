@@ -1,0 +1,15 @@
+# A repository whose .git/config runs commands on ordinary git use (GitSpawn class).
+
+[[expect]]
+id = "E1"
+rule = "git-config-exec"
+path = ".git/config"
+line = 4
+severity = "P0"
+
+[[expect]]
+id = "E2"
+rule = "git-config-exec"
+path = ".git/config"
+line = 6
+severity = "P0"

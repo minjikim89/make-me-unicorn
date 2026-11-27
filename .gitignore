@@ -1,5 +1,6 @@
-# Runtime state
-.mmu/
+# Runtime state (the repo's own scan config is tracked)
+.mmu/*
+!.mmu/config.toml
 
 # Python
 __pycache__/

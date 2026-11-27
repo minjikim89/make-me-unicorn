@@ -4,7 +4,105 @@ All notable changes to this project will be documented in this file.
 
 The format is inspired by Keep a Changelog and follows semantic intent.
 
-## [Unreleased]
+## [0.9.0] - 2026-11-26
+
+make-me-unicorn becomes a launch gate for AI coding agents: `mmu install` registers `mmu vibecheck` as a commit, stop and post-edit hook in Claude Code, Codex CLI, Cursor, Gemini CLI and git, and the rules were reworked for precision (0 wrong P0 findings across 20 open-source apps, `docs/benchmark.md`). The launch checklists are unchanged and documented in `docs/checklists.md`.
+
+First release on PyPI since 0.6.3: it also contains everything listed under 0.7.0, which was tagged on GitHub but not uploaded to PyPI.
+
+### Breaking
+
+- **`mmu vibecheck` exit codes.** `0` = no blocking findings, `1` = blocking (P0) findings, `2` = usage/runtime error (bad `--root`, git unavailable for a scoped scan, unknown rule id). Blocking findings previously exited `2`; scripts that test for "non-zero" keep working, scripts that test for `== 2` must change.
+- **`mmu vibecheck --json` output is now the `mmu.vibecheck/v1` document** (`docs/vibecheck-json-schema.md`): `schema`, `tool`, `root`, `scope`, `summary`, `findings`. The `messages` text blob, `failures` and `exit_code` keys are gone; `ok`/`skip` findings are listed only with `--all`. Findings keep `check`, `hint` and `files` as deprecated aliases next to `rule_id`, `fix` and `locations`.
+- The `webhook-safety` skip finding is replaced by `webhook-signature` and `webhook-idempotency` skips, so every finding id is a registered rule.
+- `mmu_vibecheck` MCP tool returns the same v1 document (was `{findings, failures, exit_code}`).
+- **`mmu` with no subcommand now runs `mmu vibecheck`** on the current directory (exit 1 on P0 findings) instead of printing the dashboard. `mmu status` still shows the dashboard. This is what makes `uvx make-me-unicorn` a one-command gate.
+- **The MCP extra is now `mcp>=1.27,<3`** and `mmu_vibecheck` returns the v1 document as MCP structured content with a published output schema. Clients that parsed the text content still get the JSON document as text by default.
+- `hooks/vibecheck_gate.py` is now a thin wrapper around `mmu hook`; its private helpers (`_should_gate`, `_run_vibecheck`, …) moved to `mmu_cli.hooks`.
+
+### Changed: `mmu vibecheck` rule accuracy
+
+Measured on 12 fixtures and 20 open-source apps (`docs/benchmark.md`): P0 findings judged wrong on review went from 11 of 16 to 0 of 4 on the real-world sweep; fixtures score 100% P0 precision and recall.
+
+- **Severity policy.** P0 = high confidence and launch-blocking. Findings about something being absent are P1. `password-reset` and `webhook-idempotency` are now P1. A `.env` that git does not ignore is P0 only when it holds a known key signature; other credential-named values are the new P1 `env-not-ignored`; placeholder values are not reported. `pickle.load(s)` is P0 when the input visibly comes from outside the process and P1 otherwise (unsafe YAML loaders stay P0).
+- **Comments are not evidence.** A `// TODO: add sentry`, a "dedupe" comment or a commented-out `constructEvent` no longer satisfies a check; docstrings no longer trigger `debug-mode`.
+- `password-reset` (P0 → P1): warns only when the app verifies passwords itself (`signInWithPassword`, bcrypt/argon2 verify, credentials providers, ...) and no forgot/reset flow exists anywhere in the project. No longer triggered by file names (`AuthorBio.tsx`), passwordless or OAuth-only apps, or projects on a managed auth product (Clerk, Auth0, Stytch, ...). Recognises `password_reset`, `password-reset`, `reset_password`.
+- `webhook-signature` / `webhook-idempotency`: judged per handler, with evidence taken from the handler and the first-party helpers it imports. Handlers are found by route and content (`event.type`, provider event names), not only by file name; UI components and webhook-settings endpoints are not handlers. Recognises FastAPI `Header()`, `stripe.Webhook.construct_event`, `x-hub-signature-256`, Svix, `verifyWebhook`, HMAC comparisons; idempotency recognises `on_conflict_do_nothing` / `onConflictDoNothing` and warns only for effects that are wrong when repeated.
+- `sql-fstring`: flags only strings shaped like a SQL statement with a value interpolated, reaching an execute-like call or written in upper-case SQL. `f"Update available: {v}"` is not SQL. Also covers `%` formatting, `.format()`, concatenation, and JS/TS template literals and concatenation passed to `query` / `execute` / `raw` / `$queryRawUnsafe`. Constant identifiers, generated placeholders and tagged templates are not flagged.
+- `secrets`: also scans `.json`, `.yaml`, `.toml`, `.ini`, `.properties`, `.tf`, `.mjs`, `.cjs`, `Dockerfile*` and dotenv variants (`.env.production`, `prod.env`) that git does not ignore; skips lockfiles, templates and documentation placeholders (`sk_live_xxxx...`). A Supabase `service_role` JWT hardcoded in any source file is P0. Adds Stripe restricted/webhook, SendGrid and GitLab key signatures.
+- `client-bundle-secrets`: server-only provider keys behind a public prefix (`NEXT_PUBLIC_OPENAI_API_KEY`).
+- `rate-limiting`: `lodash.throttle`, the word "upstash" and `express` inside "expression" no longer count; an installed but unused limiter still warns; Cloudflare rate limit bindings are recognised.
+- `cors-wildcard`: `cors()` with no options (Express, Hono, Fastify); the message says when a wildcard or reflected origin is combined with credentials.
+- `debug-mode`: `app.run(debug=True)`, `FastAPI(debug=True)`, and dev servers (`--reload`, `npm run dev`) in a production Dockerfile `CMD`.
+- `unsafe-deserialization`: `yaml.load(f, yaml.SafeLoader)` (positional loader) is safe.
+- `error-monitoring` is skipped for projects without a server framework.
+- `git-config-exec`: a `core.hooksPath` inside the repository or its git dir is not reported.
+- **Fix text follows the framework** of the flagged file (Next.js, Express, Hono, FastAPI, Flask, Django, Supabase) instead of listing every variant. `--list-rules --format json` exposes `fix_variants`.
+
+### Changed: what gets scanned
+
+- **Breaking for projects that relied on it:** root `scripts/`, `tests/`, `docs/`, `examples/`, `cli/` and `src/mmu_cli` are no longer skipped. Those were excludes for this repository and hid user code. Defaults now skip only vendor and build directories at any depth (adds `vendor`, `target`, `out`, `.vercel`, `.output`, `.wrangler`, ...). Project-specific excludes go in `.mmu/config.toml` (`[vibecheck] skip_paths` or `[doctor] skip_paths`); this repository ships its own.
+- Results no longer depend on directory order or project size: files are processed in path order and the 400-file caps are gone (files over 1 MB and minified bundles are skipped; a 20,000-file cut-off is reported in `scope.truncated`).
+- `.gitignore` is honoured the way git does it (`git check-ignore` inside a work tree, a pattern matcher elsewhere): `/.env`, `.env*`, `*.env`, nested ignore files and `!` negations.
+- Repo-level findings (`git-config-exec`, `env-not-ignored`, anything in a dotenv file) stay in the result under `--changed`, `--staged` and `--since`.
+
+### Added
+
+- **New rules.** `code-injection` (P0: `eval`, `new Function`, `child_process.exec`, `os.system`, `subprocess(..., shell=True)` with a request value in the same expression), `jwt-secret-default` (P0: signing secret assigned a literal or given a literal fallback, e.g. `os.getenv("JWT_SECRET", "dev")`, `process.env.SESSION_SECRET || "changeme"`), `env-not-ignored` (P1), `llm-route-unthrottled` (P1: a route calling a paid LLM SDK with no auth and no rate limit in the file or in middleware), `admin-route-no-auth` (P1), `dangerous-html` (P1: `dangerouslySetInnerHTML`, `v-html`, `innerHTML` with a non-literal value and no sanitizer), `stack-trace-leak` (P1: `traceback.format_exc()` / `err.stack` in an HTTP response without an environment guard).
+- **Baseline for existing projects.** `mmu vibecheck --write-baseline [FILE]` records current findings (default `.mmu/vibecheck-baseline.json`); `--baseline [FILE]` reports them with status `baselined` (non-blocking, counted in `summary.baselined`) so only new findings block.
+- **Benchmark.** `bench/` (fixtures with ground truth, no credentials committed), `scripts/bench.py`, `docs/benchmark.md`, and a test that fails on any P0 false positive or a drop in recall.
+- **Vibecheck engine v2: an output contract built for coding agents.**
+  - Every finding carries `locations` with `path`, `line` and a `snippet` (secret values redacted). Absence findings (no password reset, unverified webhook, no rate limiting, no error monitoring) anchor to the file that creates the obligation.
+  - Rule registry: stable `rule_id`, title, summary, concrete `fix` instructions, `ref`, tags, confidence. `mmu vibecheck --list-rules` and `mmu vibecheck --explain <rule-id>`.
+  - Suppressions: `mmu-ignore[<rule-id>]: <reason>` on the flagged line or alone on the line above (a marker without a reason is not applied), and `[vibecheck] ignore = ["rule-id", "path/glob/**:rule-id"]` in `.mmu/config.toml`. Suppressed findings are reported with status `suppressed` and counted in `summary.suppressed`.
+  - Scoping for agent loops: `--changed` (tracked changes vs HEAD + untracked), `--staged`, `--since <ref>`, `--files-from <file|->` (an explicit list of root-relative paths). Without git or outside a repository the git-based ones exit `2` instead of silently scanning everything.
+  - `--format text|json|sarif|agent`, `--output <file>`, `--fail-on P0|P1|never`, `--all`. `agent` is compact plain text for LLM context; `sarif` is SARIF 2.1.0 for code-scanning upload. `mmu --json vibecheck` (flag before the subcommand) now works. With `--format json`, errors are a JSON object `{"schema", "error": {"code", "message"}}` on stdout.
+  - GitHub Action inputs `format`, `sarif-file` and `fail-on`.
+- **Four new `mmu vibecheck` rules grounded in field data.** Reeve's August 2026 scan of 30,998 live vibe-coded apps found 57% of Supabase-backed apps with unauthenticated table reads, 1 in 23 shipping a secret in the public bundle, and 13% publishing source maps — so: `client-bundle-secrets` (P0: `service_role` JWTs, known key signatures, or credential-named values behind `NEXT_PUBLIC_`/`VITE_`/`REACT_APP_`… prefixes, in `.env*` files and client code), `supabase-rls` (P0: tables created under `supabase/` without `ENABLE ROW LEVEL SECURITY`; P1 warn when Supabase is used but no SQL is in the repo), `sourcemaps-exposed` (P1: Vite/Next/webpack production source-map flags), and `git-config-exec` (P0: git config keys such as `core.fsmonitor` that run a command when an agent opens the repo — the GitSpawn class, Sep 2026; follows `gitdir:` pointers and `include.path`, ignores husky/git-lfs/`ssh` settings).
+- **`ref` on findings** — every new rule prints a `why:` link to the incident report or dataset that motivated it. JSON output carries the same field.
+- **Test/fixture downgrade** — a P0 whose offending files all live in test directories (`tests/`, `__tests__/`, `fixtures/`, …) or test-suffixed code files becomes a P1 warning instead of failing the build. Deliberately narrow: `examples/`, `mocks/`, Next.js `app/test/route.ts`, and dotfiles are not treated as tests.
+- **Scanner prunes dependency/build directories at any depth** (`node_modules`, `.next`, `venv`, `site-packages`, …) and now includes `.mjs`/`.mts`/`.cjs`; `.env*`, build configs and `supabase/` are discovered up to three levels deep for monorepos.
+- **Claude Code plugin now gates commits.** A PreToolUse hook (`hooks/vibecheck_gate.py`) runs `mmu vibecheck` before any `git commit` / `git push` the agent issues (including `git -C <path>`, env-prefixed, chained and subshell forms) and blocks on P0 findings, printing the finding, hint, and `why:` link to the agent. Uses the plugin's bundled source; if the scanner cannot run, the commit is allowed and a visible warning is shown instead of a silent pass. All subprocesses share a 45s deadline under the hook's 60s timeout. Bypass one command with a `MMU_HOOK_DISABLE=1` prefix, or set it in the environment to disable for the session; `MMU_HOOK_ON_PUSH_ONLY=1` gates only pushes.
+- **`mmu_vibecheck` MCP tool** — the scanner is callable from any MCP client (findings, failure count, exit code). Rejects a `project_root` that is not a directory instead of returning a clean verdict for a path it never scanned.
+
+- **`mmu hook`: one hook entry point for Claude Code, Codex CLI, Cursor, and Gemini CLI.** It reads the host's hook JSON on stdin, detects the host and event (or takes `--host` / `--event`), and answers in that host's format.
+  - *Commit and push gate*: gates `git commit` / `git push` in command position, parsed the way a POSIX shell splits the command, so an `echo`, a comment, a heredoc body or a commit message that mentions them decides nothing, and `cd`, `pushd`, `git -C`, `--git-dir`, `--work-tree`, `bash -c` and `eval` are followed. A plain commit scans `--staged`; `-a`, pathspecs and `git add … && git commit …` scan exactly the files the commit records. A push scans the files touched by commits no remote-tracking ref has yet, so the first push of a branch is not blocked by findings already on the remote. The block reason is the scanner's `--format agent` text: rule id, `path:line`, fix, and how to silence a false positive with a reason.
+  - *Exit code 0, always*: blocks are JSON on stdout on every host (`permissionDecision: "deny"` on Claude Code and Codex), because a host reads exit 2 as a block. The command `mmu install` writes ends in `|| true` on macOS and Linux, so an offline `uvx` or an older `mmu` lets the action through instead of blocking every shell command.
+  - *Stop gate*: when the agent is about to finish with P0 findings, it is sent back with the findings. On Claude Code and Codex only files the agent edited in this session count (the post-edit hook records them in the git dir), so uncommitted work it never touched does not hold it back; Cursor and Gemini count every uncommitted change. Bounded by the host's own loop flag and by `MMU_STOP_MAX` (default 3 attempts at the same findings per session; a new finding starts the count again, and a clean scan clears the session state). The reason tells the agent to list the P0s and stop when the user asked to defer hardening. `MMU_STOP_DISABLE=1` turns it off.
+  - *Post-edit feedback* (Claude Code, Codex): after an edit to a code or config file, P0 findings located in that file are returned as context, and the path is recorded for the stop gate. Never blocks.
+  - Fails open: if the scanner errors or runs out of time, the action is allowed and one line says so.
+- **`mmu install`**: `--claude` (`.claude/settings.json`), `--codex` (`.codex/hooks.json`), `--cursor` (`.cursor/hooks.json`), `--gemini` (`.gemini/settings.json`), `--git` (pre-commit hook that keeps an existing hook as `pre-commit.pre-mmu` and runs it first), `--agents-md` (a marked block in `AGENTS.md`), `--skill` (`.agents/skills/mmu-vibecheck/`), `--all`, `--dry-run`, `--uninstall`, `--command`. Existing JSON is merged, repeated runs change nothing, and invalid JSON is left untouched. The hook command is `mmu hook` when an `mmu` 0.9+ that will stay installed is on PATH, otherwise `uvx --from "make-me-unicorn>=0.9" mmu hook`. A user handler that wraps `mmu hook` is left alone, and a `hooks` value that is not an object is reported, not replaced. `--git` does not touch a repository whose hooks are managed through `core.hooksPath` (husky, lefthook, ...) and prints the line to add to that manager instead.
+- **`.pre-commit-hooks.yaml`** for the pre-commit framework (hook id `mmu-vibecheck`).
+- **`make-me-unicorn` console script**, so `uvx make-me-unicorn vibecheck` works without installing anything. `mmu --version`.
+- **`mmu-vibecheck` Agent Skill** (`skills/mmu-vibecheck/`, mirrored to `.agents/skills/` for Codex and bundled in the wheel): triggers after writing webhook, auth, payment, Supabase/RLS, CORS, rate-limit or env-var code and before a commit, PR, deploy, or "done".
+- **Claude Code plugin**: Stop and PostToolUse hooks next to the commit gate, a `/vibecheck` command, and a bundled MCP server entry (`.mcp.json`, started with `uvx`, so it needs `uv`).
+- **MCP server works with MCP Python SDK v2 and v1** (#33). New tools `mmu_explain_rule` and `mmu_list_rules`; `mmu_vibecheck` takes `format="json"|"agent"`. Every tool has a title and read-only annotations (`mmu_validate_idea` is marked open-world), the server sends instructions that tell the agent when to call the gate, and `serverInfo.version` is the package version.
+
+### Changed
+
+- `mmu_cli.vibecheck` is now a package (`engine`, `output`, `command`, `rules/`); existing imports (`check_*`, `Finding`, `run_vibecheck`, `format_findings`, `downgrade_test_only_findings`) are re-exported unchanged.
+- The commit-gate hook reads the v1 document: the block reason lists `rule-id path:line` and the fix, and a scanner error (exit 2) allows the commit with a visible warning.
+- Vibecheck text output shows `path:line` and the fix for each finding.
+- MCP tool descriptions rewritten to state purpose, when to use, arguments and return shape (following the TDQS tool-definition guidance); `mmu_vibecheck` and `mmu_validate_idea` are listed first, and `mmu_validate_idea` now documents its real `status`/`top_threads` shape.
+- Plugin manifest category `productivity` → `security`; description leads with the commit gate. FAQ, Product Hunt kit, `server.json`, and the four translated READMEs updated to match.
+- CI lint and type-check now cover `hooks/`.
+
+### Fixed
+
+- `mmu install` never registers an `mmu` that lives in a uvx/pipx run cache (it is deleted later) or one older than 0.9 (it has no `mmu hook` and exits 2, which a host reads as a block); it falls back to `uvx --from "make-me-unicorn>=0.9" mmu hook`. The uvx hook, git hook and plugin MCP commands require `make-me-unicorn>=0.9`, so a stale cached release is never used.
+- Configured `skip_paths` now also apply to the shallow discovery of dotenv files, build configs and `supabase/` directories.
+- `mmu init --force` no longer wipes progress: checklist templates are refreshed with checked items carried over, and edited docs and `.mmu/config.toml` are kept. Use the new `mmu init --reset` to overwrite everything.
+- `mmu check` / `mmu uncheck` accept only an exact blueprint name or alias. Partial names (`e`, `latest`) used to modify an unrelated blueprint; they now fail with a suggestion. `mmu show` still accepts an unambiguous partial name and reports ambiguous ones.
+- `mmu scan` no longer inflates the score: MMU's own scaffold (`docs/`, `prompts/`, `.mmu/`, `Unicorn.md`, `current_sprint.md`) and dependency/build directories are not evidence, markers that match almost any codebase (`G-`, `https://`, `ssl`, `logger`, `throttle`) are gone, and rules no longer tick items a marker cannot prove (forgot-password flow, CORS allowlist, webhook events). New `mmu scan --dry-run` lists what would be checked without writing.
+- Badges for the 55–75% `young` stage render purple instead of gray.
+- `mmu next` in a directory without blueprints says the project is not initialized instead of "you're done".
+- `mmu validate` without the `[validate]` extra prints the install command instead of "Check your internet connection"; when one source fails, the report, markdown and JSON output (`errors`) say the results are partial.
+- `mmu snapshot` exits `2` with an explanation when the snapshot script is absent (it is not shipped in the PyPI package).
+- Default LLM model is `claude-sonnet-5-5` (override with `MMU_MODEL`).
+- Global `--json` and `--root` work before or after any subcommand (`mmu --json --root ../app doctor`).
+- CLI output is forced to UTF-8, fixing a `UnicodeEncodeError` on Windows consoles using cp1252.
+- `server.json` uses the 2025-12-11 registry schema; the `mcp` extra is passed to `uvx` with `--with`. The README ownership marker is now an HTML comment.
+- The `mmu-startup` skill description is limited to planning so it does not compete with `mmu-vibecheck`.
 
 ## [0.7.0] - 2026-06-10
 

@@ -1,7 +1,7 @@
 {
   "name": "make-me-unicorn",
-  "version": "0.7.0",
-  "description": "Open-source launch checklist and operating system for solo SaaS builders. Provides startup blueprints, validation prompts, and launch templates to Claude.",
+  "version": "0.9.0",
+  "description": "Launch gate for AI coding agents. Deterministic `mmu vibecheck` (no LLM, no account) blocks `git commit`/`git push` and a premature \"done\" while launch-blocking gaps remain: leaked secrets, unverified webhooks, Supabase tables without RLS, f-string SQL. Also ships the vibecheck skill, a /vibecheck command, and an MCP server.",
   "author": {
     "name": "Make Me Unicorn Contributors",
     "url": "https://github.com/minjikim89/make-me-unicorn"
@@ -9,5 +9,22 @@
   "homepage": "https://minjikim89.github.io/make-me-unicorn/",
   "repository": "https://github.com/minjikim89/make-me-unicorn",
   "license": "MIT",
-  "keywords": ["saas", "checklist", "launch", "founder", "startup", "blueprints"]
+  "keywords": [
+    "security",
+    "vibecheck",
+    "launch-gate",
+    "hooks",
+    "pre-commit",
+    "secrets",
+    "supabase",
+    "stripe",
+    "saas",
+    "agents"
+  ],
+  "network": {
+    "hosts": [
+      "pypi.org",
+      "files.pythonhosted.org"
+    ]
+  }
 }

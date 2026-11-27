@@ -1,9 +1,10 @@
 name: "MMU Vibe Check"
 description: >-
-  Scan for the launch-blocking gaps AI-generated code misses most: hardcoded
-  secrets, missing webhook signature verification, no password reset flow,
-  f-string SQL, wildcard CORS, missing rate limits, DEBUG=True, and more.
-  P0 findings fail the build.
+  Deterministic launch gate for AI-written code: unverified webhooks, Supabase
+  tables without RLS, secrets in the browser bundle or in git, interpolated SQL,
+  request data reaching eval/exec, hardcoded signing secrets, unsafe
+  deserialization, plus warnings such as unthrottled LLM routes and admin routes
+  without auth. P0 findings fail the build; optional SARIF for code scanning.
 author: "minjikim89"
 branding:
   icon: "shield"
@@ -16,7 +17,7 @@ inputs:
     default: "."
   version:
     description: >-
-      Version spec for make-me-unicorn, e.g. "==0.7.0". Empty installs the
+      Version spec for make-me-unicorn, e.g. "==0.9.0". Empty installs the
       latest release from PyPI.
     required: false
     default: ""
@@ -24,6 +25,21 @@ inputs:
     description: "Python version used to run the scan."
     required: false
     default: "3.12"
+  format:
+    description: "Format of the report printed to the job log: text, agent, json, or sarif."
+    required: false
+    default: "text"
+  sarif-file:
+    description: >-
+      If set, also write a SARIF 2.1.0 report to this path (relative to the
+      workspace) so a later step can upload it with
+      github/codeql-action/upload-sarif. Written even when the build fails.
+    required: false
+    default: ""
+  fail-on:
+    description: "Severity that fails the build: P0 (default), P1, or never."
+    required: false
+    default: "P0"
 
 runs:
   using: "composite"
@@ -37,6 +53,19 @@ runs:
       shell: bash
       run: python -m pip install --quiet "make-me-unicorn${{ inputs.version }}"
 
+    - name: Write SARIF report
+      if: ${{ inputs.sarif-file != '' }}
+      shell: bash
+      env:
+        MMU_ROOT: ${{ inputs.root }}
+        MMU_SARIF_FILE: ${{ inputs.sarif-file }}
+      run: mmu vibecheck --root "$MMU_ROOT" --format sarif --output "$MMU_SARIF_FILE" --fail-on never
+
+    # Exit codes: 0 = no blocking findings, 1 = blocking findings, 2 = scanner error.
     - name: Run vibe check
       shell: bash
-      run: mmu vibecheck --root "${{ inputs.root }}"
+      env:
+        MMU_ROOT: ${{ inputs.root }}
+        MMU_FORMAT: ${{ inputs.format }}
+        MMU_FAIL_ON: ${{ inputs.fail-on }}
+      run: mmu vibecheck --root "$MMU_ROOT" --format "$MMU_FORMAT" --fail-on "$MMU_FAIL_ON"

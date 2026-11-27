@@ -1,0 +1,101 @@
+# FastAPI + SQLAlchemy + OpenAI API with 11 planted issues (B1-B11) and 5 pieces of correct
+# code that must stay unflagged (B-OK1..5).
+
+[[expect]]
+id = "B1"
+rule = "sql-fstring"
+path = "app/routers/notes.py"
+line = 39
+severity = "P0"
+
+[[expect]]
+id = "B2"
+rule = "cors-wildcard"
+path = "app/main.py"
+line = 13
+severity = "P1"
+
+[[expect]]
+id = "B3"
+rule = "unsafe-deserialization"
+path = "app/routers/export.py"
+line = 23
+severity = "P0"
+
+[[expect]]
+id = "B4"
+rule = "debug-mode"
+path = "app/config.py"
+line = 13
+severity = "P1"
+
+[[expect]]
+id = "B5"
+rule = "secrets"
+path = "app/routers/ai.py"
+line = 12
+severity = "P0"
+
+[[expect]]
+id = "B6"
+rule = "jwt-secret-default"
+path = "app/config.py"
+line = 8
+severity = "P0"
+
+[[expect]]
+id = "B7"
+rule = "password-reset"
+path = "app/routers/auth.py"
+severity = "P1"
+
+[[expect]]  # second anchor of the same finding: where the password is verified
+id = "B7"
+rule = "password-reset"
+path = "app/security.py"
+severity = "P1"
+
+[[expect]]
+id = "B9"
+rule = "stack-trace-leak"
+path = "app/main.py"
+line = 31
+severity = "P1"
+
+[[expect]]  # project-level: slowapi is installed but never applied
+id = "B10"
+rule = "rate-limiting"
+path = "app/main.py"
+severity = "P1"
+
+[[expect]]
+id = "B11"
+rule = "debug-mode"
+path = "Dockerfile"
+line = 6
+severity = "P1"
+
+[[expect]]  # not planted on purpose, but true: no error tracker
+rule = "error-monitoring"
+path = "app/main.py"
+severity = "P1"
+
+[[uncovered]]
+id = "B8"
+issue = "IDOR: GET /notes/{id} returns a note without checking ownership"
+path = "app/routers/notes.py"
+
+[[must_not]]  # B-OK1: parametrized text() query (line 31)
+rule = "code-injection"
+path = "app/routers/notes.py"
+
+[[must_not]]  # B-OK2: bcrypt hashing is not a hardcoded secret
+rule = "jwt-secret-default"
+path = "app/security.py"
+
+[[must_not]]  # B-OK3: .env is ignored, .env.example has no values
+rule = "env-not-ignored"
+
+[[must_not]]  # B-OK4: the LLM route requires a signed-in user
+rule = "llm-route-unthrottled"
+path = "app/routers/ai.py"

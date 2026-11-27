@@ -1,454 +1,221 @@
 <div align="center">
 
-# Make Me Unicorn
+# make-me-unicorn
 
-**모르는 영역까지 챙기고, 확신 있게 출시하세요.**
+**AI 코딩 에이전트를 위한 출시 게이트입니다.**
 
-솔로 빌더를 위한 오픈소스 출시 체크리스트이자 운영 시스템.
+서명을 검증하지 않고 이벤트를 신뢰하는 webhook, RLS가 없는 Supabase 테이블,<br>
+브라우저 번들에 들어간 `service_role` 키는 에이전트가 commit할 수 없습니다. 결정적이고, 오프라인으로 동작하며, 계정과 LLM이 필요 없고, 약 0.1초면 끝납니다.
 
+[![PyPI](https://img.shields.io/pypi/v/make-me-unicorn?color=blue)](https://pypi.org/project/make-me-unicorn/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-black.svg)](./LICENSE)
-[![PyPI version](https://img.shields.io/pypi/v/make-me-unicorn?color=blue)](https://pypi.org/project/make-me-unicorn/)
-[![PyPI downloads](https://img.shields.io/pypi/dm/make-me-unicorn?color=blue)](https://pypi.org/project/make-me-unicorn/)
-[![CLI](https://img.shields.io/badge/cli-mmu-f59e0b.svg)](./SPEC.md)
-[![Guardrails CI](https://img.shields.io/badge/ci-doctor%20%2B%20gates-22c55e.svg)](./.github/workflows/mmu-guardrails.yml)
-[![Contributions Welcome](https://img.shields.io/badge/contributions-welcome-16a34a.svg)](./CONTRIBUTING.md)
+[![CI](https://github.com/minjikim89/make-me-unicorn/actions/workflows/mmu-guardrails.yml/badge.svg)](./.github/workflows/mmu-guardrails.yml)
+[![Benchmark](https://img.shields.io/badge/P0%20false%20positives-0%20in%2020%20OSS%20repos-22c55e)](./docs/benchmark.md)
 
-[🇺🇸 English](./README.md) · **🇰🇷 한국어** · [🇯🇵 日本語](./README.ja.md) · [🇨🇳 简体中文](./README.zh-CN.md) · [🇪🇸 Español](./README.es.md)
-
-<img src="./assets/brand/unicorn-hero.png" alt="Make Me Unicorn mascot" width="960" />
-
-<img src="./assets/demo.gif" alt="MMU CLI 데모 — init, scan, vibecheck, dashboard" width="720" />
+[English](./README.md) · **한국어** · [日本語](./README.ja.md) · [简体中文](./README.zh-CN.md) · [Español](./README.es.md)
 
 </div>
 
-## 문제
+<!-- mcp-name: io.github.minjikim89/make-me-unicorn -->
 
-SaaS를 만들고 있습니다. AI 덕분에 코딩 속도는 빨라졌습니다. 그런데:
-
-> "잠깐, 비밀번호 재설정 플로우 넣었나?"
->
-> "결제 Webhook... 멱등성 처리했나?"
->
-> "개인정보처리방침은? 환불 정책은? OG 메타 태그는?"
->
-> "지난주에 인증 제공자 뭘로 하기로 했더라? 이유가 뭐였지?"
-
-**코딩을 못 하는 게 아닙니다. 중요한 걸 놓치고 있는 겁니다.**
-
-혼자 만드는 사람이라면 누구나 같은 벽에 부딪힙니다:
-
-| 놓치는 것 | 치르는 대가 |
-|-----------|------------|
-| 로그인 만들면서 비밀번호 재설정을 빠뜨림 | 출시 첫날부터 사용자가 계정에 못 들어감 |
-| Webhook 서명 검증을 건너뜀 | 공격자가 결제 이벤트를 재전송함 |
-| OG 태그 없이 출시 | 공유한 링크가 전부 깨져 보임 |
-| AI 세션 간 컨텍스트가 유실됨 | 매번 프로젝트를 처음부터 다시 설명함 |
-| 환불 정책이 없음 | 첫 분쟁 = Stripe 계정 동결 |
-
-MMU는 이런 문제를 **사용자, 매출, 신뢰를 잃기 전에** 잡아냅니다.
-
-## 작동 방식
-
+```bash
+uvx make-me-unicorn install --claude    # or --codex, --cursor, --gemini, --git, --all
 ```
-mmu init                    # 1. 15개 카테고리, 670개 이상의 체크리스트 항목 생성
-mmu scan                    # 2. 기술 스택 자동 감지 — 이미 구현된 항목 자동 체크
-mmu                         # 3. 완료된 것과 빠진 것을 한눈에 확인
-mmu status --why            # 4. 점수 산출 근거 확인 — 반영된 항목, 제외된 항목
-mmu next                    # 5. 우선순위 기반 다음 액션 추천
-```
+
+설정은 이것으로 끝입니다. 이제부터 에이전트가 `git commit`을 실행하면 hook이 staged 상태의 내용을 스캔합니다. P0 finding이 나오면 명령을 거부하고, 에이전트가 바로 적용할 수 있는 수정 방법을 넘겨줍니다. 아래는 Next.js + Supabase + Stripe 프로젝트의 첫 commit에서 나온 실제 출력입니다(줄은 줄였고, P1 경고 5건은 생략):
 
 ```text
-  MAKE ME UNICORN - STATUS DASHBOARD
-
-          .--*--.
-         / *v*  \
-        |       |
-         \ ___ /
-          '---'
-
-  Stage: HATCHING    ######..............  22%  (124/551)
-
-  LAUNCH GATES  (16/26)
-    M0 Problem Fit         ################   4/4   PASS
-    M1 Build Fit           ################   5/5   PASS
-    M2 Revenue Fit         ############....   3/4   OPEN
-    M3 Trust Fit           ################   4/4   PASS
-    M4 Growth Fit          ########........   2/4   OPEN
-    M5 Scale Fit           ####............   1/5   OPEN
-
-  BLUEPRINTS  (124/551)
-    Frontend           ##########......  18/35  51%
-    Backend            ############....  24/46  52%
-    Auth               ##########......  16/42  38%
-    Billing            ########........  11/36  30%
-    ...11 more
+mmu vibecheck: 4 blocking (P0), 5 warning(s) (P1), 0 suppressed | scope: staged (22 file(s))
+P0 secrets .env:3 (+1: components/AdminPanel.tsx:8)
+  what: possible hardcoded secrets in 2 file(s): Supabase service_role JWT; ... (the service_role
+        key is in a "use client" file: it bypasses RLS for every visitor)
+P0 client-bundle-secrets .env:6 (+1: app/api/ai/summarize/route.ts:4)
+  what: secret shipped to the browser bundle via public env prefix in 2 file(s): NEXT_PUBLIC_OPENAI_API_KEY ...
+P0 webhook-signature app/api/webhooks/stripe-legacy/route.ts:5
+  what: 1 of 2 webhook handler(s) trust the event without verifying its signature
+  fix: Verify the signature on the raw body before trusting the event, and return 400 when it fails:
+       event = stripe.webhooks.constructEvent(await req.text(), req.headers.get("stripe-signature")!,
+       process.env.STRIPE_WEBHOOK_SECRET!) Do not call req.json() before this: the check needs the
+       exact bytes the provider signed.
+  silence (only if false positive): // mmu-ignore[webhook-signature]: <reason>
+P0 supabase-rls supabase/migrations/0001_init.sql:1
+  what: 1 table(s) created without ENABLE ROW LEVEL SECURITY: public.invoices
+  fix: Add a migration for each listed table: `alter table <schema>.<table> enable row level security;`
+       plus at least one policy, e.g. `create policy "owner can read" on <table> for select using
+       (auth.uid() = user_id);`. ...
+Fix every P0 above, then re-run `mmu vibecheck --format agent --staged` until it reports 0 blocking.
 ```
 
-유니콘은 빌드 진행에 따라 성장합니다: Egg → Hatching → Foal → Young → Unicorn → Legendary.
+에이전트는 수정하고, 다시 실행한 뒤 commit합니다. 코드가 이미 올바르면 게이트는 아무것도 출력하지 않습니다. 실제 Claude Code 세션 테스트에서 에이전트는 서명을 검증하는 Stripe webhook을 한 번에 작성했고, commit은 그대로 통과했습니다.
 
-## 내 프로젝트에 맞게 적용하기
+## 부재 검사가 필요한 이유
 
-모든 프로젝트에 결제가 필요한 건 아닙니다. 모든 제품에 다국어가 필요한 것도 아닙니다. MMU는 적응합니다:
+Secret 스캐너와 SAST는 이미 존재하는 나쁜 코드를 찾습니다. 에이전트가 작성한 코드는 존재하지 않는 코드 때문에 문제가 되는 경우가 더 많습니다. 아무도 작성하지 않은 서명 검증, 추가된 적 없는 RLS 정책, 유료 LLM route 앞에 빠져 있는 rate limit이 그 예입니다.
+
+- Tenzai는 코딩 에이전트 5종에 같은 앱 3개를 만들게 했습니다(총 15개 앱). 악용 가능한 SQLi나 XSS가 있는 앱은 하나도 없었지만, 보안 통제에 대해서는 "in almost all cases, they didn't even try"(거의 모든 경우 시도조차 하지 않았다)였습니다 ([SecurityWeek, 2026년 1월](https://www.securityweek.com/vibe-coding-tested-ai-agents-nail-sqli-but-fail-miserably-on-security-controls/)).
+- GitGuardian의 측정에 따르면 Claude Code를 사용한 공개 commit의 secret 유출률은 3.2%였고, 기준치는 1.5%였습니다 ([State of Secrets Sprawl 2026](https://blog.gitguardian.com/the-state-of-secrets-sprawl-2026/)).
+
+Linter는 존재하지 않는 함수를 지적하지 못합니다. `mmu vibecheck`는 리뷰어가 "이 webhook은 어디에서 검증하나요?"라고 묻듯이 프로젝트를 읽고, 답이 분명히 "어디에도 없음"일 때만 차단합니다.
+
+## 게이트 동작 방식
+
+에이전트는 선택 사항인 도구는 건너뜁니다. hook은 건너뛸 수 없습니다. `mmu install`은 `mmu hook`을 호출하는 hook 항목을 기록하고, `mmu hook`은 각 호스트의 hook 프로토콜에 맞춰 응답합니다.
+
+| 호스트 | Commit / push 게이트 | "미완료" 게이트 | 편집 후 피드백 | `mmu install` 플래그 |
+|------|--------------------|---------------------|--------------------|--------------------|
+| Claude Code | `Bash`에 대한 `PreToolUse` | `Stop` | `Edit`/`Write`/`MultiEdit`에 대한 `PostToolUse` | `--claude` |
+| Codex CLI | `Bash`에 대한 `PreToolUse` | `Stop` | `apply_patch`에 대한 `PostToolUse` | `--codex` |
+| Cursor | `beforeShellExecution` | `stop` | 미지원 | `--cursor` |
+| Gemini CLI | `run_shell_command`에 대한 `BeforeTool` | `AfterAgent` | 미지원 | `--gemini` |
+| git | `pre-commit`, 기존 hook이 있으면 이어서 실행 | | | `--git` |
+| pre-commit 프레임워크 | hook id `mmu-vibecheck` | | | `.pre-commit-hooks.yaml` |
+| GitHub Actions | `uses: minjikim89/make-me-unicorn@v0.9.0`, SARIF를 code scanning으로 전송 | | | |
+
+- **Commit 게이트**는 commit에 들어갈 내용을 스캔합니다. 기본 대상은 staged 파일이고, `git commit -a`, pathspec, `git add ... && git commit`의 경우에는 변경된 파일입니다. push는 upstream 이후 변경된 내용을 스캔합니다.
+- **"미완료" 게이트**는 에이전트가 작업을 끝내려 할 때 실행됩니다. 이번 세션에서 에이전트가 편집한 파일만 보기 때문에, 건드리지 않은 코드를 다시 쓰게 만드는 일은 없습니다. 에이전트를 되돌려 보내는 횟수는 최대 `MMU_STOP_MAX`번(기본값 3)입니다. 보안 강화를 나중으로 미루라고 에이전트에 지시한 경우에는 P0 목록을 보여주고 멈춥니다.
+- **편집 후 피드백**은 방금 작성한 파일의 P0 finding을 컨텍스트로 돌려줍니다. 차단은 하지 않습니다.
+- `mmu install --all`, `--dry-run`, `--uninstall`을 지원합니다. `--agents-md`는 `AGENTS.md`에 지시 블록을 추가하고, `--skill`은 `mmu-vibecheck` Agent Skill을 `.agents/skills/`에 복사합니다. 기존 설정은 병합하며, 덮어쓰지 않습니다.
+
+Claude Code는 실제 세션에서 테스트했습니다. Codex CLI, Cursor, Gemini CLI는 문서화된 hook 계약을 따르며, 문서에 나온 payload로 테스트했습니다. 실제 세션에서 사용해 본 결과 제보를 환영합니다.
+
+설계 제약(모두 테스트로 확인):
+
+- **결정적.** 같은 트리에서는 같은 finding이 나옵니다. 모델 호출, 네트워크, 계정이 없습니다.
+- **Fail-open.** 스캐너 자체가 crash하거나 timeout되면 눈에 보이는 경고와 함께 명령을 통과시킵니다. 게이트가 고장 나도 세션이 멈추지 않습니다.
+- **사람은 우회 가능.** 명령 하나만 우회하려면 `MMU_HOOK_DISABLE=1 git commit ...`을 사용합니다. 에이전트의 환경 변수로 설정하면 해당 세션에서 게이트가 꺼집니다.
+- **빠름.** 실제 저장소 20개 기준 중앙값 89 ms, 가장 큰 저장소(파일 1,699개)에서 1.1 s입니다.
+
+## 탐지 항목
+
+P0는 차단하고 P1은 경고합니다. 부재를 추정하는 휴리스틱은 근거가 구체적이지 않으면 모두 P1입니다.
+
+| Rule | 심각도 | 탐지 대상 |
+|------|-----|-------|
+| `secrets` | P0 | 소스, 설정 파일, 또는 git이 ignore하지 않는 dotenv 파일에 들어 있는 실제 provider 키와 Supabase `service_role` JWT |
+| `client-bundle-secrets` | P0 | `NEXT_PUBLIC_` / `VITE_` / `EXPO_PUBLIC_` prefix가 붙었거나 client 코드에서 읽는 secret |
+| `supabase-rls` | P0 | migration에서 `ENABLE ROW LEVEL SECURITY` 없이 생성된 테이블 |
+| `webhook-signature` | P0 | 이벤트를 검증하지 않고 사용하는 Stripe, GitHub, Svix, Clerk... webhook handler |
+| `sql-fstring` | P0 | f-string, `%`, `.format`, template literal 또는 문자열 연결로 만들어 `execute`에 전달하는 SQL |
+| `code-injection` | P0 | `eval`, `exec`, `Function` 또는 shell에 도달하는 요청 데이터 |
+| `jwt-secret-default` | P0 | 값이 하드코딩되었거나 `|| 'fallback'`이 있는 서명용 secret |
+| `unsafe-deserialization` | P0 | safe loader 없는 `yaml.load`, 외부 입력에 대한 `pickle` |
+| `git-config-exec` | P0 | 일반적인 git 사용 중에 프로그램을 실행하는 `.git/config` 키 (`core.fsmonitor`, `core.sshCommand`, `alias.x = !cmd`) |
+| `llm-route-unthrottled` | P1 | 인증과 rate limit 없이 유료 LLM API를 호출하는 route |
+| `admin-route-no-auth` | P1 | 세션 또는 role 확인이 없는 `/admin` route |
+| `password-reset` | P1 | 비밀번호 로그인은 있지만 비밀번호 찾기/재설정 흐름이 어디에도 없음 |
+| `webhook-idempotency` | P1 | provider가 재시도하면 결과가 잘못되는 webhook 처리 |
+| `rate-limiting` | P1 | rate limiting이 전혀 없는 서버 |
+| `cors-wildcard` | P1 | `*` origin, 옵션 없는 `cors()`, credentials와 함께 쓴 wildcard |
+| `dangerous-html` | P1 | sanitize하지 않은 값에 쓴 `dangerouslySetInnerHTML` / `v-html` |
+| `jwt-localstorage` | P1 | `localStorage` / `sessionStorage`에 저장한 인증 토큰 |
+| `stack-trace-leak` | P1 | client에 반환되는 예외 상세 정보 |
+| `sourcemaps-exposed` | P1 | production source map 활성화 |
+| `env-not-ignored` | P1 | credential로 보이는 이름의 값이 들어 있는데 git이 ignore하지 않는 dotenv 파일 |
+| `disabled-ssl` | P1 | `verify=False`, `rejectUnauthorized: false` |
+| `debug-mode` | P1 | `DEBUG = True`, `app.run(debug=True)`, Dockerfile의 `--reload` |
+| `error-monitoring` | P1 | Sentry 또는 동급 도구 없음 |
+
+`mmu vibecheck --list-rules`는 이 표를 출력하고, `mmu vibecheck --explain <rule>`은 해당 rule이 무엇을 찾는지와 수정 방법을 출력합니다.
+
+## 정확도
+
+측정했고, 재현할 수 있으며, 한계까지 [`docs/benchmark.md`](./docs/benchmark.md)에 기록했습니다.
+
+| 측정 | 결과 |
+|-------------|--------|
+| 인기 오픈소스 앱 20개(starter, SaaS kit, 프레임워크 예제), 기본 설정 | 검토 결과 잘못된 P0 finding 0건 (이번 릴리스의 rule 재작업 전에는 11건) |
+| 문제 55개를 심어 둔 fixture 프로젝트 12개 | P0 precision 100%, P0 recall 100%, 심어 둔 문제 55개 중 52개 탐지 |
+| 탐지하지 못함 | IDOR, 평문 비밀번호 비교, 로그인 응답에 포함된 password 컬럼: 인가나 데이터 흐름을 모델링하는 rule이 없음 |
+
+Fixture는 rule과 함께 작성했으므로 회귀 테스트 모음으로 보아야 합니다. 독립적인 검증은 오픈소스 저장소 대상 스캔입니다.
+
+## 직접 실행하기
 
 ```bash
-mmu init                      # 기술 스택 선택 (Next.js, Django, Rails, ...)
+pip install make-me-unicorn          # or run any command through uvx make-me-unicorn ...
+mmu vibecheck                        # whole project, human-readable
+mmu vibecheck --staged               # what is about to be committed
+mmu vibecheck --since origin/main    # what this branch changed
+mmu vibecheck --format agent         # compact fix list for a coding agent
+mmu vibecheck --format json          # schema mmu.vibecheck/v1
+mmu vibecheck --format sarif --output mmu.sarif
 ```
 
-`mmu init`을 실행하면 `.mmu/config.toml`이 생성됩니다.  
-이 파일의 플래그로 내 프로젝트에 해당하지 않는 항목을 점수 계산에서 제외할 수 있습니다.
+종료 코드: `0`은 차단할 항목 없음, `1`은 `--fail-on`(기본값 `P0`) 이상의 finding이 1건 이상, `2`는 스캔을 실행하지 못함. JSON schema: [`docs/vibecheck-json-schema.md`](./docs/vibecheck-json-schema.md).
+
+### False positive
+
+이유를 적어 한 줄만 억제할 수 있습니다(이유가 없는 억제는 무시됩니다):
+
+```ts
+// mmu-ignore[webhook-signature]: verified by the API gateway before this handler runs
+```
+
+또는 `.mmu/config.toml`에서 경로 단위로 지정합니다:
 
 ```toml
-[features]
-billing = false               # 결제 기능이 없으면 billing 섹션 제외
-email_transactional = true
-email_marketing = false
-i18n = false
-file_upload = false
-mfa = false
-ab_testing = false
-webhooks_outgoing = false
-
-[architecture]
-containerized = false
-iac = false
-ssr = true
-serverless = false
-
-[market]
-targets_eu = false
-targets_california = false
-targets_korea = true
+[vibecheck]
+ignore = ["scripts/seed.ts:secrets", "examples/**:jwt-secret-default"]
 ```
 
-점수는 **내 프로젝트에 해당하는 항목만** 반영됩니다.  
-`mmu status --why`로 산출 근거(반영 항목/제외 항목)를 투명하게 확인할 수 있습니다.
+기존 코드베이스에 게이트를 도입할 때: `mmu vibecheck --write-baseline`으로 현재 finding을 기록해 두면, 이후 `mmu vibecheck --baseline`은 새로 생긴 finding만 보고합니다.
 
-## MMU가 대신 챙겨주는 것
-
-<table>
-<tr>
-<td width="33%">
-
-**제품 만들기**
-- Frontend (반응형, a11y, 폼)
-- Backend (API, DB, 큐)
-- Auth (로그인, 재설정, OAuth, 세션)
-- Billing (Stripe, Webhook, 환불)
-- Testing (유닛, E2E, 에이전트 안전성)
-
-</td>
-<td width="33%">
-
-**출시 준비하기**
-- SEO (OG 태그, sitemap, 메타)
-- Legal (개인정보처리방침, 이용약관, GDPR)
-- Security (CORS, rate limit, 시크릿 관리)
-- Performance (캐싱, 레이지 로드)
-- CI/CD (파이프라인, 롤백 플랜)
-
-</td>
-<td width="34%">
-
-**출시 후 운영하기**
-- Monitoring (에러, 업타임, 알림)
-- Analytics (퍼널, 리텐션, 이벤트)
-- Email (트랜잭션, 템플릿)
-- Accessibility (WCAG, 키보드 내비게이션)
-- Reliability (백업, 장애 대응 플랜)
-
-</td>
-</tr>
-</table>
-
-**670개 이상의 항목, 15개 카테고리. 놓침 없이 준비할 수 있습니다.**
-
-## 다른 도구와 뭐가 다른가요?
-
-| | 범위 | 위치 | 에이전트 네이티브 | 진행 상황 추적 |
-|---|---|---|---|---|
-| **MMU** | SaaS 전체: 코드 + 결제 + 법무 + 그로스 + 운영 | 내 리포의 마크다운 | ✅ Claude 플러그인 + MCP 서버 | ✅ 점수, 게이트, 진화하는 대시보드 |
-| Lighthouse | 프론트엔드 성능/접근성/SEO만 | 브라우저/CI | ❌ | 실행별 점수만, 프로젝트 기억 없음 |
-| 벤더 런치 체크리스트 (Vercel, Stripe 문서) | 해당 벤더 영역만 | 벤더 문서 사이트 | ❌ | ❌ 읽기 전용 |
-| 정적 체크리스트 리포 / Notion 템플릿 | 검증 불가한 경우 다수 | 복사-붙여넣기 | ❌ | ❌ 수동, 금방 낡음 |
-| AI 코드 리뷰어 (CodeRabbit 등) | 코드 diff | PR 워크플로 | 부분적 | PR 단위만, 런치 관점 없음 |
-
-MMU는 린터도, 문서 사이트도 아닙니다 — **AI 코딩 세션과 실제 런치 사이의 운영 레이어**입니다: CLI, CI, AI 에이전트가 같은 체크리스트를 읽고 갱신합니다.
-
-## AI가 쓴 코드, 바이브 체크
-
-AI가 생성한 코드의 45%는 취약점을 안고 출시됩니다. AI 어시스턴트가 가장 자주 빼먹는 것들을 한 커맨드로 스캔하세요:
-
-```bash
-mmu vibecheck
-```
-
-검사 항목: 하드코딩된 시크릿 · `.gitignore` 안 된 `.env` · 웹훅 서명 검증 + 멱등성 · 비밀번호 재설정 플로우 · f-string SQL · rate limiting · 와일드카드 CORS · `DEBUG = True` · 에러 모니터링. P0 발견 시 non-zero exit이므로 CI에 바로 연결됩니다.
-
-### GitHub Actions에서 실행하기
-
-어떤 워크플로우에든 한 스텝이면 됩니다 — 출시를 막는(P0) 발견이 있으면 빌드가 실패합니다:
+## GitHub Actions
 
 ```yaml
-- uses: minjikim89/make-me-unicorn@main
-  # 선택:
-  # with:
-  #   root: "apps/web"        # 스캔할 하위 폴더
-  #   version: "==0.7.0"      # 릴리스 버전 고정
+permissions:
+  contents: read
+  security-events: write
+steps:
+  - uses: actions/checkout@v4
+  - uses: minjikim89/make-me-unicorn@v0.9.0
+    with:
+      sarif-file: mmu.sarif
+  - uses: github/codeql-action/upload-sarif@v4
+    if: always()
+    with:
+      sarif_file: mmu.sarif
 ```
 
-## 이런 분들을 위해 만들었습니다
+Finding은 Security 탭에 표시되고, pull request에는 annotation으로 표시됩니다.
 
-| 당신이... | MMU가 도와주는 것 |
-|-----------|-------------------|
-| **AI로 코딩하는 창업자** | 매 세션마다 프로젝트를 처음부터 설명하는 걸 그만두세요. 도구 간 컨텍스트를 유지하세요. |
-| **프론트엔드 개발자** | 정확히 뭘 만들어야 하는지 알 수 있습니다: 인증 플로우, 에러 상태, 반응형 브레이크포인트, OG 태그. |
-| **PM / 기획자** | 구조화된 PRD, 가격 전략, 출시 체크리스트를 마크다운으로 한 번에 정리할 수 있습니다. |
-| **풀스택 빌더** | 프론트엔드, 백엔드, 결제, 컴플라이언스를 한곳에서 추적하세요. 빠지는 것 없이. |
+## Claude Code 플러그인
 
-## 60초 체험
-
-```bash
-pip install make-me-unicorn
-cd your-project
-mmu init && mmu scan && mmu status --why
-```
-
-여기까지면 준비 끝입니다. 출시 준비도 점수, 완료된 항목, 빠진 항목, 그리고 그 이유를 바로 확인할 수 있습니다.
-
-그다음 `mmu next`를 실행하면 지금 뭘 먼저 해야 하는지 알 수 있습니다.
-
-## 빠른 시작
-
-```bash
-pip install -e .
-
-# 옵션 A: 빈 템플릿으로 시작하고 직접 채우기
-mmu init
-
-# 옵션 B: Claude가 프로젝트 문서를 생성 (API 키 필요)
-pip install -e ".[llm]"
-export ANTHROPIC_API_KEY=sk-ant-...
-mmu init --interactive        # 5가지 질문에 답하면 → 전략, 제품, 가격 문서가 자동 생성
-```
-
-그다음:
-
-```bash
-mmu scan                      # 기술 스택 자동 감지
-mmu                           # 대시보드 확인
-mmu status --why              # 점수 산출 근거 상세 확인
-mmu next                      # 우선순위 기반 다음 액션 Top 3 확인
-mmu show frontend             # 특정 카테고리 상세 보기
-mmu check frontend 3          # 항목 완료 처리
-mmu gate --stage M0           # 다음 단계 진입 가능 여부 확인
-mmu doctor                    # 가드레일 헬스 체크 실행
-```
-
-## 점수 공유하기
-
-출시 준비 상태를 공유하세요. README에 붙여넣거나, 트윗하거나, Discord에 올려보세요.
-
-```bash
-mmu share                     # 공유용 스코어 카드 출력
-mmu share --clipboard         # 클립보드에 복사 (macOS)
-```
-
-```
-┌─────────────────────────────────────────────┐
-│  Make Me Unicorn — Launch Readiness         │
-│                                             │
-│  Score: 68%  Stage: YOUNG UNICORN           │
-│                                             │
-│  M0 Problem Fit    ████████████████  PASS   │
-│  M1 Build Fit      ████████████████  PASS   │
-│  M2 Revenue Fit    ██████████░░░░░░  OPEN   │
-│  M3 Trust Fit      ████████████████  PASS   │
-│  M4 Growth Fit     ████████░░░░░░░░  OPEN   │
-│  M5 Scale Fit      ████░░░░░░░░░░░░  OPEN   │
-│                                             │
-│  Stack: Next.js · Stripe · SSR              │
-│  pip install make-me-unicorn                │
-│  #MakeMeUnicorn                             │
-└─────────────────────────────────────────────┘
-```
-
-## 출시 게이트 6단계
-
-단계별 출구 조건이라고 생각하세요. 건너뛰지 마세요.
-
-```
-M0 Problem Fit    →  누구를 위해, 왜 만드는지 알고 있는가?
-M1 Build Fit      →  핵심 제품이 실제로 끝까지 동작하는가?
-M2 Revenue Fit    →  결제가 가능한가? 환불도 되는가?
-M3 Trust Fit      →  개인정보처리방침? 고객 지원 경로? 로깅?
-M4 Growth Fit     →  공유 링크가 제대로 보이는가? 검색에서 찾을 수 있는가?
-M5 Scale Fit      →  새벽 3시에 장애 나면 어떻게 되는가?
-```
-
-`mmu gate --stage M0`으로 검증하세요. 체크하지 않은 항목이 하나라도 있으면 `NOT PASS`입니다.
-
-## 12개의 운영 모드
-
-세션당 하나의 모드. 각 모드는 필요한 문서만 로드합니다.
-
-```bash
-mmu start --mode backend      # 로드: architecture.md, sprint, ADR 로그
-mmu start --mode billing      # 로드: pricing.md, 결제 체크리스트, 컴플라이언스
-mmu start --mode growth       # 로드: SEO 체크리스트, 지표 문서
-```
-
-AI 코딩의 1순위 문제인 **컨텍스트 과부하**를 방지합니다. AI 어시스턴트에게 프로젝트 전체가 아닌, 딱 필요한 것만 전달됩니다.
-
-## AI 연동 (선택)
-
-MMU는 AI 없이도 동작합니다. 하지만 Claude와 함께 쓰면 훨씬 강력해집니다:
-
-```bash
-pip install make-me-unicorn[llm]
-export ANTHROPIC_API_KEY=sk-ant-...
-```
-
-| 명령어 | 하는 일 |
-|--------|---------|
-| `mmu init --interactive` | 제품에 대한 5가지 질문에 답하면 Claude가 전략, 제품 스펙, 가격, 아키텍처, UX 문서를 작성합니다. |
-| `mmu start --mode X --agent` | 세션 컨텍스트를 자동 포맷 — Claude Code나 다른 LLM에 바로 붙여넣으세요. |
-| `mmu doctor --deep` | Claude가 코드와 문서를 읽고, 불일치, 보안 취약점, 놓친 부분을 찾아냅니다. |
-| `mmu generate strategy` | 현재 프로젝트 상태를 기반으로 핵심 문서를 생성하거나 업데이트합니다. |
-
-코어 CLI는 외부 의존성 제로. AI 기능은 선택이며, 없어도 정상 동작합니다.
-
-## Claude Skill로 사용하기
-
-MMU는 Claude Code 플러그인 + Anthropic Agent Skill로도 패키징되어 있습니다. Claude Code, Claude Desktop, OpenAI Codex CLI 등 Agent Skills 사양을 지원하는 모든 도구에서 "스타트업 아이디어 검증해줘", "출시 체크리스트 알려줘" 같은 문구를 입력하면 MMU가 자동 호출됩니다.
-
-```bash
-# Claude Code 안에서:
+```text
 /plugin marketplace add minjikim89/make-me-unicorn
-/plugin install make-me-unicorn
+/plugin install make-me-unicorn@make-me-unicorn
 ```
 
-스킬은 progressive disclosure 방식으로 대화에 필요한 블루프린트만 로드하므로 컨텍스트 비용이 적습니다.
+플러그인에 포함된 소스로 동일한 hook 3개를 등록하고(`python3` 3.10+ 필요, `pip install` 불필요), `/vibecheck` 명령, `mmu-vibecheck` skill, MCP 서버([uv](https://docs.astral.sh/uv/)로 실행)를 함께 제공합니다.
 
-## MCP 서버 모드
+## MCP 서버
 
-MMU는 MCP(Model Context Protocol) 서버로도 동작합니다. Claude Code, Claude Desktop, Cursor, Gemini CLI 등 MCP 호환 에이전트가 MMU의 블루프린트와 템플릿을 네이티브 도구로 호출할 수 있습니다.
-
-```bash
-pip install make-me-unicorn[mcp]
-mmu serve-mcp                          # stdio 전송 (기본)
-mmu serve-mcp --transport sse          # SSE 전송
-```
-
-Claude Desktop 설정 (`~/Library/Application Support/Claude/claude_desktop_config.json`):
+직접 물어보는 방식을 선호하는 에이전트를 위한 기능입니다. `mmu serve-mcp`는 `mmu_vibecheck`, `mmu_explain_rule`, `mmu_list_rules`를 제공합니다(읽기 전용). MCP SDK v1과 v2에서 동작합니다.
 
 ```json
 {
   "mcpServers": {
-    "mmu": {
-      "command": "mmu",
-      "args": ["serve-mcp", "--root", "/path/to/cloned/make-me-unicorn"]
-    }
+    "mmu": { "command": "uvx", "args": ["--from", "make-me-unicorn[mcp]>=0.9", "mmu", "serve-mcp"] }
   }
 }
 ```
 
-노출되는 도구:
+MCP 도구는 편의 기능입니다. 게이트는 hook입니다.
 
-- `mmu_list_blueprints` — 17개 블루프린트(코어 15개 + 산업 2개) 목록
-- `mmu_get_blueprint(name)` — 특정 블루프린트 마크다운 전문
-- `mmu_list_idea_templates` — start/close/ADR 프롬프트 + Product Hunt 키트
-- `mmu_validate_idea(idea)` — 실제 HN + Reddit 스레드 기반 검증: 평결, 감성 분석, 경쟁자, 주요 스레드 (무료 모드, API 키 불필요. `[validate]` extra 필요)
+## Rule 추가하기
 
-## 아이디어 검증
+Rule은 [`src/mmu_cli/vibecheck/rules/`](./src/mmu_cli/vibecheck/rules/)에 있습니다. Rule에는 `bench/fixtures/`의 fixture와 `bench/expected/`의 예상 finding이 함께 있어야 하고, 벤치마크의 P0 false positive를 0으로 유지해야 합니다(`python -m unittest tests.test_bench`). [CONTRIBUTING.md](./CONTRIBUTING.md)를 참고하세요.
 
-빌드 전에 HN + Reddit에서 실제 신호를 가져옵니다:
+## 이 저장소의 다른 기능: 출시 체크리스트
 
-```bash
-pip install make-me-unicorn[validate]
-mmu validate "어린이를 위한 AI 튜터" --limit 30
-```
-
-기본 모드는 **무료** — API 키 불필요, 유료 호출 없음. 공개 Reddit + HN Algolia 검색 + 로컬 VADER sentiment + 대문자 토큰 기반 경쟁자 추출. `reports/validate/<slug>-<hash>.md`에 마크다운 리포트가 자동 저장됩니다.
-
-스레드를 종합한 1페이지 검증 리포트가 필요하면:
+make-me-unicorn은 솔로 빌더를 위한 출시 체크리스트로 시작했고, 그 기능도 계속 제공합니다. 체크리스트 카테고리 15개, 출시 게이트 M0~M5, 집중 세션 모드, MCP blueprint 서버가 있습니다. 체크리스트는 프로젝트에서 결정하고 완료한 내용을 추적하고, 위의 게이트는 코드가 실제로 하는 일을 검사합니다.
 
 ```bash
-mmu validate "어린이를 위한 AI 튜터" --llm
-# 비용 확인 프롬프트 (~$0.05–0.20). -y 로 스킵 가능.
+mmu init && mmu scan && mmu status
 ```
 
-`--llm`은 명시적 옵트인이며, 기본 흐름은 Anthropic API를 호출하지 않습니다.
-
-## 세션 워크플로우
-
-모든 세션은 같은 리듬을 따릅니다:
-
-```
-1. mmu start --mode backend      ← 포커스를 정하고, 관련 문서를 로드
-2. Build / decide / validate      ← 작업 수행
-3. mmu close                      ← 변경 사항과 다음 할 일을 기록
-```
-
-세션 종료 시 구조화된 태그로 기록합니다:
-
-- `[DONE]` — 완료한 작업
-- `[DECISION]` — 내린 결정 (중요하면 ADR 생성)
-- `[ISSUE]` — 문제 발생 (유형 분류: 컨텍스트 유실 / 잘못된 방향 / 문서-코드 불일치)
-- `[NEXT]` — 다음 세션의 첫 번째 할 일
-
-다음 세션이 "어디까지 했더라?"로 15분 낭비하는 대신, **5초 만에** 시작됩니다.
-
-## 예제: TaskNote
-
-MMU를 실제로 채워 넣은 예제를 확인하세요:
-
-```
-examples/filled/tasknote/
-├── docs/core/strategy.md      ← ICP, 가치 제안, 경쟁사
-├── docs/core/product.md       ← MVP 범위, 사용자 여정, P0/P1
-├── docs/core/pricing.md       ← Free/Pro/Team, 결제 규칙
-├── docs/core/architecture.md  ← Next.js + FastAPI + Postgres
-├── docs/adr/001_billing_provider_choice.md  ← 왜 Stripe를 결제 제공자로 선택했는가?
-└── current_sprint.md          ← 이번 주 3가지 목표
-```
-
-## 요구 사항
-
-- Python `3.10+`
-- `pip`
-- Core CLI: 외부 의존성 없음
-- AI 기능: `pip install make-me-unicorn[llm]`
-
-## 프로젝트 구조
-
-```
-make-me-unicorn/
-├── src/mmu_cli/           # CLI source (Python)
-├── docs/
-│   ├── core/              # Strategy, Product, Pricing, Architecture, UX
-│   ├── ops/               # Roadmap, Metrics, Compliance, Reliability
-│   ├── blueprints/        # 15 category checklists (670+ items)
-│   ├── checklists/        # M0–M5 launch gates
-│   └── adr/               # Decision log templates
-├── prompts/               # Session start/close/ADR templates
-├── examples/filled/       # Concrete example (TaskNote)
-└── tests/                 # Unit tests
-```
-
-## CI 가드레일
-
-`mmu doctor`는 모든 PR에서 실행됩니다. `mmu gate`는 `docs/ops/gate_targets.txt`에 명시된 단계에 대해 실행됩니다.
-
-## 기여하기
-
-`CONTRIBUTING.md`를 참고하세요. [`good first issue`](https://github.com/minjikim89/make-me-unicorn/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22) 라벨이 붙은 이슈는 첫 PR용으로 범위를 잡아뒀습니다 — 수정할 파일까지 이슈에 명시되어 있습니다.
-
-## 프로젝트 응원하기
-
-MMU가 놓칠 뻔한 걸 잡아줬다면, **[스타 하나](https://github.com/minjikim89/make-me-unicorn/stargazers)가 다른 솔로 빌더들이 이 프로젝트를 발견하는 데 큰 도움이 됩니다.**
-
-[![Star History Chart](https://api.star-history.com/svg?repos=minjikim89/make-me-unicorn&type=Date)](https://star-history.com/#minjikim89/make-me-unicorn&Date)
+자세한 내용: [docs/checklists.md](./docs/checklists.md), [SPEC.md](./SPEC.md).
 
 ## 라이선스
 
-MIT. `LICENSE` 파일을 참고하세요.
+MIT

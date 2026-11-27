@@ -15,7 +15,7 @@ Recommended topics (8-12):
 - `saas`
 - `solo-founder`
 - `developer-tools`
-- `productivity`
+- `security`
 - `checklist`
 - `llm`
 - `ai-coding`

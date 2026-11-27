@@ -1,0 +1,24 @@
+# A correct passwordless Next.js + Supabase + Stripe app (magic link + OAuth only), with a
+# component named AuthorBio.tsx. Zero P0s allowed.
+
+[[expect]]  # true of the fixture: no limiter anywhere
+rule = "rate-limiting"
+path = "package.json"
+severity = "P1"
+
+[[expect]]  # true of the fixture: Supabase is used and no schema is in the repo
+rule = "supabase-rls"
+path = "package.json"
+severity = "P1"
+
+[[must_not]]  # passwordless: there is no password to reset
+rule = "password-reset"
+
+[[must_not]]
+rule = "webhook-signature"
+
+[[must_not]]
+rule = "webhook-idempotency"
+
+[[must_not]]  # @vercel/otel is installed
+rule = "error-monitoring"

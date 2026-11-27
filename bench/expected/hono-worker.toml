@@ -1,0 +1,16 @@
+# Hono on Cloudflare Workers, rate limited through a Workers rate limit binding.
+
+[[expect]]
+id = "F1"
+rule = "cors-wildcard"
+path = "src/index.ts"
+line = 4
+severity = "P1"
+
+[[expect]]  # true of the fixture: no error tracker
+rule = "error-monitoring"
+path = "package.json"
+severity = "P1"
+
+[[must_not]]  # c.env.RL.limit({key}) + wrangler ratelimit binding
+rule = "rate-limiting"
