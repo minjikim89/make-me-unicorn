@@ -11,7 +11,7 @@
       "name": "make-me-unicorn",
       "source": "./",
       "description": "Launch gate for AI coding agents: deterministic vibecheck blocks commits, pushes and a premature \"done\" while launch-blocking gaps remain.",
-      "version": "0.9.0",
+      "version": "0.9.1",
       "category": "security",
       "tags": [
         "security",

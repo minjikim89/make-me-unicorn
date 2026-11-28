@@ -194,6 +194,12 @@ class JsonTargetTests(unittest.TestCase):
             self.assertEqual(install.default_command(), uvx, "the mmu of a `uvx make-me-unicorn install` run is deleted later")
         self.assertTrue(install._is_ephemeral("/home/u/.local/pipx/.cache/0a1b/bin/mmu"))
         self.assertFalse(install._is_ephemeral("/home/u/.local/bin/mmu"))
+        self.assertFalse(install._is_ephemeral("/home/u/.local/share/uv/tools/make-me-unicorn/bin/mmu"))
+        # a custom UV_CACHE_DIR has no `uv` in its path (setup-uv, dev containers)
+        self.assertTrue(install._is_ephemeral("/home/runner/work/_temp/setup-uv-cache/archive-v0/x/bin/mmu"))
+        with mock.patch.dict(os.environ, {"UV_CACHE_DIR": "/tmp/ci-cache"}):
+            self.assertTrue(install._is_ephemeral("/tmp/ci-cache/builds-v0/x/bin/mmu"))
+            self.assertFalse(install._is_ephemeral("/usr/local/bin/mmu"))
         code, out = _run(self.root)
         self.assertEqual(code, 2)
         self.assertIn("nothing to install", out)

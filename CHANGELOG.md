@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 The format is inspired by Keep a Changelog and follows semantic intent.
 
+## [0.9.1] - 2026-11-28
+
+### Fixed
+
+- `uvx make-me-unicorn install` registered `mmu hook`, which only existed inside that uvx run, when `UV_CACHE_DIR` points to a directory without `uv` in its path (GitHub Actions setup-uv, dev containers). The hook then could not start and the gate silently did nothing. It now registers the `uvx --from "make-me-unicorn>=0.9" mmu hook` form; run `install` again to repair an affected config.
+
 ## [0.9.0] - 2026-11-26
 
 make-me-unicorn becomes a launch gate for AI coding agents: `mmu install` registers `mmu vibecheck` as a commit, stop and post-edit hook in Claude Code, Codex CLI, Cursor, Gemini CLI and git, and the rules were reworked for precision (0 wrong P0 findings across 20 open-source apps, `docs/benchmark.md`). The launch checklists are unchanged and documented in `docs/checklists.md`.

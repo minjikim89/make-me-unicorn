@@ -69,7 +69,7 @@ Agents skip optional tools. They cannot skip hooks. `mmu install` writes hook en
 | Gemini CLI | `BeforeTool` on `run_shell_command` | `AfterAgent` | not available | `--gemini` |
 | git | `pre-commit`, chaining any existing hook | | | `--git` |
 | pre-commit framework | hook id `mmu-vibecheck` | | | `.pre-commit-hooks.yaml` |
-| GitHub Actions | `uses: minjikim89/make-me-unicorn@v0.9.0`, SARIF to code scanning | | | |
+| GitHub Actions | `uses: minjikim89/make-me-unicorn@v0.9.1`, SARIF to code scanning | | | |
 
 - **Commit gate** scans what the commit will contain: staged files, or changed files for `git commit -a`, pathspecs and `git add ... && git commit`. A push scans what changed since the upstream.
 - **"Not done yet" gate** runs when the agent tries to finish. It looks only at files the agent edited in this session, so it never makes the agent rewrite code it did not touch. It sends the agent back at most `MMU_STOP_MAX` times (default 3); if you told the agent to defer hardening, it lists the P0s and stops.
@@ -168,7 +168,7 @@ permissions:
   security-events: write
 steps:
   - uses: actions/checkout@v4
-  - uses: minjikim89/make-me-unicorn@v0.9.0
+  - uses: minjikim89/make-me-unicorn@v0.9.1
     with:
       sarif-file: mmu.sarif
   - uses: github/codeql-action/upload-sarif@v4

@@ -69,7 +69,7 @@ Linter는 존재하지 않는 함수를 지적하지 못합니다. `mmu vibechec
 | Gemini CLI | `run_shell_command`에 대한 `BeforeTool` | `AfterAgent` | 미지원 | `--gemini` |
 | git | `pre-commit`, 기존 hook이 있으면 이어서 실행 | | | `--git` |
 | pre-commit 프레임워크 | hook id `mmu-vibecheck` | | | `.pre-commit-hooks.yaml` |
-| GitHub Actions | `uses: minjikim89/make-me-unicorn@v0.9.0`, SARIF를 code scanning으로 전송 | | | |
+| GitHub Actions | `uses: minjikim89/make-me-unicorn@v0.9.1`, SARIF를 code scanning으로 전송 | | | |
 
 - **Commit 게이트**는 commit에 들어갈 내용을 스캔합니다. 기본 대상은 staged 파일이고, `git commit -a`, pathspec, `git add ... && git commit`의 경우에는 변경된 파일입니다. push는 upstream 이후 변경된 내용을 스캔합니다.
 - **"미완료" 게이트**는 에이전트가 작업을 끝내려 할 때 실행됩니다. 이번 세션에서 에이전트가 편집한 파일만 보기 때문에, 건드리지 않은 코드를 다시 쓰게 만드는 일은 없습니다. 에이전트를 되돌려 보내는 횟수는 최대 `MMU_STOP_MAX`번(기본값 3)입니다. 보안 강화를 나중으로 미루라고 에이전트에 지시한 경우에는 P0 목록을 보여주고 멈춥니다.
@@ -168,7 +168,7 @@ permissions:
   security-events: write
 steps:
   - uses: actions/checkout@v4
-  - uses: minjikim89/make-me-unicorn@v0.9.0
+  - uses: minjikim89/make-me-unicorn@v0.9.1
     with:
       sarif-file: mmu.sarif
   - uses: github/codeql-action/upload-sarif@v4
