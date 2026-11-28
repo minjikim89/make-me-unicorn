@@ -69,7 +69,7 @@ linter 不会标记一个不存在的函数。`mmu vibecheck` 阅读项目的方
 | Gemini CLI | `run_shell_command` 上的 `BeforeTool` | `AfterAgent` | 不支持 | `--gemini` |
 | git | `pre-commit`,并串联已有的 hook | | | `--git` |
 | pre-commit 框架 | hook id `mmu-vibecheck` | | | `.pre-commit-hooks.yaml` |
-| GitHub Actions | `uses: minjikim89/make-me-unicorn@v0.9.0`,SARIF 上传到 code scanning | | | |
+| GitHub Actions | `uses: minjikim89/make-me-unicorn@v0.9.1`,SARIF 上传到 code scanning | | | |
 
 - **commit 关卡**扫描本次 commit 将包含的内容:staged 的文件;对于 `git commit -a`、pathspec 和 `git add ... && git commit`,则是有改动的文件。push 时扫描自 upstream 以来的改动。
 - **"尚未完成"关卡**在智能体准备结束任务时运行。它只检查智能体在本次会话中编辑过的文件,因此不会让智能体重写它没有碰过的代码。它最多把智能体退回 `MMU_STOP_MAX` 次(默认 3 次);如果你已经让智能体把加固工作推后,它会列出 P0 问题然后停止。
@@ -168,7 +168,7 @@ permissions:
   security-events: write
 steps:
   - uses: actions/checkout@v4
-  - uses: minjikim89/make-me-unicorn@v0.9.0
+  - uses: minjikim89/make-me-unicorn@v0.9.1
     with:
       sarif-file: mmu.sarif
   - uses: github/codeql-action/upload-sarif@v4

@@ -1,6 +1,6 @@
 # https://pre-commit.com: add to .pre-commit-config.yaml
 #   - repo: https://github.com/minjikim89/make-me-unicorn
-#     rev: v0.9.0
+#     rev: v0.9.1
 #     hooks:
 #       - id: mmu-vibecheck
 - id: mmu-vibecheck

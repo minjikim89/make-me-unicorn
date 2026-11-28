@@ -88,11 +88,23 @@ MIN_HOOK_VERSION = (0, 9)
 
 
 def _is_ephemeral(path: str) -> bool:
-    """True for executables in a uvx/pipx run cache: they vanish, so a hook must not point at them."""
-    parts = [p.lower() for p in Path(path).resolve().parts]
-    uvx_run = "uv" in parts and any(p.startswith("archive-v") for p in parts)
+    """True for executables in a uvx/pipx run cache: they vanish, so a hook must not point at them.
+
+    uv keeps `uvx` environments in `<cache>/archive-v<N>/`, wherever the cache is: `~/.cache/uv`,
+    or a custom `UV_CACHE_DIR` (GitHub Actions setup-uv, dev containers) with no `uv` in its path.
+    """
+    resolved = Path(path).resolve()
+    parts = [p.lower() for p in resolved.parts]
+    cache = os.environ.get("UV_CACHE_DIR")
+    in_uv_cache = any(p.startswith("archive-v") for p in parts)
+    if cache and not in_uv_cache:
+        try:
+            resolved.relative_to(Path(cache).expanduser().resolve())
+            in_uv_cache = True
+        except (ValueError, OSError):
+            pass
     pipx_run = "pipx" in parts and ".cache" in parts
-    return uvx_run or pipx_run
+    return in_uv_cache or pipx_run
 
 
 def _supports_hook(executable: str) -> bool:

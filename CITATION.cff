@@ -32,8 +32,8 @@ keywords:
   - git-hooks
   - static-analysis
   - idea-validation
-version: 0.9.0
-date-released: "2026-11-26"
+version: 0.9.1
+date-released: "2026-11-28"
 preferred-citation:
   type: software
   title: "Make Me Unicorn"
