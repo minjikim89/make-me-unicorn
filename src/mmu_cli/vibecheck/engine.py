@@ -253,8 +253,41 @@ def reset_caches() -> None:
         cache.clear()
 
 
-def _read(path: Path) -> str:
+# The resolved root of the scan in progress; `_read` refuses symlinks that lead out of it.
+_SCAN_ROOT: dict[str, Path] = {}
+_RUN_CACHES.append(_SCAN_ROOT)
+
+
+def real_outside(path: Path, base: Path) -> Path | None:
+    """Where `path` really points when that is outside the resolved directory `base`, else None."""
+    try:
+        real = path.resolve()
+    except (OSError, RuntimeError):
+        return path
+    return None if real == base or base in real.parents else real
+
+
+def check_write_target(path: Path, root: Path) -> None:
+    """Refuse to write through a symlink that leads from inside the repo to somewhere outside it."""
+    target = Path(os.path.abspath(path))
+    try:  # samefile, not string prefixes: `/var/x` and `/private/var/x` are one directory on macOS
+        inside = any(parent.exists() and os.path.samefile(parent, root) for parent in target.parents)
+    except OSError:
+        inside = False
+    if not inside:
+        return  # a path outside the repo was chosen explicitly
+    real = real_outside(target, root.resolve())
+    if real is not None:
+        raise ScanError("output-failed", f"refusing to write {path}: a symlink points it outside the repository, at {real}")
+
+
+def _read(path: Path, confined: bool = True) -> str:
+    """File text (first 2 MB). `confined`: a symlink to a file outside the scanned root reads as empty,
+    so a cloned repo cannot point `prod.env` at `~/.aws/credentials` and get it echoed into a report."""
     if path not in _READ_CACHE:
+        base = _SCAN_ROOT.get("root")
+        if confined and base is not None and os.path.islink(path) and real_outside(path, base) is not None:
+            return ""  # not cached: an unconfined read of the same path must still see the file
         try:
             _READ_CACHE[path] = path.read_bytes()[:2_000_000].decode("utf-8", errors="ignore")
         except OSError:
@@ -308,6 +341,7 @@ def gather_files(root: Path, skip_paths: set[str]) -> tuple[list[Path], list[Pat
     code: list[Path] = []
     config: list[Path] = []
     code_ext = CODE_EXTENSIONS | _EXTRA_CODE_EXTENSIONS
+    base = root.resolve()
     for dirpath, dirnames, filenames in os.walk(root):
         rel_dir = Path(dirpath).relative_to(root).as_posix()
         rel_dir = "" if rel_dir == "." else rel_dir
@@ -328,6 +362,8 @@ def gather_files(root: Path, skip_paths: set[str]) -> tuple[list[Path], list[Pat
             try:
                 if not path.is_file() or path.stat().st_size > _MAX_FILE_BYTES:
                     continue
+                if path.is_symlink() and real_outside(path, base) is not None:
+                    continue  # directory links are never walked; file links must stay inside the repo too
             except OSError:
                 continue
             (code if is_code else config).append(path)
@@ -817,6 +853,7 @@ def write_baseline(result: ScanResult, path: Path) -> int:
     """Record every active finding of `result` in `path`; returns the number of entries."""
     entries = baseline_entries(result.findings)
     doc = {"schema": BASELINE_SCHEMA, "tool": {"name": "mmu", "version": tool_version()}, "entries": entries}
+    check_write_target(path, result.root)
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps(doc, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
@@ -875,7 +912,7 @@ def scan(root: Path, scope: str = "all", since: str | None = None, baseline: Pat
 
     `baseline`: a file written by `write_baseline`; findings recorded in it get status `baselined`.
     """
-    from mmu_cli.cli import vibecheck_skip_paths
+    from mmu_cli.cli import DEFAULT_SKIP_PATHS, should_skip_rel, vibecheck_skip_paths
     from mmu_cli.vibecheck import rules
 
     if not root.is_dir():
@@ -892,8 +929,18 @@ def scan(root: Path, scope: str = "all", since: str | None = None, baseline: Pat
         scope_info["files"] = len(in_scope)
     known = load_baseline(baseline) if baseline is not None else None
 
+    skip_paths = vibecheck_skip_paths(root)
+    configured = sorted(skip_paths - DEFAULT_SKIP_PATHS)
+    if configured:  # repo config narrowed the scan: say so, so a pass is never silently partial
+        scope_info["config_skip_paths"] = configured
+        if in_scope is not None:
+            hidden = [p for p in in_scope if should_skip_rel(p, set(configured)) and not should_skip_rel(p, set())]
+            if hidden:
+                scope_info["skipped_by_config"] = len(hidden)
+
     reset_caches()
-    code_files, config_files = gather_files(root, vibecheck_skip_paths(root))
+    _SCAN_ROOT["root"] = root.resolve()
+    code_files, config_files = gather_files(root, skip_paths)
     if len(code_files) > _MAX_FILES:
         scope_info["truncated"] = len(code_files) - _MAX_FILES
         code_files = code_files[:_MAX_FILES]

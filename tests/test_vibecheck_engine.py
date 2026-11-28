@@ -311,6 +311,17 @@ class ScopeTests(unittest.TestCase):
             vibecheck.scan(self.root, scope="since", since="no-such-ref")
         self.assertEqual(ctx.exception.code, "bad-ref")
 
+    def test_config_skip_paths_are_named_in_the_output(self):
+        write(self.root, ".mmu/config.toml", '[vibecheck]\nskip_paths = ["gen"]\n')
+        write(self.root, "gen/q.py", 'r = f"DELETE FROM t WHERE id = {i}"\n')
+        _, out, _ = run_cli("vibecheck", "--root", str(self.root), "--changed", "--format", "json")
+        scope = json.loads(out)["scope"]
+        self.assertEqual((scope["config_skip_paths"], scope["skipped_by_config"]), (["gen"], 1))
+        _, out, _ = run_cli("vibecheck", "--root", str(self.root), "--changed", "--format", "agent")
+        self.assertIn("note: 1 file(s) in scope not scanned: .mmu/config.toml skip_paths = gen", out)
+        _, out, _ = run_cli("vibecheck", "--root", str(self.root))
+        self.assertIn("Not scanned: .mmu/config.toml skip_paths = gen", out)
+
     def test_files_from_lists_the_scope(self):
         write(self.root, "new.py", 'r = f"DELETE FROM t WHERE id = {i}"\n')
         found = vibecheck.scan(self.root, scope="files", files=["./old.py", "", "missing.py"]).findings
@@ -502,6 +513,58 @@ class OutputTests(unittest.TestCase):
         code, out, _ = run_cli("vibecheck", "--root", str(self.root), "--format", "sarif", "--output", str(target))
         self.assertEqual((code, out), (1, ""))
         self.assertEqual(json.loads(target.read_text(encoding="utf-8"))["version"], "2.1.0")
+
+
+@unittest.skipIf(sys.platform == "win32", "symlinks need extra privileges on Windows")
+class SymlinkTests(unittest.TestCase):
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        base = Path(self._tmp.name)
+        self.root, self.outside = base / "repo", base / "outside"
+        self.root.mkdir()
+        self.outside.mkdir()
+
+    def test_file_links_out_of_the_repo_are_not_read(self):
+        target = self.outside / "creds.py"
+        target.write_text('r = f"DELETE FROM t WHERE id = {i}"  # outside-marker\n', encoding="utf-8")
+        (self.root / "leak.py").symlink_to(target)
+        write(self.root, "inner.py", 'r = f"DELETE FROM t WHERE id = {i}"\n')
+        (self.root / "alias.py").symlink_to("inner.py")
+        code, out, _ = run_cli("vibecheck", "--root", str(self.root), "--format", "json")
+        self.assertNotIn("outside-marker", out)
+        doc = json.loads(out)
+        paths = {loc["path"] for f in doc["findings"] if f["status"] == "fail" for loc in f["locations"]}
+        self.assertEqual((code, paths), (1, {"inner.py", "alias.py"}))
+
+    def test_direct_reads_of_a_link_out_of_the_repo_are_empty(self):
+        manifest = self.outside / "package.json"
+        manifest.write_text('{"name": "outside-marker"}\n', encoding="utf-8")
+        (self.root / "package.json").symlink_to(manifest)
+        engine.reset_caches()
+        engine._SCAN_ROOT["root"] = self.root.resolve()
+        self.assertEqual(engine._read(self.root / "package.json"), "")
+        self.assertIn("outside-marker", engine._read(self.root / "package.json", confined=False))
+        engine.reset_caches()
+
+    def test_reports_and_baselines_are_not_written_through_links_out_of_the_repo(self):
+        victim = self.outside / "victim.txt"
+        victim.write_text("keep\n", encoding="utf-8")
+        (self.root / "results.sarif").symlink_to(victim)
+        (self.root / ".mmu").symlink_to(self.outside, target_is_directory=True)
+        code, _, err = run_cli("vibecheck", "--root", str(self.root), "--format", "sarif",
+                               "--output", str(self.root / "results.sarif"))
+        self.assertEqual(code, 2)
+        self.assertIn("refusing to write", err)
+        code, _, err = run_cli("vibecheck", "--root", str(self.root), "--write-baseline")
+        self.assertEqual(code, 2)
+        self.assertIn("refusing to write", err)
+        self.assertEqual(victim.read_text(encoding="utf-8"), "keep\n")
+        self.assertFalse((self.outside / "vibecheck-baseline.json").exists())
+        report = self.outside / "report.json"  # a path outside the repo given explicitly is still written
+        code, _, _ = run_cli("vibecheck", "--root", str(self.root), "--format", "json", "--output", str(report))
+        self.assertEqual(code, 0)
+        self.assertTrue(report.is_file())
 
 
 class ExitCodeTests(unittest.TestCase):

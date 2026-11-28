@@ -88,7 +88,7 @@ def is_test_file(path: Path, root: Path) -> bool:
 
 # --- Manifests and frameworks ------------------------------------------------
 
-_REQ_NAME = re.compile(r"^\s*([A-Za-z0-9][A-Za-z0-9._-]*)", re.MULTILINE)
+_REQ_NAME = re.compile(r"^[ \t]*([A-Za-z0-9][A-Za-z0-9._-]*)", re.MULTILINE)
 _PYPROJECT_DEP = re.compile(r"""["']([A-Za-z0-9][A-Za-z0-9._-]*)\s*(?:\[[^\]]*\])?\s*(?:[<>=!~;].*?)?["']""")
 _POETRY_DEP = re.compile(r"^([A-Za-z0-9][A-Za-z0-9._-]*)\s*=", re.MULTILINE)
 
@@ -130,7 +130,7 @@ _SERVER_DEPS = {
     "quart": "quart", "litestar": "litestar", "aiohttp": "aiohttp", "tornado": "tornado", "@hapi/hapi": "hapi",
     "restify": "restify", "@trpc/server": "trpc", "astro": "astro",
 }
-_PY_FRAMEWORK = re.compile(r"^\s*(?:from|import)\s+(fastapi|flask|django|starlette|sanic|quart|litestar|aiohttp)\b", re.MULTILINE)
+_PY_FRAMEWORK = re.compile(r"^[ \t]*(?:from|import)\s+(fastapi|flask|django|starlette|sanic|quart|litestar|aiohttp)\b", re.MULTILINE)
 _JS_FRAMEWORK = re.compile(
     r"""(?:from\s+|require\(\s*)["'](express|fastify|koa|hono|@nestjs/core|elysia|next)(?:/[^"']*)?["']"""
 )
@@ -200,8 +200,8 @@ def framework_of(path: Path, root: Path) -> str:
 # --- Local imports -----------------------------------------------------------
 
 _JS_IMPORT = re.compile(r"""(?:\bfrom\s+|\brequire\(\s*|\bimport\(\s*|\bimport\s+)["']([^"'\n]+)["']""")
-_PY_FROM = re.compile(r"^\s*from\s+(\.*[\w.]*)\s+import\s+([^\n#]+)", re.MULTILINE)
-_PY_IMPORT = re.compile(r"^\s*import\s+([\w.]+)", re.MULTILINE)
+_PY_FROM = re.compile(r"^[ \t]*from\s+(\.*[\w.]*)\s+import\s+([^\n#]+)", re.MULTILINE)
+_PY_IMPORT = re.compile(r"^[ \t]*import\s+([\w.]+)", re.MULTILINE)
 _JS_TRY = ("", ".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", "/index.ts", "/index.tsx", "/index.js", "/index.mjs")
 _ALIAS_PREFIXES = ("@/", "~/", "#/", "$lib/", "src/")
 
@@ -307,7 +307,7 @@ JS_ROUTE = re.compile(
 PY_ROUTE = re.compile(
     r"""@[\w.]+\.(get|post|put|patch|delete|route|api_route)\(\s*(?:path\s*=\s*)?(["'])([^"'\n]*)\2"""
 )
-_DJANGO_VIEW = re.compile(r"^\s*(?:async\s+)?def\s+\w+\(\s*(?:self\s*,\s*)?request\b", re.MULTILINE)
+_DJANGO_VIEW = re.compile(r"^[ \t]*(?:async\s+)?def\s+\w+\(\s*(?:self\s*,\s*)?request\b", re.MULTILINE)
 
 
 def route_paths(path: Path, root: Path) -> list[tuple[int, str]]:

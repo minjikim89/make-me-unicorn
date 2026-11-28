@@ -4,6 +4,23 @@ All notable changes to this project will be documented in this file.
 
 The format is inspired by Keep a Changelog and follows semantic intent.
 
+## [0.9.2] - 2026-11-28
+
+### Security
+
+- The agent hook started the scanner with `python -m mmu_cli` from the repository root, so a `fnmatch.py`, `json.py` or any other module name at the root of a cloned repo was imported and run on the next edit, stop or commit. The scanner now starts in isolated mode (`python -I`) with only the package's own directory added to its import path. The pre-commit hook, the GitHub Action and the MCP server were not affected.
+- `mmu install` followed symlinks: a repo that ships `.claude/settings.json` or `AGENTS.md` as a link to a file in your home directory had that file rewritten. Targets that resolve outside the repository are now refused; links that stay inside it (`AGENTS.md -> CLAUDE.md`) still work.
+- `mmu vibecheck` read symlinks to files outside the scanned root and could quote their lines in text, JSON and SARIF output, for example a pull request adding `prod.env -> /proc/self/environ` in CI. Such links are skipped now, and `--output`/`--write-baseline` refuse to write through a link from inside the repository to somewhere outside it.
+- `git-config-exec` accepted any `filter.*` command starting with `git-lfs ` as benign, so `git-lfs clean; <command>` passed. Only the exact values `git lfs install` writes are accepted.
+
+### Fixed
+
+- Regexes anchored with `^\s*` under MULTILINE took quadratic time on runs of blank lines: 20,000 empty lines in a `.env` took 12 s and in a Dockerfile 5 s, enough for a padded file to push a hook scan past its 45-second deadline, after which the gate lets the command through unchecked. Leading whitespace is now matched within a line; findings on the fixture benchmark are unchanged.
+
+### Changed
+
+- When `.mmu/config.toml` narrows a gated commit or push, the hook says so instead of passing silently: files of the change excluded by `skip_paths`, and P0 rules silenced by `[vibecheck] ignore`. Text and agent output name the configured skip paths; the JSON `scope` carries `config_skip_paths` and `skipped_by_config`.
+
 ## [0.9.1] - 2026-11-28
 
 ### Fixed

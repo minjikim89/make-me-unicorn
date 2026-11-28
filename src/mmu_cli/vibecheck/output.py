@@ -88,10 +88,22 @@ def _scope_label(scope: dict[str, Any]) -> str:
     return f"{label} ({scope.get('files', 0)} file(s))"
 
 
+def _config_skip_note(scope: dict[str, Any]) -> str:
+    paths = scope.get("config_skip_paths") or []
+    if not paths:
+        return ""
+    hidden = scope.get("skipped_by_config")
+    count = f"{hidden} file(s) in scope " if hidden else ""
+    return f"{count}not scanned: .mmu/config.toml skip_paths = {', '.join(paths)}"
+
+
 def render_text(result: ScanResult) -> str:
     lines, _ = format_findings(result.findings)
     if result.scope.get("mode", "all") != "all":
         lines.insert(1, f"Scope: {_scope_label(result.scope)}")
+    note = _config_skip_note(result.scope)
+    if note:
+        lines.insert(1, note[0].upper() + note[1:])
     return "\n".join(lines)
 
 
@@ -154,6 +166,9 @@ def render_agent(result: ScanResult) -> str:
         + (f", {s['baselined']} baselined" if s.get("baselined") else "")
         + f" | scope: {_scope_label(result.scope)}"
     ]
+    note = _config_skip_note(result.scope)
+    if note:
+        lines.append(f"note: {note}")
     active = [f for f in result.findings if f.status in {"fail", "warn"}]
     active.sort(key=lambda f: 0 if f.status == "fail" else 1)
     for f in active:

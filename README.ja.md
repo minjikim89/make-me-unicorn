@@ -69,7 +69,7 @@ linter は存在しない関数を指摘しません。`mmu vibecheck` は、レ
 | Gemini CLI | `run_shell_command` に対する `BeforeTool` | `AfterAgent` | 利用不可 | `--gemini` |
 | git | `pre-commit`(既存の hook があれば続けて実行) | | | `--git` |
 | pre-commit フレームワーク | hook id `mmu-vibecheck` | | | `.pre-commit-hooks.yaml` |
-| GitHub Actions | `uses: minjikim89/make-me-unicorn@v0.9.1`、SARIF を code scanning へ送信 | | | |
+| GitHub Actions | `uses: minjikim89/make-me-unicorn@v0.9.2`、SARIF を code scanning へ送信 | | | |
 
 - **commit ゲート**は、commit に含まれる内容をスキャンします。対象は staged のファイルで、`git commit -a`、pathspec、`git add ... && git commit` の場合は変更されたファイルです。push では upstream 以降の変更をスキャンします。
 - **「未完了」ゲート**は、エージェントが作業を終えようとしたときに実行されます。このセッションでエージェントが編集したファイルだけを見るため、触れていないコードを書き直させることはありません。エージェントを差し戻すのは最大 `MMU_STOP_MAX` 回(デフォルト 3)です。ハードニングを後回しにするようエージェントに指示している場合は、P0 を一覧表示して止まります。
@@ -168,7 +168,7 @@ permissions:
   security-events: write
 steps:
   - uses: actions/checkout@v4
-  - uses: minjikim89/make-me-unicorn@v0.9.1
+  - uses: minjikim89/make-me-unicorn@v0.9.2
     with:
       sarif-file: mmu.sarif
   - uses: github/codeql-action/upload-sarif@v4

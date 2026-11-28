@@ -18,6 +18,7 @@ from mmu_cli.vibecheck.engine import (
     ScanResult,
     all_rules,
     baseline_path,
+    check_write_target,
     get_rule,
     scan,
     write_baseline,
@@ -87,9 +88,11 @@ def render(result: ScanResult, fmt: str, include_all: bool = False) -> str:
     return render_text(result)
 
 
-def _emit(text: str, output: str | None, colorize: bool = False) -> None:
+def _emit(text: str, output: str | None, colorize: bool = False, root: Path | None = None) -> None:
     if output:
         path = Path(output).expanduser()
+        if root is not None:
+            check_write_target(path, root)
         try:
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text(text + "\n", encoding="utf-8")
@@ -129,11 +132,13 @@ def run(args: argparse.Namespace, root: Path) -> int:
         if args.list_rules:
             rules = all_rules()
             listing: Any = {"schema": "mmu.vibecheck/v1", "rules": [rule.to_dict() for rule in rules]}
-            _emit(json.dumps(listing, ensure_ascii=False, indent=2) if as_json else render_rule_list(rules), args.output)
+            _emit(json.dumps(listing, ensure_ascii=False, indent=2) if as_json else render_rule_list(rules), args.output,
+                  root=root)
             return 0
         if args.explain:
             rule = get_rule(args.explain)
-            _emit(json.dumps(rule.to_dict(), ensure_ascii=False, indent=2) if as_json else render_rule(rule), args.output)
+            _emit(json.dumps(rule.to_dict(), ensure_ascii=False, indent=2) if as_json else render_rule(rule), args.output,
+                  root=root)
             return 0
         mode, since = _scope(args)
         write_to = getattr(args, "write_baseline", None)
@@ -142,13 +147,13 @@ def run(args: argparse.Namespace, root: Path) -> int:
             count = write_baseline(scan(root), target)  # always the whole project: a baseline of a diff is meaningless
             summary: Any = {"schema": "mmu.vibecheck/v1", "baseline": {"path": str(target), "entries": count}}
             text = f"Wrote {count} finding(s) to {target}. Run `mmu vibecheck --baseline` to report only new ones."
-            _emit(json.dumps(summary, ensure_ascii=False, indent=2) if as_json else text, args.output)
+            _emit(json.dumps(summary, ensure_ascii=False, indent=2) if as_json else text, args.output, root=root)
             return 0
         use = getattr(args, "baseline", None)
         listed = _read_file_list(args.files_from) if mode == "files" else None
         result = scan(root, scope=mode, since=since, baseline=baseline_path(root, use) if use is not None else None,
                       files=listed)
-        _emit(render(result, fmt, include_all=args.all), args.output, colorize=fmt == "text")
+        _emit(render(result, fmt, include_all=args.all), args.output, colorize=fmt == "text", root=root)
     except ScanError as exc:
         if as_json:
             print(json.dumps(error_json(exc.code, exc.message), ensure_ascii=False, indent=2))

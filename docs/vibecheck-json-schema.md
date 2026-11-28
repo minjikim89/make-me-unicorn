@@ -19,7 +19,7 @@ Fields are only added within `v1`; a removal or a change of meaning bumps the `s
 | `schema` | string | Always `mmu.vibecheck/v1` |
 | `tool` | object | `{"name": "mmu", "version": "<package version>"}` |
 | `root` | string | Absolute path that was scanned |
-| `scope` | object | `{"mode": "all"}`, or `{"mode": "changed" \| "staged" \| "since" \| "files", "files": <n>, "since": "<ref>"}` (`since` only in that mode; `files` is `--files-from`). `truncated: <n>` is added when more than 20,000 code files were found and the last `n` (in path order) were left out |
+| `scope` | object | `{"mode": "all"}`, or `{"mode": "changed" \| "staged" \| "since" \| "files", "files": <n>, "since": "<ref>"}` (`since` only in that mode; `files` is `--files-from`). `truncated: <n>` is added when more than 20,000 code files were found and the last `n` (in path order) were left out. `config_skip_paths: [...]` lists the `.mmu/config.toml` skip paths when there are any, and `skipped_by_config: <n>` counts the in-scope files they excluded (scoped scans only) |
 | `summary` | object | Counts of findings by status: `blocking` (fail), `warnings` (warn), `passed` (ok), `skipped` (skip), `suppressed`, `baselined` |
 | `findings` | array | `fail`, `warn`, `suppressed` and `baselined` findings; `--all` adds `ok` and `skip` |
 
@@ -66,7 +66,7 @@ Measured precision and recall: [benchmark.md](benchmark.md).
 ```json
 {
   "schema": "mmu.vibecheck/v1",
-  "tool": {"name": "mmu", "version": "0.9.1"},
+  "tool": {"name": "mmu", "version": "0.9.2"},
   "root": "/work/app",
   "scope": {"mode": "changed", "files": 3},
   "summary": {"blocking": 1, "warnings": 0, "passed": 15, "skipped": 6, "suppressed": 1, "baselined": 0},
@@ -146,7 +146,8 @@ Codes: `bad-root`, `git-unavailable`, `not-a-git-repo`, `git-failed`, `bad-ref`,
   skip_paths = ["tools/generated", "docs"]
   ```
 
-  (`[doctor] skip_paths` is honoured too.)
+  (`[doctor] skip_paths` is honoured too.) The paths are listed in the output, so a narrowed scan is never silent.
+- Symlinks to files outside the root are not read, and `--output`/`--write-baseline` refuse to write through a symlink that leads out of the repository.
 - Dotenv files are checked against git: inside a work tree `git check-ignore` decides (a tracked file is never "ignored"); elsewhere the `.gitignore` files are matched directly, including patterns such as `/.env`, `.env*`, `*.env` and `!` negations.
 - Files are processed in path order, so two runs on the same tree give the same result.
 

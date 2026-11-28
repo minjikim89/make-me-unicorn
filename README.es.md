@@ -69,7 +69,7 @@ Los agentes se saltan las herramientas opcionales. Los hooks no se los pueden sa
 | Gemini CLI | `BeforeTool` sobre `run_shell_command` | `AfterAgent` | no disponible | `--gemini` |
 | git | `pre-commit`, encadenando cualquier hook existente | | | `--git` |
 | framework pre-commit | hook id `mmu-vibecheck` | | | `.pre-commit-hooks.yaml` |
-| GitHub Actions | `uses: minjikim89/make-me-unicorn@v0.9.1`, SARIF hacia code scanning | | | |
+| GitHub Actions | `uses: minjikim89/make-me-unicorn@v0.9.2`, SARIF hacia code scanning | | | |
 
 - **La puerta de commit** analiza lo que va a contener el commit: los archivos en staging, o los archivos modificados en el caso de `git commit -a`, pathspecs y `git add ... && git commit`. Un push analiza lo que ha cambiado desde el upstream.
 - **La puerta de "aún no terminado"** se ejecuta cuando el agente intenta dar la tarea por finalizada. Solo mira los archivos que el agente editó en esta sesión, así que nunca le obliga a reescribir código que no tocó. Devuelve al agente al trabajo como máximo `MMU_STOP_MAX` veces (3 por defecto); si le dijiste al agente que aplazara el endurecimiento, enumera los P0 y se detiene.
@@ -168,7 +168,7 @@ permissions:
   security-events: write
 steps:
   - uses: actions/checkout@v4
-  - uses: minjikim89/make-me-unicorn@v0.9.1
+  - uses: minjikim89/make-me-unicorn@v0.9.2
     with:
       sarif-file: mmu.sarif
   - uses: github/codeql-action/upload-sarif@v4

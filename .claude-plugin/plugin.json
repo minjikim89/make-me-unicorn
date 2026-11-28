@@ -1,6 +1,6 @@
 {
   "name": "make-me-unicorn",
-  "version": "0.9.1",
+  "version": "0.9.2",
   "description": "Launch gate for AI coding agents. Deterministic `mmu vibecheck` (no LLM, no account) blocks `git commit`/`git push` and a premature \"done\" while launch-blocking gaps remain: leaked secrets, unverified webhooks, Supabase tables without RLS, f-string SQL. Also ships the vibecheck skill, a /vibecheck command, and an MCP server.",
   "author": {
     "name": "Make Me Unicorn Contributors",
