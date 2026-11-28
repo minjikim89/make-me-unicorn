@@ -32,7 +32,7 @@ keywords:
   - git-hooks
   - static-analysis
   - idea-validation
-version: 0.9.1
+version: 0.9.2
 date-released: "2026-11-28"
 preferred-citation:
   type: software

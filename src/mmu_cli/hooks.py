@@ -588,13 +588,15 @@ def scope_for(call: GitCall, root: Path, deadline: float) -> Scope | None:
 
 # --- scanner -----------------------------------------------------------------
 
+# `-m` would put the scanned repo (the child's cwd) first on sys.path, so a `fnmatch.py` at its root would run.
+# Isolated mode keeps the cwd and PYTHON* variables out; the package's own directory is added explicitly.
+_BOOT = "import runpy, sys; sys.path.insert(0, sys.argv.pop(1)); runpy.run_module('mmu_cli', run_name='__main__', alter_sys=True)"
+
+
 def _launcher() -> tuple[list[str], dict[str, str]]:
     """Run the scanner from the same source tree as this module (installed package or plugin bundle)."""
-    env = dict(os.environ)
     src = str(Path(__file__).resolve().parents[1])
-    env["PYTHONPATH"] = src + (os.pathsep + env["PYTHONPATH"] if env.get("PYTHONPATH") else "")
-    env.setdefault("PYTHONIOENCODING", "utf-8")
-    return [sys.executable, "-m", "mmu_cli", "vibecheck"], env
+    return [sys.executable, "-I", "-X", "utf8", "-c", _BOOT, src, "vibecheck"], dict(os.environ)
 
 
 def _run(args: list[str], root: Path, deadline: float, stdin: str = "") -> subprocess.CompletedProcess[str] | str:
@@ -639,6 +641,27 @@ def run_scan(root: Path, scope: Scope, deadline: float) -> dict[str, Any] | str:
 
 def blocking(result: dict[str, Any]) -> list[dict[str, Any]]:
     return [f for f in result.get("findings", []) if isinstance(f, dict) and f.get("status") == "fail"]
+
+
+def narrowed_note(result: dict[str, Any], verb: str) -> str:
+    """One visible line when the repo's own `.mmu/config.toml` kept part of this change out of the gate."""
+    raw = result.get("scope")
+    scope: dict[str, Any] = raw if isinstance(raw, dict) else {}
+    parts: list[str] = []
+    hidden = scope.get("skipped_by_config")
+    if isinstance(hidden, int) and hidden > 0:
+        paths = ", ".join(str(p) for p in (scope.get("config_skip_paths") or [])[:3])
+        parts.append(f"{hidden} file(s) not scanned (skip_paths: {paths})")
+    ignored = sorted({
+        str(f.get("rule_id")) for f in result.get("findings", [])
+        if isinstance(f, dict) and f.get("status") == "suppressed" and f.get("severity") == "P0"
+        and isinstance(f.get("suppression"), dict) and f["suppression"].get("source") == "config"
+    })
+    if ignored:
+        parts.append(f"P0 rule(s) ignored: {', '.join(ignored[:5])}")
+    if not parts:
+        return ""
+    return f"mmu vibecheck: {verb} allowed, but .mmu/config.toml narrowed the check: {'; '.join(parts)}."
 
 
 def _places(finding: dict[str, Any]) -> list[str]:
@@ -946,7 +969,7 @@ def handle_pre_shell(payload: dict[str, Any], reply: Reply) -> int:
         return reply.allow(f"mmu vibecheck gate did not run ({result}) — {verb} allowed unchecked.")
     fails = blocking(result)
     if not fails:
-        return reply.allow()
+        return reply.allow(narrowed_note(result, verb))
     reason = build_reason(
         f"mmu vibecheck: {len(fails)} launch-blocking issue(s) in {root} — {verb} blocked.",
         fails, root, scope, deadline,

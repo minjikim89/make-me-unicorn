@@ -289,7 +289,7 @@ def check_rate_limiting(root: Path, code_files: list[Path], config_files: list[P
 _LLM_IMPORT = re.compile(
     r"""(?:from\s+|require\(\s*|import\s+)["'](?:openai|@anthropic-ai/sdk|ai|@ai-sdk/[\w-]+|@google/generative-ai|"""
     r"""@google/genai|replicate|groq-sdk|@mistralai/[\w-]+|cohere-ai|@langchain/[\w-]+|langchain(?:/[\w/-]+)?|together-ai)["']|"""
-    r"""^\s*(?:from|import)\s+(?:openai|anthropic|google\.generativeai|google\.genai|litellm|groq|mistralai|cohere|replicate|"""
+    r"""^[ \t]*(?:from|import)\s+(?:openai|anthropic|google\.generativeai|google\.genai|litellm|groq|mistralai|cohere|replicate|"""
     r"""langchain\w*|together)\b""",
     re.MULTILINE,
 )

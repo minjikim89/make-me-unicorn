@@ -101,7 +101,7 @@ _SECRET_TOKEN_SEQS = (
     ("SECRET",), ("SERVICE", "ROLE"), ("SERVICE", "KEY"), ("PRIVATE", "KEY"),
     ("SIGNING", "KEY"), ("ACCESS", "TOKEN"), ("REFRESH", "TOKEN"),
 )
-_ENV_LINE = re.compile(r"^\s*(?:export\s+)?([A-Z][A-Z0-9_]*)\s*=\s*(.*)$", re.MULTILINE)
+_ENV_LINE = re.compile(r"^[ \t]*(?:export\s+)?([A-Z][A-Z0-9_]*)\s*=\s*(.*)$", re.MULTILINE)
 
 
 _PUBLIC_ENV_IN_CODE = re.compile(
@@ -181,7 +181,7 @@ def secret_hits(text: str) -> list[tuple[int, str]]:
     return sorted(hits)
 
 
-_USE_CLIENT = re.compile(r"""^\s*["']use client["']""", re.MULTILINE)
+_USE_CLIENT = re.compile(r"""^[ \t]*["']use client["']""", re.MULTILINE)
 
 
 def _unignored_env_files(root: Path, config_files: list[Path] | None) -> list[Path]:

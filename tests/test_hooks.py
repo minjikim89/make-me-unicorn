@@ -422,6 +422,34 @@ class RealRepoTests(unittest.TestCase):
     def _state(self) -> list[dict]:
         return [json.loads(p.read_text(encoding="utf-8")) for p in sorted((self.root / ".git" / "mmu").glob("stop-*.json"))]
 
+    def test_modules_in_the_scanned_repo_are_never_imported(self):
+        (self.root / "fnmatch.py").write_text('open("PLANTED", "w").write("x")\n', encoding="utf-8")
+        (self.root / "json.py").write_text('open("PLANTED", "w").write("x")\n', encoding="utf-8")
+        self._write_secret()
+        _git(self.root, "add", "app/pay.py")
+        code, out, _ = _call({"hook_event_name": "PreToolUse", "tool_name": "Bash", "cwd": str(self.root),
+                              "tool_input": {"command": "git commit -m x"}})
+        self.assertIn("P0 secrets app/pay.py:1", _deny_reason(out))
+        self.assertFalse((self.root / "PLANTED").exists())
+
+    def test_a_pass_narrowed_by_repo_config_says_so(self):
+        payload = {"hook_event_name": "PreToolUse", "tool_name": "Bash", "cwd": str(self.root),
+                   "tool_input": {"command": "git add -A && git commit -m x"}}
+        config = self.root / ".mmu" / "config.toml"
+        config.parent.mkdir()
+        config.write_text('[vibecheck]\nskip_paths = ["app"]\n', encoding="utf-8")
+        self._write_secret()
+        code, out, _ = _call(payload)
+        self.assertEqual(_deny_reason(out), "")
+        self.assertIn(".mmu/config.toml narrowed the check: 1 file(s) not scanned (skip_paths: app)",
+                      out["systemMessage"])
+        config.write_text('[vibecheck]\nignore = ["secrets"]\n', encoding="utf-8")
+        code, out, _ = _call(payload)
+        self.assertEqual(_deny_reason(out), "")
+        self.assertIn("P0 rule(s) ignored: secrets", out["systemMessage"])
+        config.write_text('[vibecheck]\nskip_paths = ["docs"]\n', encoding="utf-8")
+        self.assertTrue(_deny_reason(_call(payload)[1]), "a skip path outside the change neither hides nor notes it")
+
     def test_commit_gate_blocks_staged_secret_and_ignores_unstaged(self):
         self._write_secret()
         payload = {"hook_event_name": "PreToolUse", "tool_name": "Bash", "cwd": str(self.root),

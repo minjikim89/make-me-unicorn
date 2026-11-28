@@ -240,10 +240,10 @@ def check_cors(root: Path, code_files: list[Path], config_files: list[Path] | No
     return Finding("cors-wildcard", "P1", "ok", "no wildcard CORS origins detected")
 
 
-_DEBUG_ASSIGN = re.compile(r"^\s*DEBUG\s*(?::\s*bool\s*)?=\s*True\b", re.MULTILINE)
+_DEBUG_ASSIGN = re.compile(r"^[ \t]*DEBUG\s*(?::\s*bool\s*)?=\s*True\b", re.MULTILINE)
 _DEBUG_CALL = re.compile(r"\b(?:\w+\.run|FastAPI|Flask|Starlette|Sanic|Quart|run_simple)\(")
 _DEBUG_KWARG = re.compile(r"\b(?:debug|use_debugger)\s*=\s*True\b")
-_DOCKER_CMD = re.compile(r"^\s*(?:CMD|ENTRYPOINT)\b.*$", re.MULTILINE | re.IGNORECASE)
+_DOCKER_CMD = re.compile(r"^[ \t]*(?:CMD|ENTRYPOINT)\b.*$", re.MULTILINE | re.IGNORECASE)
 _DOCKER_DEV = re.compile(
     r"--reload\b|--debug\b|\bnext[\"',\s]+dev\b|\b(?:npm|pnpm|yarn|bun)[\"',\s]+(?:run[\"',\s]+)?dev\b|\bnodemon\b|"
     r"\bflask[\"',\s]+run\b|\brunserver\b|FLASK_DEBUG=1|\bvite[\"',\s]*(?:dev)?[\"'\]]*\s*$"

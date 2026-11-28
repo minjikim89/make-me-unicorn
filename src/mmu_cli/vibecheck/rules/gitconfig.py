@@ -65,12 +65,12 @@ def _git_config_path(root: Path) -> Path | None:
         cfg = dot_git / "config"
         return cfg if cfg.is_file() else None
     if dot_git.is_file():
-        text = _read(dot_git).strip()
+        text = _read(dot_git, confined=False).strip()
         if text.startswith("gitdir:"):
             gitdir = (root / text.split(":", 1)[1].strip()).resolve()
             common = gitdir / "commondir"
             if common.is_file():
-                gitdir = (gitdir / _read(common).strip()).resolve()
+                gitdir = (gitdir / _read(common, confined=False).strip()).resolve()
             cfg = gitdir / "config"
             return cfg if cfg.is_file() else None
     return None
@@ -87,13 +87,25 @@ def _git_config_entries_located(cfg: Path, seen: set[Path] | None = None) -> lis
     if cfg in seen or len(seen) > 8:
         return []
     seen.add(cfg)
-    entries = [(section, key, value, cfg, lineno) for section, key, value, lineno in _parse_git_config_lines(_read(cfg))]
+    # git config and include.path targets live outside a worktree root by design, so these reads are unconfined
+    lines = _parse_git_config_lines(_read(cfg, confined=False))
+    entries = [(section, key, value, cfg, lineno) for section, key, value, lineno in lines]
     for section, key, value, _, _ in list(entries):
         if section.split(".", 1)[0] in {"include", "includeif"} and key == "path":
             inc = (cfg.parent / Path(value).expanduser()).resolve()
             if inc.is_file():
                 entries.extend(_git_config_entries_located(inc, seen))
     return entries
+
+
+# What `git lfs install` (with or without --skip-smudge) writes.
+_GIT_LFS_FILTERS = {
+    "git-lfs clean -- %f",
+    "git-lfs smudge -- %f",
+    "git-lfs smudge --skip -- %f",
+    "git-lfs filter-process",
+    "git-lfs filter-process --skip",
+}
 
 
 def _is_shellish(value: str) -> bool:
@@ -129,8 +141,9 @@ def _git_config_exec_hit(root: Path, section: str, key: str, value: str, gitdir:
         return v.startswith("!")
     if top == "credential" and key == "helper":
         return _is_shellish(v) or "/" in v
-    if top == "filter" and key in {"clean", "smudge", "process", "required"} and key != "required":
-        return not v.startswith("git-lfs ")  # `git lfs install --local` writes exactly these
+    if top == "filter" and key in {"clean", "smudge", "process"}:
+        # exact values only: a prefix test let `git-lfs clean; <any command>` pass as benign
+        return " ".join(v.split()) not in _GIT_LFS_FILTERS
     if top == "diff" and key == "external":
         return True
     if top == "merge" and key == "driver":

@@ -360,6 +360,15 @@ def _plan_skill(root: Path, uninstall: bool) -> dict[str, Any]:
 
 # --- driver ------------------------------------------------------------------
 
+def _escapes(path: Path, bases: tuple[Path, ...]) -> Path | None:
+    """The real location of `path` when a symlink takes it outside every base, else None."""
+    try:
+        real = path.resolve()
+    except (OSError, RuntimeError):
+        return path
+    return None if any(real == b or b in real.parents for b in bases) else real
+
+
 def plan(root: Path, targets: list[str], base: str, uninstall: bool = False) -> list[dict[str, Any]]:
     out: list[dict[str, Any]] = []
     for target in targets:
@@ -371,6 +380,17 @@ def plan(root: Path, targets: list[str], base: str, uninstall: bool = False) -> 
             out.append(_plan_agents_md(root, uninstall))
         elif target == "skill":
             out.append(_plan_skill(root, uninstall))
+    # A cloned repo can ship `.claude/settings.json` or `AGENTS.md` as a symlink to a file in the user's home.
+    repo = root.resolve()
+    for i, step in enumerate(out):
+        if step["action"] in ("unchanged", "error"):
+            continue
+        path = Path(step["path"])
+        bases = (repo, path.parent.resolve()) if step["target"] == "git" else (repo,)
+        real = _escapes(path, bases)
+        if real is not None:
+            out[i] = {"target": step["target"], "path": step["path"], "action": "error",
+                      "detail": f"resolves to {real}, outside the repository (symlink); left untouched"}
     return out
 
 

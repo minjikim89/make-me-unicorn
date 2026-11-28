@@ -127,7 +127,7 @@ Deterministic, read-only scan. No network, no LLM. `mmu vibecheck --list-rules` 
 - P1 (warning): `llm-route-unthrottled`, `admin-route-no-auth`, `password-reset`, `webhook-idempotency`, `rate-limiting`, `cors-wildcard`, `dangerous-html`, `jwt-localstorage`, `stack-trace-leak`, `sourcemaps-exposed`, `env-not-ignored`, `disabled-ssl`, `debug-mode`, `error-monitoring`.
 - Severity policy: P0 only with specific evidence; findings about something being absent are P1. Comments are never evidence.
 - Scope: whole project by default; `--staged`, `--changed`, `--since <ref>`, `--files-from <file|->` limit findings to those files. Repo-level findings (dotenv files, `.git/config`) stay in scope.
-- Skipped: vendor and build directories at any depth, files over 1 MB, minified bundles, git-ignored files. Extra excludes: `[vibecheck] skip_paths` (or `[doctor] skip_paths`) in `.mmu/config.toml`.
+- Skipped: vendor and build directories at any depth, files over 1 MB, minified bundles, git-ignored files, and symlinks to files outside the root. Extra excludes: `[vibecheck] skip_paths` (or `[doctor] skip_paths`) in `.mmu/config.toml`; they are named in text and agent output, and the commit/push hook says when they or a `[vibecheck] ignore` entry kept part of the change out of the check.
 - Suppression: `mmu-ignore[<rule-id>]: <reason>` on the flagged line or the line above (a reason is required), or `[vibecheck] ignore = ["glob:rule-id"]`. Baseline: `--write-baseline`, `--baseline`.
 - Output: `--format text|json|sarif|agent`, `--output <file>`. JSON schema `mmu.vibecheck/v1`: `docs/vibecheck-json-schema.md`.
 - Exit codes: `0` nothing at or above `--fail-on` (default `P0`), `1` blocking findings, `2` the scan could not run.

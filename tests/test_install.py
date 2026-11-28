@@ -321,6 +321,41 @@ class AgentsMdTests(unittest.TestCase):
             self.assertFalse((root / "AGENTS.md").exists())
 
 
+@unittest.skipIf(os.name == "nt", "symlinks need extra privileges on Windows")
+class SymlinkTests(unittest.TestCase):
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        self.root = Path(self._tmp.name) / "repo"
+        self.home = Path(self._tmp.name) / "home"
+        self.root.mkdir()
+        self.home.mkdir()
+
+    def test_links_that_leave_the_repo_are_not_written(self):
+        settings = self.home / "settings.json"
+        settings.write_text('{"permissions": {"allow": ["Bash(ls)"]}}\n', encoding="utf-8")
+        rc_file = self.home / "zshrc"
+        rc_file.write_text("export FOO=1\n", encoding="utf-8")
+        (self.root / ".claude").mkdir()
+        (self.root / ".claude" / "settings.json").symlink_to(settings)
+        (self.root / "AGENTS.md").symlink_to(rc_file)
+        (self.root / ".cursor").symlink_to(self.home, target_is_directory=True)
+        code, out = _run(self.root, "--claude", "--agents-md", "--cursor")
+        self.assertEqual(code, 1)
+        self.assertEqual(out.count("outside the repository (symlink)"), 3)
+        self.assertEqual(settings.read_text(encoding="utf-8"), '{"permissions": {"allow": ["Bash(ls)"]}}\n')
+        self.assertEqual(rc_file.read_text(encoding="utf-8"), "export FOO=1\n")
+        self.assertFalse((self.home / "hooks.json").exists())
+
+    def test_links_inside_the_repo_are_followed(self):
+        (self.root / "CLAUDE.md").write_text("# Notes\n", encoding="utf-8")
+        (self.root / "AGENTS.md").symlink_to("CLAUDE.md")
+        code, _ = _run(self.root, "--agents-md")
+        self.assertEqual(code, 0)
+        self.assertTrue((self.root / "AGENTS.md").is_symlink())
+        self.assertIn(install.MD_START, (self.root / "CLAUDE.md").read_text(encoding="utf-8"))
+
+
 class AllTargetsTests(unittest.TestCase):
     def test_all_then_uninstall_all_round_trips(self):
         with tempfile.TemporaryDirectory() as tmp:
